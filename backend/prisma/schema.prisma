@@ -1,0 +1,256 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  PATIENT
+  DRIVER
+  ADMIN_HOSPITAL
+  SUPER_ADMIN
+}
+
+enum RequestStatus {
+  PENDING
+  ACCEPTED
+  ARRIVING
+  IN_TRANSIT
+  AT_HOSPITAL
+  COMPLETED
+  REJECTED
+}
+
+enum AmbulanceType {
+  BASIC_LIFE_SUPPORT
+  ADVANCED_LIFE_SUPPORT
+  OXYGEN_SUPPORT
+}
+
+enum TripType {
+  SOS
+  STANDARD
+}
+
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+
+enum BedStatus {
+  AVAILABLE
+  OCCUPIED
+  CLEANING
+  MAINTENANCE
+  RESERVED
+}
+
+enum WardType {
+  ICU
+  EMERGENCY_ER
+  TRAUMA
+  GENERAL_WARD
+  PEDIATRIC
+  SURGICAL
+  OBSERVATION
+}
+
+enum BookingType {
+  EMERGENCY_ADMISSION
+  OPD_CONSULTATION
+  BED_RESERVATION
+  SCHEDULED_SURGERY
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  ADMITTED
+  COMPLETED
+  CANCELLED
+}
+
+enum TriageLevel {
+  RED_CRITICAL
+  YELLOW_URGENT
+  GREEN_ROUTINE
+}
+
+model User {
+  id           String          @id @default(uuid())
+  name         String
+  email        String          @unique
+  passwordHash String
+  role         Role
+  phone        String?
+  googleId     String?
+  createdAt    DateTime        @default(now())
+  isActive     Boolean         @default(true)
+  hospitalId   String?
+  
+  patientProfile   PatientProfile?
+  ambulance        Ambulance?
+  hospital         Hospital?
+  driverHospital   Hospital?       @relation("HospitalDrivers", fields: [hospitalId], references: [id], onDelete: SetNull)
+  
+  patientRequests  EmergencyRequest[] @relation("PatientRequests")
+  driverRequests   EmergencyRequest[] @relation("DriverRequests")
+  healthMetrics    HealthMetric[]
+  queueEntries     QueueEntry[]
+  hospitalBookings HospitalBooking[]
+}
+
+model PatientProfile {
+  userId                String   @id
+  bloodGroup            String
+  allergies             String?
+  emergencyContactName  String
+  emergencyContactPhone String
+  medicalNotes          String?
+  
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Ambulance {
+  id                 String             @id @default(uuid())
+  driverId           String?            @unique
+  vehicleNumber      String
+  ambulanceType      AmbulanceType
+  isAvailable        Boolean            @default(false)
+  currentLat         Float
+  currentLng         Float
+  lastUpdated        DateTime           @default(now())
+  hospitalId         String?
+  licenseNumber      String?
+  licenseDoc         String?
+  registrationDoc    String?
+  verificationStatus VerificationStatus @default(PENDING)
+  maintenanceStatus  String             @default("GOOD")
+  
+  driver             User?              @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  hospital           Hospital?          @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+}
+
+model Hospital {
+  id            String             @id @default(uuid())
+  name          String
+  address       String
+  contactNumber String
+  lat           Float
+  lng           Float
+  adminUserId   String             @unique
+  availableBeds Int                @default(0)
+  
+  adminUser     User               @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  requests      EmergencyRequest[]
+  queueEntries  QueueEntry[]
+  drivers       User[]             @relation("HospitalDrivers")
+  ambulances    Ambulance[]
+  beds          HospitalBed[]
+  bookings      HospitalBooking[]
+}
+
+model HospitalBed {
+  id               String       @id @default(uuid())
+  hospitalId       String
+  bedNumber        String       // e.g. "ER-01", "ICU-02", "TR-01", "GW-101"
+  ward             WardType     @default(EMERGENCY_ER)
+  status           BedStatus    @default(AVAILABLE)
+  patientName      String?
+  patientId        String?
+  assignedDoctor   String?
+  cleaningPriority String?      // "URGENT", "TERMINAL_DISINFECTION", "ROUTINE"
+  cleanedBy        String?
+  notes            String?
+  admittedAt       DateTime?
+  lastCleanedAt    DateTime?
+  createdAt        DateTime     @default(now())
+
+  hospital         Hospital     @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  bookings         HospitalBooking[]
+}
+
+model HospitalBooking {
+  id             String        @id @default(uuid())
+  hospitalId     String
+  patientId      String?
+  patientName    String
+  patientPhone   String
+  bookingType    BookingType   @default(EMERGENCY_ADMISSION)
+  department     String        // e.g. "Emergency ER", "Cardiology", "Orthopedics", "Neurology", "Pediatrics", "General Medicine"
+  doctorName     String?
+  scheduledDate  DateTime?
+  status         BookingStatus @default(PENDING)
+  triageLevel    TriageLevel   @default(YELLOW_URGENT)
+  symptoms       String?
+  assignedBedId  String?
+  notes          String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  hospital       Hospital      @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  patient        User?         @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  assignedBed    HospitalBed?  @relation(fields: [assignedBedId], references: [id], onDelete: SetNull)
+}
+
+model EmergencyRequest {
+  id          String        @id @default(uuid())
+  patientId   String
+  driverId    String?
+  hospitalId  String
+  pickupLat   Float
+  pickupLng   Float
+  status      RequestStatus @default(PENDING)
+  tripType    TripType      @default(STANDARD)
+  etaMinutes  Int?
+  assignedBay String?       // e.g. "ER Trauma Bay 1" or "Resus Bay A"
+  createdAt   DateTime      @default(now())
+  completedAt DateTime?
+  
+  patient     User          @relation("PatientRequests", fields: [patientId], references: [id], onDelete: Cascade)
+  driver      User?         @relation("DriverRequests", fields: [driverId], references: [id], onDelete: SetNull)
+  hospital    Hospital      @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+}
+
+enum QueueStatus {
+  WAITING
+  IN_CONSULTATION
+  COMPLETED
+  SKIPPED
+}
+
+enum QueuePriority {
+  STANDARD
+  HIGH
+  EMERGENCY
+}
+
+model HealthMetric {
+  id         String   @id @default(uuid())
+  patientId  String
+  metricType String   // 'pulse', 'bp_systolic', 'bp_diastolic', 'blood_glucose', 'weight'
+  value      Float
+  unit       String?
+  recordedAt DateTime @default(now())
+
+  patient    User     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+}
+
+model QueueEntry {
+  id            String        @id @default(uuid())
+  hospitalId    String
+  patientId     String
+  specialty     String
+  queuePosition Int
+  status        QueueStatus   @default(WAITING)
+  priority      QueuePriority @default(STANDARD)
+  joinedAt      DateTime      @default(now())
+
+  hospital      Hospital      @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  patient       User          @relation(fields: [patientId], references: [id], onDelete: Cascade)
+}
