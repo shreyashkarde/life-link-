@@ -1,6 +1,7 @@
 import { Server, Socket } from 'socket.io';
 import { RequestStatus, TripType, AmbulanceType } from '@prisma/client';
 import prisma from './db';
+import { sendEmergencyAlertToContacts } from './utils/smsService';
 
 // Haversine formula to compute distance in km
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -67,6 +68,11 @@ export function broadcastToPatient(patientId: string, event: string, data: any) 
   }
 }
 
+export function broadcastToSuperAdmin(event: string, data: any) {
+  if (!ioInstance) return;
+  ioInstance.to('super_admin_room').to('telemetry_room').emit(event, data);
+}
+
 export function setupSocketHandlers(io: Server) {
   ioInstance = io;
   io.on('connection', (socket: Socket) => {
@@ -91,11 +97,19 @@ export function setupSocketHandlers(io: Server) {
       socket.join('hospital_room');
     });
 
-    // Register Super Admin Telemetry
+    // Register Super Admin Telemetry and Activity
     socket.on('telemetry:register', () => {
       telemetrySockets.add(socket.id);
       socket.join('telemetry_room');
+      socket.join('super_admin_room');
       console.log(`Registered Telemetry listener: ${socket.id}`);
+    });
+
+    socket.on('superadmin:register', () => {
+      telemetrySockets.add(socket.id);
+      socket.join('super_admin_room');
+      socket.join('telemetry_room');
+      console.log(`Registered Super Admin room listener: ${socket.id}`);
     });
 
     // Handle SOS and standard dispatches
@@ -114,7 +128,7 @@ export function setupSocketHandlers(io: Server) {
         // Fetch patient details and medical profile
         const patient = await prisma.user.findUnique({
           where: { id: patientId },
-          include: { patientProfile: true },
+          include: { patientProfile: true, emergencyContacts: true },
         });
 
         if (!patient) {
@@ -223,6 +237,16 @@ export function setupSocketHandlers(io: Server) {
           request: emergencyRequest,
           hospital: targetHospital,
         });
+
+        // 4b. Dispatch Emergency SMS alert to patient's emergency contacts
+        if (patient.emergencyContacts && patient.emergencyContacts.length > 0) {
+          sendEmergencyAlertToContacts(
+            patient.emergencyContacts.map((c) => ({ name: c.name, phone: c.phone })),
+            patient.name,
+            patient.patientProfile?.customAlertMessage,
+            { lat, lng }
+          ).catch((err) => console.error('[SMS SOS Dispatch Error]', err));
+        }
 
         // 5. Send dispatch to the closest available candidate first (Sequential Dispatch)
         const payloadForDrivers = {

@@ -225,16 +225,9 @@ export const Login: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => navigate('/admin/login')}
-                      className="flex-1 py-1.5 px-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                      className="w-full py-1.5 px-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
                     >
-                      Hospital Admin Login →
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => navigate('/super-admin/login')}
-                      className="flex-1 py-1.5 px-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
-                    >
-                      Super Admin Login →
+                      Hospital Staff Login →
                     </button>
                   </div>
                 )}
@@ -334,10 +327,10 @@ export const Login: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={() => navigate('/super-admin/login')}
-                className="flex-1 py-2 px-3 bg-slate-100 dark:bg-slate-900 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-slate-200 dark:border-slate-800 hover:border-rose-500/40 text-rose-600 dark:text-rose-400 rounded-xl text-2xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                onClick={() => navigate('/register-hospital')}
+                className="flex-1 py-2 px-3 bg-slate-100 dark:bg-slate-900 hover:bg-teal-50 dark:hover:bg-teal-950/40 border border-slate-200 dark:border-slate-800 hover:border-teal-500/40 text-teal-600 dark:text-teal-400 rounded-xl text-2xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
               >
-                <span>🛡️ Super Admin Vault</span>
+                <span>📝 Register Hospital</span>
               </button>
             </div>
           </div>

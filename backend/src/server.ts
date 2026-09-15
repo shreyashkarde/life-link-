@@ -18,16 +18,31 @@ import adminRoutes from './routes/admin';
 import healthRoutes from './routes/health';
 import queueRoutes from './routes/queue';
 import uploadRoutes from './routes/upload';
+import chatbotRoutes from './routes/chatbot';
+import doctorRoutes from './routes/doctors';
+import appointmentRoutes from './routes/appointments';
+import emergencyContactRoutes from './routes/emergencyContacts';
 import { setupSocketHandlers } from './socket';
 
 const app = express();
 const server = http.createServer(app);
 
-// CORS configuration
-const corsOptions = {
-  origin: ['http://localhost:5173', 'http://localhost:3000'],
+// Dynamic CORS configuration allowing any localhost/127.0.0.1 port
+const isAllowedOrigin = (origin: string | undefined): boolean => {
+  if (!origin) return true;
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+};
+
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
+    if (isAllowedOrigin(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
 };
 
@@ -46,6 +61,10 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/health-metrics', healthRoutes);
 app.use('/api/queue', queueRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/chatbot', chatbotRoutes);
+app.use('/api/doctors', doctorRoutes);
+app.use('/api/appointments', appointmentRoutes);
+app.use('/api/emergency-contacts', emergencyContactRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

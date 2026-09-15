@@ -6,6 +6,8 @@ import { LeafletMap } from '../components/LeafletMap';
 import { ViewOnMap } from '../components/ViewOnMap';
 import { ThemeToggle } from '../components/ui/ThemeToggle';
 import { HeartbeatLoader } from '../components/ui/HeartbeatLoader';
+import { BookAppointmentSection } from '../components/patient/BookAppointmentSection';
+import { EmergencyContactsSection } from '../components/patient/EmergencyContactsSection';
 import {
   Activity,
   Heart,
@@ -51,6 +53,10 @@ export const PatientDashboard: React.FC = () => {
   const [ambulanceType, setAmbulanceType] = useState('BASIC_LIFE_SUPPORT');
   const [triggering, setTriggering] = useState(false);
   const [nearbyAmbulances, setNearbyAmbulances] = useState<any[]>([]);
+  // Feature 5: 10-Second Cancellable SOS Delay state
+  const [sosCountdownActive, setSosCountdownActive] = useState(false);
+  const [sosCountdown, setSosCountdown] = useState(10);
+  const executeSOSRef = React.useRef<() => void>(() => {});
 
   // Symptom routing states
   const [symptoms, setSymptoms] = useState('');
@@ -78,7 +84,7 @@ export const PatientDashboard: React.FC = () => {
   const [driverLocation, setDriverLocation] = useState<[number, number] | null>(null);
 
   // History & tabs
-  const [activeTab, setActiveTab] = useState<'SOS' | 'HOSPITAL_BEDS' | 'PROFILE' | 'HISTORY' | 'HEALTH_METRICS' | 'MORE_INFO'>('SOS');
+  const [activeTab, setActiveTab] = useState<'SOS' | 'APPOINTMENTS' | 'HOSPITAL_BEDS' | 'PROFILE' | 'HISTORY' | 'HEALTH_METRICS' | 'MORE_INFO'>('SOS');
   const [tripsHistory, setTripsHistory] = useState<any[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
@@ -373,8 +379,9 @@ export const PatientDashboard: React.FC = () => {
     }
   };
 
-  // SOS trigger
-  const handleSOSTrigger = () => {
+  // Feature 5: Execute actual SOS dispatch when countdown elapses
+  const executeActualSOSDispatch = () => {
+    setSosCountdownActive(false);
     if (!socket || triggering) return;
     setTriggering(true);
     playEmergencySiren();
@@ -385,6 +392,51 @@ export const PatientDashboard: React.FC = () => {
       tripType: 'SOS',
     });
   };
+
+  executeSOSRef.current = executeActualSOSDispatch;
+
+  // Feature 5: Initiate 10-second cancellable safety delay
+  const handleSOSTrigger = () => {
+    if (triggering || activeTrip) return;
+    setSosCountdown(10);
+    setSosCountdownActive(true);
+  };
+
+  const cancelSOSCountdown = () => {
+    setSosCountdownActive(false);
+    setSosCountdown(10);
+  };
+
+  // Feature 5: Client-side countdown timer with interval cleanup
+  useEffect(() => {
+    if (!sosCountdownActive) return;
+
+    const timer = setInterval(() => {
+      setSosCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          executeSOSRef.current();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      clearInterval(timer);
+    };
+  }, [sosCountdownActive]);
+
+  // Feature 5: Allow pressing Escape key to cancel countdown
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && sosCountdownActive) {
+        cancelSOSCountdown();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [sosCountdownActive]);
 
   // Standard ambulance booking
   const handleStandardBooking = (e: React.FormEvent) => {
@@ -689,6 +741,17 @@ export const PatientDashboard: React.FC = () => {
           >
             <ShieldAlert className="w-4 h-4" />
             SOS & Dispatch
+          </button>
+          <button
+            onClick={() => setActiveTab('APPOINTMENTS')}
+            className={`flex-1 md:flex-none flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-semibold transition-all duration-300 cursor-pointer ${
+              activeTab === 'APPOINTMENTS'
+                ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/20'
+                : 'bg-white dark:bg-slate-950 text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-850'
+            }`}
+          >
+            <CalendarCheck className="w-4 h-4" />
+            Book Doctor & Slots
           </button>
           <button
             onClick={() => setActiveTab('HOSPITAL_BEDS')}
@@ -1119,6 +1182,10 @@ export const PatientDashboard: React.FC = () => {
                 </div>
               )}
             </div>
+          )}
+
+          {activeTab === 'APPOINTMENTS' && (
+            <BookAppointmentSection apiFetch={apiFetch} patientLat={lat} patientLng={lng} />
           )}
 
           {activeTab === 'HOSPITAL_BEDS' && (
@@ -1712,6 +1779,11 @@ export const PatientDashboard: React.FC = () => {
                   </button>
                 </form>
               </div>
+
+              {/* Feature 5: Emergency Contacts & Cellular SMS Network */}
+              <div className="mt-8">
+                <EmergencyContactsSection apiFetch={apiFetch} currentLat={lat} currentLng={lng} />
+              </div>
             </div>
           )}
 
@@ -2055,6 +2127,87 @@ export const PatientDashboard: React.FC = () => {
           )}
         </main>
       </div>
+
+      {/* Feature 5: 10-Second Cancellable SOS Delay Modal */}
+      {sosCountdownActive && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative bg-slate-900 border-2 border-rose-600/60 rounded-3xl max-w-md w-full p-6 md:p-8 space-y-6 text-center shadow-2xl shadow-rose-600/30 overflow-hidden">
+            {/* Ambient background pulsing red glow */}
+            <div className="absolute -top-24 -left-24 w-48 h-48 bg-rose-600/25 rounded-full blur-3xl pointer-events-none animate-pulse" />
+            <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-red-600/25 rounded-full blur-3xl pointer-events-none animate-pulse" />
+
+            {/* Header Badge */}
+            <div className="flex flex-col items-center gap-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-400 text-3xs font-mono font-bold tracking-widest uppercase">
+                <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+                Emergency Dispatch Imminent
+              </div>
+              <h3 className="text-xl font-black text-white tracking-tight">SOS Countdown Active</h3>
+              <p className="text-xs text-slate-300">
+                LifeLink is preparing to broadcast your location and medical telemetry to the emergency dispatch network.
+              </p>
+            </div>
+
+            {/* Large Animated Countdown Ring */}
+            <div className="relative w-36 h-36 mx-auto flex items-center justify-center">
+              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="42"
+                  className="stroke-slate-800"
+                  strokeWidth="8"
+                  fill="transparent"
+                />
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="42"
+                  className="stroke-rose-600 transition-all duration-1000 ease-linear"
+                  strokeWidth="8"
+                  strokeDasharray={264}
+                  strokeDashoffset={264 - (264 * sosCountdown) / 10}
+                  strokeLinecap="round"
+                  fill="transparent"
+                />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-5xl font-black text-white font-mono tracking-tighter animate-pulse">
+                  {sosCountdown}
+                </span>
+                <span className="text-4xs uppercase tracking-widest text-rose-400 font-bold mt-0.5">
+                  Seconds
+                </span>
+              </div>
+            </div>
+
+            {/* Explanatory instruction */}
+            <div className="bg-slate-950/70 border border-slate-800 p-3.5 rounded-2xl text-2xs text-slate-300 space-y-1">
+              <p className="font-semibold text-white">
+                Emergency units will be dispatched when the counter hits 0.
+              </p>
+              <p className="text-3xs text-slate-400">
+                If this was triggered accidentally, click the cancellation button below immediately. No request will be created.
+              </p>
+            </div>
+
+            {/* Prominent Cancel Button */}
+            <div className="space-y-2 pt-2">
+              <button
+                type="button"
+                onClick={cancelSOSCountdown}
+                className="w-full py-4 bg-slate-800 hover:bg-slate-750 active:bg-slate-700 text-white border-2 border-slate-700 hover:border-rose-500 rounded-2xl text-sm font-black tracking-wider uppercase transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <X className="w-5 h-5 text-rose-500" />
+                <span>Cancel Emergency (False Alarm)</span>
+              </button>
+              <p className="text-4xs text-slate-500 font-mono">
+                Press ESC or click Cancel to abort dispatch safely
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

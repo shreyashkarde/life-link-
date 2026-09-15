@@ -3,6 +3,7 @@ import { Role, BedStatus, WardType, BookingType, BookingStatus, TriageLevel } fr
 import { authenticate, AuthRequest } from '../middleware/auth';
 import prisma from '../db';
 import { broadcastToHospital, broadcastToDriver, broadcastToPatient, getIO } from '../socket';
+import { logAdminActivity } from '../utils/activityLogger';
 
 const router = Router();
 
@@ -122,6 +123,129 @@ async function ensureHospitalBeds(hospitalId: string) {
 // -------------------------------------------------------------
 // Public & Patient Endpoints
 // -------------------------------------------------------------
+
+// Haversine distance formula (in km)
+function haversineDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Earth's radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function formatDistance(distanceKm: number): string {
+  if (distanceKm < 1) {
+    return `${Math.round(distanceKm * 1000)} m away`;
+  }
+  return `${distanceKm.toFixed(1)} km away`;
+}
+
+// GET /api/hospitals/nearby?lat=&lng=&radius=&search=
+router.get('/nearby', async (req, res) => {
+  try {
+    const latStr = req.query.lat as string | undefined;
+    const lngStr = req.query.lng as string | undefined;
+    const radiusStr = req.query.radius as string | undefined;
+    const search = (req.query.search as string | undefined)?.trim().toLowerCase();
+
+    const radius = radiusStr ? parseFloat(radiusStr) : 15; // default 15km
+    const hasCoords = latStr && lngStr && !isNaN(parseFloat(latStr)) && !isNaN(parseFloat(lngStr));
+    const userLat = hasCoords ? parseFloat(latStr!) : null;
+    const userLng = hasCoords ? parseFloat(lngStr!) : null;
+
+    let hospitals = await prisma.hospital.findMany({
+      include: {
+        doctors: {
+          where: { isActive: true },
+          select: { id: true, name: true, specialization: true, experienceYears: true, consultationFee: true },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    if (search) {
+      hospitals = hospitals.filter(
+        (h) =>
+          h.name.toLowerCase().includes(search) ||
+          h.address.toLowerCase().includes(search) ||
+          h.doctors.some((d) => d.specialization.toLowerCase().includes(search) || d.name.toLowerCase().includes(search))
+      );
+    }
+
+    if (userLat !== null && userLng !== null) {
+      const hospitalsWithDistance = hospitals.map((h) => {
+        const distanceKm = haversineDistanceKm(userLat, userLng, h.lat, h.lng);
+        return {
+          ...h,
+          distanceKm: Math.round(distanceKm * 100) / 100,
+          distanceLabel: formatDistance(distanceKm),
+        };
+      });
+
+      // Filter within radius
+      let filtered = hospitalsWithDistance.filter((h) => h.distanceKm <= radius);
+      // Fallback: If no hospital is within radius (e.g. mock coordinates far away), return all sorted nearest-first
+      if (filtered.length === 0) {
+        filtered = hospitalsWithDistance;
+      }
+      filtered.sort((a, b) => a.distanceKm - b.distanceKm);
+
+      return res.json({
+        hasLocation: true,
+        userLocation: { lat: userLat, lng: userLng },
+        radiusKm: radius,
+        count: filtered.length,
+        hospitals: filtered,
+      });
+    }
+
+    // Geolocation absent or denied fallback
+    return res.json({
+      hasLocation: false,
+      count: hospitals.length,
+      hospitals: hospitals.map((h) => ({
+        ...h,
+        distanceKm: null,
+        distanceLabel: 'Distance unavailable',
+      })),
+    });
+  } catch (error: any) {
+    return res.status(500).json({ message: error.message || 'Failed to fetch nearby hospitals' });
+  }
+});
+
+// GET /api/hospitals - list all hospitals
+router.get('/', async (req, res) => {
+  try {
+    const search = (req.query.search as string | undefined)?.trim().toLowerCase();
+    let hospitals = await prisma.hospital.findMany({
+      include: {
+        doctors: {
+          where: { isActive: true },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    if (search) {
+      hospitals = hospitals.filter(
+        (h) =>
+          h.name.toLowerCase().includes(search) ||
+          h.address.toLowerCase().includes(search)
+      );
+    }
+
+    return res.json(hospitals);
+  } catch (error: any) {
+    return res.status(500).json({ message: error.message || 'Failed to fetch hospitals' });
+  }
+});
 
 // List all hospitals with detailed live bed capacities
 router.get('/capacities', async (req, res) => {
@@ -357,6 +481,15 @@ router.put('/beds/:id', authenticate, async (req: AuthRequest, res) => {
 
     const io = getIO();
     if (io) io.to('hospital_room').emit('hospital:bed_updated', updatedBed);
+
+    // Record activity log for super admin monitoring
+    await logAdminActivity(req.user!.id, 'BED_STATUS_UPDATED', {
+      bedId: id,
+      bedNumber: updatedBed.bedNumber,
+      status: updatedBed.status,
+      patientName: updatedBed.patientName || undefined,
+      ward: updatedBed.ward,
+    });
 
     return res.json(updatedBed);
   } catch (error: any) {
@@ -616,6 +749,14 @@ router.put('/bookings/:id/status', authenticate, async (req: AuthRequest, res) =
       io.to('hospital_room').emit('hospital:booking_updated', updated);
     }
 
+    await logAdminActivity(req.user!.id, 'PATIENT_ADMISSION_UPDATED', {
+      bookingId: id,
+      patientName: updated.patientName,
+      status: updated.status,
+      assignedBedId: updated.assignedBedId || undefined,
+      doctorName: updated.doctorName || undefined,
+    });
+
     return res.json(updated);
   } catch (error: any) {
     return res.status(500).json({ message: error.message || 'Failed to update booking status' });
@@ -683,6 +824,15 @@ router.post('/requests/:id/assign-bay', authenticate, async (req: AuthRequest, r
     if (io) {
       io.to('hospital_room').emit('hospital:bay_assigned', payload);
     }
+
+    await logAdminActivity(req.user!.id, 'EMERGENCY_BAY_ALLOCATED', {
+      requestId: id,
+      assignedBay: updatedRequest.assignedBay,
+      patientName: request.patient.name,
+      driverName: request.driver?.name || 'Assigned Driver',
+      doctorName: payload.doctorName,
+      hospitalName: request.hospital.name,
+    });
 
     return res.json({ success: true, request: updatedRequest, bayInfo: payload });
   } catch (error: any) {

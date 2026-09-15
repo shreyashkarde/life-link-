@@ -1,9 +1,10 @@
-import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { HeartbeatLoader } from './components/ui/HeartbeatLoader';
 import { SocketProvider } from './context/SocketContext';
+import { NaniChat } from './components/NaniChat';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Landing from './pages/Landing';
@@ -13,6 +14,26 @@ import HospitalDashboard from './pages/HospitalDashboard';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
 import AdminLogin from './pages/AdminLogin';
 import SuperAdminLogin from './pages/SuperAdminLogin';
+import HospitalRegister from './pages/HospitalRegister';
+
+// Feature 1: Global Alt+A Shortcut for Hidden Super Admin Gateway
+const GlobalKeyboardShortcuts: React.FC = () => {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.altKey && (e.key === 'a' || e.key === 'A')) {
+        e.preventDefault();
+        navigate('/super-admin-login');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [navigate]);
+
+  return null;
+};
 
 // Protected Route component
 const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles: string[] }> = ({
@@ -66,7 +87,9 @@ function AppRoutes() {
       <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/register-hospital" element={<HospitalRegister />} />
       <Route path="/admin/login" element={<AdminLogin />} />
+      <Route path="/super-admin-login" element={<SuperAdminLogin />} />
       <Route path="/super-admin/login" element={<SuperAdminLogin />} />
 
       <Route
@@ -137,13 +160,49 @@ function AppRoutes() {
   );
 }
 
+// Feature 1: Route-Scoped Placement for Nani AI Chatbot
+// Allowed contexts:
+// 1. The public landing page ('/')
+// 2. The patient panel (e.g. '/patient', '/patient/*', or any patient portal route)
+// Explicitly excluded from: Super Admin (/super-admin*), Hospital Admin (/admin*, /hospital*), Driver (/driver*), and Auth pages
+const NaniRouteScoped: React.FC = () => {
+  const location = useLocation();
+  const { user } = useAuth();
+  const pathname = location.pathname;
+
+  // Explicitly excluded routes
+  if (
+    pathname.startsWith('/super-admin') ||
+    pathname.startsWith('/admin') ||
+    pathname.startsWith('/hospital') ||
+    pathname.startsWith('/driver') ||
+    pathname === '/login' ||
+    pathname === '/register' ||
+    pathname === '/register-hospital'
+  ) {
+    return null;
+  }
+
+  // Allowed contexts
+  const isLandingPage = pathname === '/';
+  const isPatientPanel = pathname.startsWith('/patient') || user?.role === 'PATIENT';
+
+  if (isLandingPage || isPatientPanel) {
+    return <NaniChat />;
+  }
+
+  return null;
+};
+
 function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
         <SocketProvider>
           <BrowserRouter>
+            <GlobalKeyboardShortcuts />
             <AppRoutes />
+            <NaniRouteScoped />
           </BrowserRouter>
         </SocketProvider>
       </AuthProvider>

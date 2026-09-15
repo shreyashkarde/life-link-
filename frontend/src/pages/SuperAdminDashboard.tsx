@@ -22,7 +22,16 @@ import {
   Database,
   Building,
   LogOut,
-  Settings
+  Settings,
+  Users,
+  FileText,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+  Filter,
+  Eye,
+  RefreshCw,
+  X
 } from 'lucide-react';
 
 // Custom icons
@@ -52,7 +61,9 @@ export const SuperAdminDashboard: React.FC = () => {
   const { socket } = useSocket();
 
   // Active view tab
-  const [activeTab, setActiveTab] = useState<'TELEMETRY' | 'HOSPITALS' | 'SEED' | 'USERS'>('TELEMETRY');
+  const [activeTab, setActiveTab] = useState<
+    'TELEMETRY' | 'HOSPITALS' | 'HOSPITAL_ADMINS' | 'REGISTRATIONS' | 'ACTIVITY_LOGS' | 'SEED' | 'USERS'
+  >('TELEMETRY');
 
   // Server telemetry data
   const [telemetry, setTelemetry] = useState<any>({
@@ -107,6 +118,33 @@ export const SuperAdminDashboard: React.FC = () => {
     ambulanceType: 'BASIC_LIFE_SUPPORT',
     isAvailable: false,
   });
+
+  // Feature 3: Hospital Admins state (Management & Soft-delete)
+  const [hospitalAdmins, setHospitalAdmins] = useState<any[]>([]);
+  const [adminsLoading, setAdminsLoading] = useState(false);
+  const [editingAdmin, setEditingAdmin] = useState<any>(null);
+  const [editAdminForm, setEditAdminForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    hospitalName: '',
+    address: '',
+    contactNumber: '',
+    availableBeds: '10',
+  });
+
+  // Feature 4: Pending Hospital Registrations state
+  const [registrations, setRegistrations] = useState<any[]>([]);
+  const [registrationsLoading, setRegistrationsLoading] = useState(false);
+  const [regFilter, setRegFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('PENDING');
+  const [rejectModal, setRejectModal] = useState<{ id: string; hospitalName: string } | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
+
+  // Feature 3: Real-Time Activity Monitoring state
+  const [activityLogs, setActivityLogs] = useState<any[]>([]);
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [activityFilterAdmin, setActivityFilterAdmin] = useState('ALL');
+  const [selectedLogPayload, setSelectedLogPayload] = useState<any>(null);
 
   // Fetch telemetry from server
   const fetchTelemetry = async () => {
@@ -167,15 +205,123 @@ export const SuperAdminDashboard: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    if (activeTab === 'USERS') {
-      fetchUsers();
+  // Fetch Hospital Admins (Feature 3)
+  const fetchHospitalAdmins = async () => {
+    setAdminsLoading(true);
+    try {
+      const data = await apiFetch('/admin/hospital-admins');
+      setHospitalAdmins(data || []);
+    } catch (err) {
+      console.error('Error fetching hospital admins:', err);
+    } finally {
+      setAdminsLoading(false);
     }
-  }, [activeTab]);
+  };
 
-  // Socket updates for live updates
+  const handleToggleAdminStatus = async (id: string, currentStatus: boolean, adminName: string) => {
+    const action = currentStatus ? 'deactivate' : 'reactivate';
+    if (!window.confirm(`Are you sure you want to ${action} the hospital admin account for "${adminName}"?`)) {
+      return;
+    }
+    try {
+      await apiFetch(`/admin/hospital-admins/${id}/toggle-status`, { method: 'PATCH' });
+      fetchHospitalAdmins();
+      fetchActivityLogs();
+    } catch (err: any) {
+      alert(err.message || `Failed to ${action} hospital admin.`);
+    }
+  };
+
+  const handleSaveEditAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAdmin) return;
+    try {
+      await apiFetch(`/admin/hospital-admins/${editingAdmin.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(editAdminForm),
+      });
+      alert('Hospital administrator and facility details updated successfully.');
+      setEditingAdmin(null);
+      fetchHospitalAdmins();
+    } catch (err: any) {
+      alert(err.message || 'Failed to update hospital admin.');
+    }
+  };
+
+  // Fetch Hospital Registrations (Feature 4)
+  const fetchRegistrations = async () => {
+    setRegistrationsLoading(true);
+    try {
+      const query = regFilter === 'ALL' ? '' : `?status=${regFilter}`;
+      const data = await apiFetch(`/admin/hospital-registrations${query}`);
+      setRegistrations(data || []);
+    } catch (err) {
+      console.error('Error fetching registrations:', err);
+    } finally {
+      setRegistrationsLoading(false);
+    }
+  };
+
+  const handleApproveRegistration = async (id: string, hospitalName: string) => {
+    if (!window.confirm(`Approve registration for "${hospitalName}"? This will create an active Hospital Administrator account and assign initial hospital beds.`)) {
+      return;
+    }
+    try {
+      const res = await apiFetch(`/admin/hospital-registrations/${id}/approve`, { method: 'POST' });
+      alert(res.message || 'Hospital approved successfully!');
+      fetchRegistrations();
+      fetchHospitalAdmins();
+      fetchTelemetry();
+      fetchActivityLogs();
+    } catch (err: any) {
+      alert(err.message || 'Failed to approve hospital registration.');
+    }
+  };
+
+  const handleRejectRegistration = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!rejectModal) return;
+    try {
+      await apiFetch(`/admin/hospital-registrations/${rejectModal.id}/reject`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: rejectionReason }),
+      });
+      alert(`Registration for "${rejectModal.hospitalName}" marked as rejected.`);
+      setRejectModal(null);
+      setRejectionReason('');
+      fetchRegistrations();
+      fetchActivityLogs();
+    } catch (err: any) {
+      alert(err.message || 'Failed to reject registration.');
+    }
+  };
+
+  // Fetch Activity Logs (Feature 3)
+  const fetchActivityLogs = async () => {
+    setActivityLoading(true);
+    try {
+      const query = activityFilterAdmin === 'ALL' ? '' : `?adminId=${activityFilterAdmin}`;
+      const data = await apiFetch(`/admin/activity-logs${query}`);
+      setActivityLogs(data || []);
+    } catch (err) {
+      console.error('Error fetching activity logs:', err);
+    } finally {
+      setActivityLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'USERS') fetchUsers();
+    if (activeTab === 'HOSPITAL_ADMINS') fetchHospitalAdmins();
+    if (activeTab === 'REGISTRATIONS') fetchRegistrations();
+    if (activeTab === 'ACTIVITY_LOGS') fetchActivityLogs();
+  }, [activeTab, regFilter, activityFilterAdmin]);
+
+  // Real-time socket updates & live activity stream
   useEffect(() => {
     if (!socket) return;
+
+    socket.emit('superadmin:register');
 
     socket.on('telemetry:update', () => {
       fetchTelemetry();
@@ -192,9 +338,15 @@ export const SuperAdminDashboard: React.FC = () => {
       );
     });
 
+    const handleAdminActivity = (newLog: any) => {
+      setActivityLogs((prev) => [newLog, ...prev.slice(0, 99)]);
+    };
+    socket.on('admin-activity', handleAdminActivity);
+
     return () => {
       socket.off('telemetry:update');
       socket.off('telemetry:driver_moved');
+      socket.off('admin-activity', handleAdminActivity);
     };
   }, [socket]);
 
@@ -325,6 +477,49 @@ export const SuperAdminDashboard: React.FC = () => {
           >
             <Building className="w-4 h-4" />
             Hospital Partners
+          </button>
+          <button
+            onClick={() => setActiveTab('HOSPITAL_ADMINS')}
+            className={`flex-1 md:flex-none flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-semibold transition-all duration-300 ${
+              activeTab === 'HOSPITAL_ADMINS'
+                ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/20'
+                : 'bg-slate-950 text-slate-400 hover:bg-slate-850'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            Hospital Admins
+          </button>
+          <button
+            onClick={() => setActiveTab('REGISTRATIONS')}
+            className={`flex-1 md:flex-none flex items-center justify-between px-4 py-3 rounded-2xl text-sm font-semibold transition-all duration-300 ${
+              activeTab === 'REGISTRATIONS'
+                ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/20'
+                : 'bg-slate-950 text-slate-400 hover:bg-slate-850'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <FileText className="w-4 h-4" />
+              <span>Registrations</span>
+            </div>
+            {registrations.filter((r) => r.status === 'PENDING').length > 0 && (
+              <span className="px-2 py-0.5 rounded-full text-3xs font-extrabold bg-amber-500 text-slate-950">
+                {registrations.filter((r) => r.status === 'PENDING').length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab('ACTIVITY_LOGS')}
+            className={`flex-1 md:flex-none flex items-center justify-between px-4 py-3 rounded-2xl text-sm font-semibold transition-all duration-300 ${
+              activeTab === 'ACTIVITY_LOGS'
+                ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/20'
+                : 'bg-slate-950 text-slate-400 hover:bg-slate-850'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <Activity className="w-4 h-4" />
+              <span>Live Activity</span>
+            </div>
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
           </button>
           <button
             onClick={() => setActiveTab('SEED')}
@@ -837,6 +1032,387 @@ export const SuperAdminDashboard: React.FC = () => {
                 </div>
               )}
 
+              {/* Feature 3: Hospital Admins Management Tab */}
+              {activeTab === 'HOSPITAL_ADMINS' && (
+                <div className="space-y-6">
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div>
+                      <h2 className="text-xl font-bold tracking-tight text-white">Hospital Administrators</h2>
+                      <p className="text-xs text-slate-400">
+                        Manage credentialed hospital admins, edit facility details, and toggle active status (soft-delete).
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 text-2xs font-mono">
+                        <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold">
+                          {hospitalAdmins.filter((a) => a.isActive).length} Active
+                        </span>
+                        <span className="px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 font-bold">
+                          {hospitalAdmins.filter((a) => !a.isActive).length} Deactivated
+                        </span>
+                      </div>
+
+                      <button
+                        onClick={fetchHospitalAdmins}
+                        className="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-xl text-xs flex items-center gap-1.5 transition-colors"
+                        title="Refresh list"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${adminsLoading ? 'animate-spin' : ''}`} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {adminsLoading ? (
+                    <div className="py-12 flex justify-center">
+                      <HeartbeatLoader size="medium" />
+                    </div>
+                  ) : hospitalAdmins.length === 0 ? (
+                    <div className="p-12 text-center bg-slate-950 border border-slate-850 rounded-2xl space-y-2">
+                      <Users className="w-8 h-8 text-slate-600 mx-auto" />
+                      <p className="text-xs text-slate-400 font-semibold">No hospital administrators found.</p>
+                      <p className="text-3xs text-slate-500">Approve pending hospital registrations or create one in Hospital Partners.</p>
+                    </div>
+                  ) : (
+                    <div className="bg-slate-950 border border-slate-850 rounded-2xl overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-900/60 border-b border-slate-850 text-slate-400 uppercase text-3xs font-mono">
+                            <tr>
+                              <th className="p-4">Admin Name & Email</th>
+                              <th className="p-4">Hospital Facility</th>
+                              <th className="p-4">Contact Phone</th>
+                              <th className="p-4">Status</th>
+                              <th className="p-4 text-right">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-850 text-slate-300">
+                            {hospitalAdmins.map((admin) => (
+                              <tr key={admin.id} className="hover:bg-slate-900/30 transition-colors">
+                                <td className="p-4">
+                                  <div className="font-bold text-white text-xs">{admin.name}</div>
+                                  <div className="text-3xs text-slate-500 font-mono mt-0.5">{admin.email}</div>
+                                </td>
+                                <td className="p-4">
+                                  {admin.hospital ? (
+                                    <div>
+                                      <div className="font-semibold text-slate-200">{admin.hospital.name}</div>
+                                      <div className="text-3xs text-slate-500 truncate max-w-xs">{admin.hospital.address}</div>
+                                      <div className="text-4xs text-emerald-400 mt-0.5 font-mono">{admin.hospital.availableBeds} beds available</div>
+                                    </div>
+                                  ) : (
+                                    <span className="text-3xs text-slate-500 italic">No facility assigned</span>
+                                  )}
+                                </td>
+                                <td className="p-4 font-mono text-3xs text-slate-400">
+                                  {admin.phone || 'N/A'}
+                                </td>
+                                <td className="p-4">
+                                  {admin.isActive ? (
+                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-3xs font-extrabold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                                      ACTIVE
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-3xs font-extrabold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+                                      DEACTIVATED
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="p-4 text-right">
+                                  <div className="flex items-center justify-end gap-2">
+                                    <button
+                                      onClick={() => {
+                                        setEditingAdmin(admin);
+                                        setEditAdminForm({
+                                          name: admin.name,
+                                          email: admin.email,
+                                          phone: admin.phone || '',
+                                          hospitalName: admin.hospital?.name || '',
+                                          address: admin.hospital?.address || '',
+                                          contactNumber: admin.hospital?.contactNumber || admin.phone || '',
+                                          availableBeds: admin.hospital?.availableBeds ? String(admin.hospital.availableBeds) : '10',
+                                        });
+                                      }}
+                                      className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-lg text-3xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <Edit2 className="w-3 h-3" />
+                                      <span>Edit</span>
+                                    </button>
+                                    <button
+                                      onClick={() => handleToggleAdminStatus(admin.id, admin.isActive, admin.name)}
+                                      className={`px-3 py-1.5 rounded-lg text-3xs font-bold transition-all cursor-pointer ${
+                                        admin.isActive
+                                          ? 'bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20'
+                                          : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20'
+                                      }`}
+                                    >
+                                      {admin.isActive ? 'Soft-Deactivate' : 'Reactivate'}
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Feature 4: Pending Hospital Registrations Tab */}
+              {activeTab === 'REGISTRATIONS' && (
+                <div className="space-y-6">
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div>
+                      <h2 className="text-xl font-bold tracking-tight text-white">Hospital Registration Applications</h2>
+                      <p className="text-xs text-slate-400">
+                        Review submissions from healthcare facilities. Approving provisions an active hospital admin account.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {(['PENDING', 'APPROVED', 'REJECTED', 'ALL'] as const).map((filter) => (
+                        <button
+                          key={filter}
+                          onClick={() => setRegFilter(filter)}
+                          className={`px-3 py-1.5 rounded-xl text-3xs font-bold font-mono transition-all cursor-pointer ${
+                            regFilter === filter
+                              ? 'bg-rose-600 text-white shadow-md'
+                              : 'bg-slate-900 hover:bg-slate-850 text-slate-400 border border-slate-800'
+                          }`}
+                        >
+                          {filter}
+                        </button>
+                      ))}
+                      <button
+                        onClick={fetchRegistrations}
+                        className="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-xl text-xs transition-colors"
+                        title="Refresh"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${registrationsLoading ? 'animate-spin' : ''}`} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {registrationsLoading ? (
+                    <div className="py-12 flex justify-center">
+                      <HeartbeatLoader size="medium" />
+                    </div>
+                  ) : registrations.length === 0 ? (
+                    <div className="p-12 text-center bg-slate-950 border border-slate-850 rounded-2xl space-y-2">
+                      <FileText className="w-8 h-8 text-slate-600 mx-auto" />
+                      <p className="text-xs text-slate-400 font-semibold">No registrations found matching filter "{regFilter}".</p>
+                      <p className="text-3xs text-slate-500">Public hospital registrations submitted at /register-hospital will appear here.</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {registrations.map((reg) => (
+                        <div
+                          key={reg.id}
+                          className="bg-slate-950 border border-slate-850 p-5 rounded-2xl space-y-4 shadow-sm hover:border-slate-800 transition-colors"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <span className={`inline-block px-2.5 py-0.5 rounded-full text-4xs font-mono font-extrabold uppercase tracking-wider mb-1.5 ${
+                                reg.status === 'PENDING'
+                                  ? 'bg-amber-500/15 text-amber-400 border border-amber-500/20'
+                                  : reg.status === 'APPROVED'
+                                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                                  : 'bg-rose-500/15 text-rose-400 border border-rose-500/20'
+                              }`}>
+                                {reg.status}
+                              </span>
+                              <h3 className="text-base font-bold text-white tracking-tight">{reg.hospitalName}</h3>
+                              <p className="text-3xs text-slate-500 font-mono mt-0.5">Applied: {new Date(reg.createdAt).toLocaleDateString()}</p>
+                            </div>
+                            <div className="w-9 h-9 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-400">
+                              <Building className="w-4 h-4 text-emerald-400" />
+                            </div>
+                          </div>
+
+                          <div className="space-y-1.5 text-2xs text-slate-300">
+                            <div className="flex items-center gap-2">
+                              <span className="text-slate-500 text-3xs font-mono uppercase w-16">Email:</span>
+                              <span className="font-mono text-slate-200">{reg.email}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-slate-500 text-3xs font-mono uppercase w-16">Phone:</span>
+                              <span className="font-mono text-slate-200">{reg.contactNumber}</span>
+                            </div>
+                            {reg.address && (
+                              <div className="flex items-start gap-2">
+                                <span className="text-slate-500 text-3xs font-mono uppercase w-16 shrink-0">Address:</span>
+                                <span className="text-slate-300 text-3xs">{reg.address}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Services badges */}
+                          {reg.services && (
+                            <div className="pt-2 border-t border-slate-850">
+                              <span className="text-4xs text-slate-500 uppercase font-mono block mb-1.5">Clinical Services:</span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {reg.services.split(',').map((s: string, idx: number) => (
+                                  <span key={idx} className="px-2 py-0.5 bg-slate-900 border border-slate-800 rounded-md text-3xs text-slate-300">
+                                    {s.trim()}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {reg.rejectionReason && (
+                            <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 rounded-xl text-3xs text-rose-400">
+                              <span className="font-bold">Rejection Reason:</span> {reg.rejectionReason}
+                            </div>
+                          )}
+
+                          {/* Action Buttons for PENDING */}
+                          {reg.status === 'PENDING' && (
+                            <div className="pt-3 border-t border-slate-850 flex items-center gap-2">
+                              <button
+                                onClick={() => handleApproveRegistration(reg.id, reg.hospitalName)}
+                                className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-600/20 flex items-center justify-center gap-1.5 cursor-pointer"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>Approve Facility</span>
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setRejectModal({ id: reg.id, hospitalName: reg.hospitalName });
+                                  setRejectionReason('');
+                                }}
+                                className="px-4 py-2 bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                              >
+                                <XCircle className="w-3.5 h-3.5" />
+                                <span>Reject</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Feature 3: Real-Time Activity Monitoring Tab */}
+              {activeTab === 'ACTIVITY_LOGS' && (
+                <div className="space-y-6">
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2.5">
+                        <h2 className="text-xl font-bold tracking-tight text-white">Live Activity Monitoring</h2>
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-4xs font-mono font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                          Socket Feed Active
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Real-time audit stream of hospital admin actions, emergency status transitions, bed allocations, and registrations.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl text-2xs text-slate-300">
+                        <Filter className="w-3.5 h-3.5 text-slate-500" />
+                        <select
+                          value={activityFilterAdmin}
+                          onChange={(e) => setActivityFilterAdmin(e.target.value)}
+                          className="bg-transparent text-slate-200 focus:outline-none text-2xs"
+                        >
+                          <option value="ALL">All Administrators</option>
+                          {hospitalAdmins.map((a) => (
+                            <option key={a.id} value={a.id}>{a.name} ({a.hospital?.name || 'Admin'})</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <button
+                        onClick={fetchActivityLogs}
+                        className="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-xl text-xs transition-colors"
+                        title="Refresh stream"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${activityLoading ? 'animate-spin' : ''}`} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {activityLoading ? (
+                    <div className="py-12 flex justify-center">
+                      <HeartbeatLoader size="medium" />
+                    </div>
+                  ) : activityLogs.length === 0 ? (
+                    <div className="p-12 text-center bg-slate-950 border border-slate-850 rounded-2xl space-y-2">
+                      <Activity className="w-8 h-8 text-slate-600 mx-auto" />
+                      <p className="text-xs text-slate-400 font-semibold">No activity logs recorded yet.</p>
+                      <p className="text-3xs text-slate-500">Actions by hospital staff (updating beds, allocating bays) will appear here live.</p>
+                    </div>
+                  ) : (
+                    <div className="bg-slate-950 border border-slate-850 rounded-2xl divide-y divide-slate-850 overflow-hidden">
+                      {activityLogs.map((log) => {
+                        let actionColor = 'bg-blue-500/15 text-blue-400 border-blue-500/30';
+                        if (log.action.includes('APPROVED')) actionColor = 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30';
+                        if (log.action.includes('REJECTED') || log.action.includes('DEACTIVATED')) actionColor = 'bg-rose-500/15 text-rose-400 border-rose-500/30';
+                        if (log.action.includes('BED') || log.action.includes('BAY')) actionColor = 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30';
+
+                        return (
+                          <div key={log.id} className="p-4 hover:bg-slate-900/30 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="flex items-start gap-3">
+                              <div className="w-8 h-8 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0 mt-0.5">
+                                <Activity className="w-4 h-4 text-rose-400" />
+                              </div>
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className={`px-2 py-0.5 rounded-full text-4xs font-mono font-extrabold uppercase border ${actionColor}`}>
+                                    {log.action}
+                                  </span>
+                                  <span className="text-xs font-bold text-white">
+                                    {log.admin?.name || 'Administrator'}
+                                  </span>
+                                  {log.admin?.hospital?.name && (
+                                    <span className="text-3xs text-slate-400">
+                                      &bull; {log.admin.hospital.name}
+                                    </span>
+                                  )}
+                                </div>
+                                {log.metadata && (
+                                  <div className="text-3xs text-slate-400 font-mono">
+                                    {log.metadata.hospitalName && `Facility: ${log.metadata.hospitalName} | `}
+                                    {log.metadata.patientName && `Patient: ${log.metadata.patientName} | `}
+                                    {log.metadata.bedNumber && `Bed: ${log.metadata.bedNumber} (${log.metadata.status}) | `}
+                                    {log.metadata.assignedBay && `Assigned: ${log.metadata.assignedBay} | `}
+                                    {log.metadata.details && log.metadata.details}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-3 self-end sm:self-center">
+                              <span className="text-3xs text-slate-500 font-mono">
+                                {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                              </span>
+                              {log.metadata && (
+                                <button
+                                  onClick={() => setSelectedLogPayload(log)}
+                                  className="px-2.5 py-1 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-lg text-4xs text-slate-400 hover:text-white transition-colors flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Eye className="w-3 h-3" />
+                                  <span>Payload</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* User Management Tab */}
               {activeTab === 'USERS' && (
                 <div className="space-y-6">
@@ -1150,6 +1726,225 @@ export const SuperAdminDashboard: React.FC = () => {
                 Save User Changes
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Feature 3: Edit Hospital Admin & Facility Modal */}
+      {editingAdmin && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 space-y-6 shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div>
+                <h3 className="text-lg font-bold text-white">Edit Hospital Administrator</h3>
+                <p className="text-xs text-slate-400">Update admin account details and facility information</p>
+              </div>
+              <button
+                onClick={() => setEditingAdmin(null)}
+                className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditAdmin} className="space-y-4">
+              <div className="bg-slate-950 border border-slate-850 p-4 rounded-2xl space-y-3">
+                <span className="text-3xs font-bold text-rose-400 block uppercase tracking-wider font-mono">Admin Account Profile</span>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-3xs font-semibold text-slate-400 uppercase mb-1">Full Name</label>
+                    <input
+                      type="text"
+                      required
+                      value={editAdminForm.name}
+                      onChange={(e) => setEditAdminForm({ ...editAdminForm, name: e.target.value })}
+                      className="w-full bg-slate-900 border border-slate-800 px-3 py-2 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-rose-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-3xs font-semibold text-slate-400 uppercase mb-1">Email Address</label>
+                    <input
+                      type="email"
+                      required
+                      value={editAdminForm.email}
+                      onChange={(e) => setEditAdminForm({ ...editAdminForm, email: e.target.value })}
+                      className="w-full bg-slate-900 border border-slate-800 px-3 py-2 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-rose-500"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-3xs font-semibold text-slate-400 uppercase mb-1">Phone Number</label>
+                  <input
+                    type="tel"
+                    value={editAdminForm.phone}
+                    onChange={(e) => setEditAdminForm({ ...editAdminForm, phone: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 px-3 py-2 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-rose-500"
+                  />
+                </div>
+              </div>
+
+              {editingAdmin.hospital && (
+                <div className="bg-slate-950 border border-slate-850 p-4 rounded-2xl space-y-3">
+                  <span className="text-3xs font-bold text-emerald-400 block uppercase tracking-wider font-mono">Linked Facility Information</span>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-3xs font-semibold text-slate-400 uppercase mb-1">Facility Name</label>
+                      <input
+                        type="text"
+                        value={editAdminForm.hospitalName}
+                        onChange={(e) => setEditAdminForm({ ...editAdminForm, hospitalName: e.target.value })}
+                        className="w-full bg-slate-900 border border-slate-800 px-3 py-2 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-rose-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-3xs font-semibold text-slate-400 uppercase mb-1">Total Available Beds</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={editAdminForm.availableBeds}
+                        onChange={(e) => setEditAdminForm({ ...editAdminForm, availableBeds: e.target.value })}
+                        className="w-full bg-slate-900 border border-slate-800 px-3 py-2 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-rose-500"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-3xs font-semibold text-slate-400 uppercase mb-1">Facility Address</label>
+                    <input
+                      type="text"
+                      value={editAdminForm.address}
+                      onChange={(e) => setEditAdminForm({ ...editAdminForm, address: e.target.value })}
+                      className="w-full bg-slate-900 border border-slate-800 px-3 py-2 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-rose-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-3xs font-semibold text-slate-400 uppercase mb-1">Emergency Desk Contact</label>
+                    <input
+                      type="tel"
+                      value={editAdminForm.contactNumber}
+                      onChange={(e) => setEditAdminForm({ ...editAdminForm, contactNumber: e.target.value })}
+                      className="w-full bg-slate-900 border border-slate-800 px-3 py-2 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-rose-500"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingAdmin(null)}
+                  className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-rose-600/20 transition-colors cursor-pointer"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Feature 4: Reject Hospital Registration Modal */}
+      {rejectModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-white">Reject Application</h3>
+                <p className="text-3xs text-slate-400">Application: {rejectModal.hospitalName}</p>
+              </div>
+              <button
+                onClick={() => setRejectModal(null)}
+                className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleRejectRegistration} className="space-y-4">
+              <div>
+                <label className="block text-3xs font-semibold text-slate-400 uppercase mb-1">
+                  Reason for Rejection (Visible to Facility)
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                  placeholder="e.g. Incomplete license documentation or contact number unreachable..."
+                  className="w-full bg-slate-950 border border-slate-850 p-3 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-rose-500"
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setRejectModal(null)}
+                  className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-rose-600/20 transition-colors cursor-pointer"
+                >
+                  Confirm Rejection
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Feature 3: Activity Log Payload Inspector Modal */}
+      {selectedLogPayload && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-850 rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <span className="text-4xs font-mono font-bold uppercase text-rose-400">Activity Telemetry Inspector</span>
+                <h3 className="text-sm font-bold text-white mt-0.5">{selectedLogPayload.action}</h3>
+              </div>
+              <button
+                onClick={() => setSelectedLogPayload(null)}
+                className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2 text-2xs">
+              <div className="flex justify-between py-1 border-b border-slate-850 font-mono">
+                <span className="text-slate-500">Log ID:</span>
+                <span className="text-slate-300">{selectedLogPayload.id}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-850 font-mono">
+                <span className="text-slate-500">Administrator:</span>
+                <span className="text-slate-300">{selectedLogPayload.admin?.name || selectedLogPayload.adminId || 'System'}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-850 font-mono">
+                <span className="text-slate-500">Timestamp:</span>
+                <span className="text-slate-300">{new Date(selectedLogPayload.timestamp).toLocaleString()}</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-3xs font-semibold text-slate-400 uppercase mb-1 font-mono">Metadata Payload (JSON)</label>
+              <pre className="bg-slate-950 border border-slate-850 p-4 rounded-xl text-3xs font-mono text-emerald-400 overflow-x-auto max-h-60 leading-relaxed">
+                {JSON.stringify(selectedLogPayload.metadata, null, 2)}
+              </pre>
+            </div>
+
+            <button
+              onClick={() => setSelectedLogPayload(null)}
+              className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+            >
+              Close Inspector
+            </button>
           </div>
         </div>
       )}

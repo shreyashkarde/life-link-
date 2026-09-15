@@ -4,6 +4,9 @@ const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
 
 export function rateLimiter(maxRequests: number, windowMs: number) {
   return (req: Request, res: Response, next: NextFunction) => {
+    // In local development, allow high request volumes so logins/testing don't get 429 blocked
+    const effectiveLimit = process.env.NODE_ENV === 'production' ? maxRequests : Math.max(maxRequests, 100);
+
     const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
     const now = Date.now();
     const key = `${req.path}:${ip}`;
@@ -16,7 +19,7 @@ export function rateLimiter(maxRequests: number, windowMs: number) {
     }
 
     rateData.count++;
-    if (rateData.count > maxRequests) {
+    if (rateData.count > effectiveLimit) {
       return res.status(429).json({
         message: 'Too many requests from this IP, please try again later.',
       });

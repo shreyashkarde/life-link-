@@ -146,6 +146,57 @@ router.post('/register', rateLimiter(5, 60 * 1000), async (req, res) => {
   }
 });
 
+// 1b. PUBLIC HOSPITAL REGISTRATION (Pending Super Admin Approval)
+router.post('/register-hospital', rateLimiter(5, 60 * 1000), async (req, res) => {
+  const { hospitalName, services, contactNumber, address, email, password } = req.body;
+
+  if (!hospitalName || !contactNumber || !email || !password) {
+    return res.status(400).json({ message: 'Hospital name, contact number, email, and password are required.' });
+  }
+
+  try {
+    // Check if email already exists in User table
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+      return res.status(400).json({ message: 'An account with this email address already exists.' });
+    }
+
+    // Check if email is already registered in hospital registrations
+    const existingRegistration = await prisma.hospitalRegistration.findUnique({ where: { email } });
+    if (existingRegistration) {
+      if (existingRegistration.status === 'PENDING') {
+        return res.status(400).json({ message: 'A registration application for this email is already under review.' });
+      } else if (existingRegistration.status === 'APPROVED') {
+        return res.status(400).json({ message: 'This hospital has already been approved.' });
+      }
+    }
+
+    // Immediately hash password with bcryptjs before saving
+    const salt = bcrypt.genSaltSync(10);
+    const passwordHash = bcrypt.hashSync(password, salt);
+
+    const registration = await prisma.hospitalRegistration.create({
+      data: {
+        hospitalName,
+        services: services || 'Emergency ER, General Medicine',
+        contactNumber,
+        address: address || '',
+        email,
+        passwordHash,
+        status: 'PENDING',
+      },
+    });
+
+    return res.status(201).json({
+      message: 'Hospital registration submitted successfully. Your account is pending Super Admin review.',
+      registrationId: registration.id,
+    });
+  } catch (error: any) {
+    console.error('Error submitting hospital registration:', error);
+    return res.status(500).json({ message: error.message || 'Internal server error' });
+  }
+});
+
 // 2. PUBLIC LOGIN (Only for Patient and Driver)
 router.post('/login', rateLimiter(5, 60 * 1000), async (req, res) => {
   const { email, password } = req.body;
@@ -203,6 +254,10 @@ router.post('/admin-login', rateLimiter(3, 60 * 1000), async (req, res) => {
 
     if (!user || user.role !== Role.ADMIN_HOSPITAL) {
       return res.status(400).json({ message: 'Invalid email or password' });
+    }
+
+    if (!user.isActive) {
+      return res.status(403).json({ message: 'Your hospital admin account has been deactivated. Please contact Super Admin.' });
     }
 
     const isValid = bcrypt.compareSync(password, user.passwordHash);

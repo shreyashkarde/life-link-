@@ -3,6 +3,7 @@ import { Role } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import prisma from '../db';
+import { logAdminActivity } from '../utils/activityLogger';
 
 const router = Router();
 
@@ -328,6 +329,325 @@ router.delete('/users/:id', async (req: AuthRequest, res) => {
     // We delete the user. Prisma schemas cascade deletes PatientProfile, Ambulance, and Hospital because of cascade configuration!
     await prisma.user.delete({ where: { id } });
     return res.json({ message: 'User account and profile deleted successfully' });
+  } catch (error: any) {
+    return res.status(500).json({ message: error.message || 'Internal server error' });
+  }
+});
+
+// =========================================================================
+// HOSPITAL ADMIN MANAGEMENT (Feature 3)
+// =========================================================================
+
+// List all Hospital Admins
+router.get('/hospital-admins', async (req: AuthRequest, res) => {
+  try {
+    const admins = await prisma.user.findMany({
+      where: { role: Role.ADMIN_HOSPITAL },
+      include: {
+        hospital: {
+          select: {
+            id: true,
+            name: true,
+            address: true,
+            contactNumber: true,
+            availableBeds: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const safeAdmins = admins.map(({ passwordHash, ...safe }) => safe);
+    return res.json(safeAdmins);
+  } catch (error: any) {
+    return res.status(500).json({ message: error.message || 'Internal server error' });
+  }
+});
+
+// Soft delete / Reactivate hospital admin
+router.patch('/hospital-admins/:id/toggle-status', async (req: AuthRequest, res) => {
+  const { id } = req.params;
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id },
+      include: { hospital: true },
+    });
+
+    if (!user || user.role !== Role.ADMIN_HOSPITAL) {
+      return res.status(404).json({ message: 'Hospital admin account not found' });
+    }
+
+    const newStatus = !user.isActive;
+    const updated = await prisma.user.update({
+      where: { id },
+      data: { isActive: newStatus },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        isActive: true,
+        hospital: true,
+      },
+    });
+
+    // Record activity log
+    await logAdminActivity(
+      req.user!.id,
+      newStatus ? 'HOSPITAL_ADMIN_REACTIVATED' : 'HOSPITAL_ADMIN_DEACTIVATED',
+      {
+        targetAdminId: id,
+        adminEmail: user.email,
+        hospitalName: user.hospital?.name || 'Unassigned',
+        newStatus: newStatus ? 'ACTIVE' : 'DEACTIVATED',
+      }
+    );
+
+    return res.json({
+      message: `Hospital admin account ${newStatus ? 'reactivated' : 'deactivated'} successfully`,
+      admin: updated,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ message: error.message || 'Internal server error' });
+  }
+});
+
+// Update hospital admin details
+router.put('/hospital-admins/:id', async (req: AuthRequest, res) => {
+  const { id } = req.params;
+  const { name, email, phone, hospitalName, address, contactNumber, availableBeds } = req.body;
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id },
+      include: { hospital: true },
+    });
+
+    if (!user || user.role !== Role.ADMIN_HOSPITAL) {
+      return res.status(404).json({ message: 'Hospital admin account not found' });
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const u = await tx.user.update({
+        where: { id },
+        data: {
+          name: name || user.name,
+          email: email || user.email,
+          phone: phone !== undefined ? phone : user.phone,
+        },
+      });
+
+      let h = null;
+      if (user.hospital) {
+        h = await tx.hospital.update({
+          where: { id: user.hospital.id },
+          data: {
+            name: hospitalName || user.hospital.name,
+            address: address || user.hospital.address,
+            contactNumber: contactNumber || user.hospital.contactNumber,
+            availableBeds: availableBeds !== undefined ? parseInt(availableBeds) : user.hospital.availableBeds,
+          },
+        });
+      }
+
+      return { user: u, hospital: h };
+    });
+
+    await logAdminActivity(req.user!.id, 'HOSPITAL_ADMIN_UPDATED', {
+      targetAdminId: id,
+      adminEmail: updated.user.email,
+      hospitalName: updated.hospital?.name,
+    });
+
+    const { passwordHash: _, ...safeUser } = updated.user;
+    return res.json({ user: safeUser, hospital: updated.hospital });
+  } catch (error: any) {
+    return res.status(500).json({ message: error.message || 'Internal server error' });
+  }
+});
+
+// =========================================================================
+// HOSPITAL REGISTRATION APPROVAL WORKFLOW (Feature 4)
+// =========================================================================
+
+// List pending or all hospital registrations
+router.get('/hospital-registrations', async (req: AuthRequest, res) => {
+  const status = req.query.status as string;
+
+  try {
+    const where: any = {};
+    if (status && ['PENDING', 'APPROVED', 'REJECTED'].includes(status.toUpperCase())) {
+      where.status = status.toUpperCase();
+    }
+
+    const registrations = await prisma.hospitalRegistration.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return res.json(registrations);
+  } catch (error: any) {
+    return res.status(500).json({ message: error.message || 'Internal server error' });
+  }
+});
+
+// Approve hospital registration
+router.post('/hospital-registrations/:id/approve', async (req: AuthRequest, res) => {
+  const { id } = req.params;
+
+  try {
+    const reg = await prisma.hospitalRegistration.findUnique({ where: { id } });
+    if (!reg) {
+      return res.status(404).json({ message: 'Hospital registration not found' });
+    }
+
+    if (reg.status !== 'PENDING') {
+      return res.status(400).json({ message: `Registration has already been ${reg.status.toLowerCase()}` });
+    }
+
+    const existingUser = await prisma.user.findUnique({ where: { email: reg.email } });
+    if (existingUser) {
+      return res.status(400).json({ message: 'A user account with this email address already exists' });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Create real User record with role ADMIN_HOSPITAL using submitted pre-hashed password
+      const adminUser = await tx.user.create({
+        data: {
+          name: `${reg.hospitalName} Administrator`,
+          email: reg.email,
+          passwordHash: reg.passwordHash,
+          role: Role.ADMIN_HOSPITAL,
+          phone: reg.contactNumber,
+          isActive: true,
+        },
+      });
+
+      // 2. Create Hospital record linked to this admin
+      const hospital = await tx.hospital.create({
+        data: {
+          name: reg.hospitalName,
+          address: reg.address || 'Standard Medical Facility',
+          contactNumber: reg.contactNumber,
+          lat: 37.7749 + (Math.random() - 0.5) * 0.05,
+          lng: -122.4194 + (Math.random() - 0.5) * 0.05,
+          availableBeds: 12,
+          adminUserId: adminUser.id,
+        },
+      });
+
+      // 3. Mark registration as APPROVED
+      const updatedReg = await tx.hospitalRegistration.update({
+        where: { id },
+        data: {
+          status: 'APPROVED',
+          reviewedAt: new Date(),
+          reviewedBy: req.user!.id,
+        },
+      });
+
+      return { adminUser, hospital, registration: updatedReg };
+    });
+
+    // Broadcast activity log to Super Admin room
+    await logAdminActivity(req.user!.id, 'HOSPITAL_REGISTRATION_APPROVED', {
+      registrationId: id,
+      hospitalName: reg.hospitalName,
+      adminEmail: reg.email,
+      adminId: result.adminUser.id,
+    });
+
+    const { passwordHash: _, ...safeUser } = result.adminUser;
+    return res.json({
+      message: `Hospital "${reg.hospitalName}" approved successfully! Hospital admin account created.`,
+      user: safeUser,
+      hospital: result.hospital,
+    });
+  } catch (error: any) {
+    console.error('Approval error:', error);
+    return res.status(500).json({ message: error.message || 'Internal server error' });
+  }
+});
+
+// Reject hospital registration
+router.post('/hospital-registrations/:id/reject', async (req: AuthRequest, res) => {
+  const { id } = req.params;
+  const { reason } = req.body;
+
+  try {
+    const reg = await prisma.hospitalRegistration.findUnique({ where: { id } });
+    if (!reg) {
+      return res.status(404).json({ message: 'Hospital registration not found' });
+    }
+
+    if (reg.status !== 'PENDING') {
+      return res.status(400).json({ message: `Registration has already been ${reg.status.toLowerCase()}` });
+    }
+
+    const updatedReg = await prisma.hospitalRegistration.update({
+      where: { id },
+      data: {
+        status: 'REJECTED',
+        rejectionReason: reason || 'Application did not meet criteria',
+        reviewedAt: new Date(),
+        reviewedBy: req.user!.id,
+      },
+    });
+
+    await logAdminActivity(req.user!.id, 'HOSPITAL_REGISTRATION_REJECTED', {
+      registrationId: id,
+      hospitalName: reg.hospitalName,
+      adminEmail: reg.email,
+      reason: reason || 'Application did not meet criteria',
+    });
+
+    return res.json({
+      message: `Hospital registration for "${reg.hospitalName}" marked as REJECTED.`,
+      registration: updatedReg,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ message: error.message || 'Internal server error' });
+  }
+});
+
+// =========================================================================
+// REAL-TIME ACTIVITY LOGS (Feature 3)
+// =========================================================================
+
+router.get('/activity-logs', async (req: AuthRequest, res) => {
+  const adminId = req.query.adminId as string;
+  const limit = parseInt(req.query.limit as string) || 60;
+
+  try {
+    const where: any = {};
+    if (adminId) {
+      where.adminId = adminId;
+    }
+
+    const logs = await prisma.activityLog.findMany({
+      where,
+      include: {
+        admin: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            hospital: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { timestamp: 'desc' },
+      take: limit,
+    });
+
+    return res.json(logs);
   } catch (error: any) {
     return res.status(500).json({ message: error.message || 'Internal server error' });
   }

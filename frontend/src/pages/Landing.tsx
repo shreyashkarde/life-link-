@@ -217,20 +217,6 @@ export const Landing: React.FC = () => {
   const [dispatches, setDispatches] = useState<DispatchAlert[]>(mockDispatches);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Keyboard shortcut listener for Super Admin Login
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key.toLowerCase() === 'l') {
-        e.preventDefault();
-        navigate('/super-admin/login');
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [navigate]);
-
   // Mark dispatch as read when clicked
   const handleSelectDispatch = (msg: DispatchAlert) => {
     setActiveDispatch(msg);
@@ -304,11 +290,11 @@ export const Landing: React.FC = () => {
 
         {/* Right Nav Action */}
         <div className="hidden md:flex items-center gap-3">
-          <Link to="/admin/login" className="text-white/60 hover:text-emerald-400 text-xs font-semibold px-2.5 py-1.5 transition-colors">
-            Hospital Admin
+          <Link to="/register-hospital" className="text-white/70 hover:text-emerald-400 text-xs font-semibold px-2.5 py-1.5 transition-colors">
+            Register Hospital
           </Link>
-          <Link to="/super-admin/login" className="text-white/60 hover:text-rose-400 text-xs font-semibold px-2.5 py-1.5 transition-colors">
-            Super Admin
+          <Link to="/admin/login" className="text-white/60 hover:text-white text-xs font-semibold px-2.5 py-1.5 transition-colors">
+            Hospital Staff
           </Link>
           <Link to="/login" className="text-white/80 hover:text-white text-xs font-bold uppercase tracking-wider px-3 py-2 transition-colors">
             Sign In
@@ -348,11 +334,11 @@ export const Landing: React.FC = () => {
               </a>
             ))}
             <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/5">
-              <Link to="/admin/login" onClick={() => setMobileMenuOpen(false)} className="flex items-center justify-center text-emerald-400 bg-emerald-950/20 border border-emerald-500/20 text-2xs font-bold py-2.5 rounded-xl">
-                Hospital Admin
+              <Link to="/register-hospital" onClick={() => setMobileMenuOpen(false)} className="flex items-center justify-center text-emerald-400 bg-emerald-950/20 border border-emerald-500/20 text-2xs font-bold py-2.5 rounded-xl">
+                Register Hospital
               </Link>
-              <Link to="/super-admin/login" onClick={() => setMobileMenuOpen(false)} className="flex items-center justify-center text-rose-400 bg-rose-950/20 border border-rose-500/20 text-2xs font-bold py-2.5 rounded-xl">
-                Super Admin
+              <Link to="/admin/login" onClick={() => setMobileMenuOpen(false)} className="flex items-center justify-center text-white/70 bg-white/5 border border-white/10 text-2xs font-bold py-2.5 rounded-xl">
+                Hospital Staff
               </Link>
             </div>
             <div className="grid grid-cols-2 gap-3 pt-2">
@@ -814,10 +800,11 @@ export const Landing: React.FC = () => {
               icon: <Building className="w-6 h-6 text-cyan-400" />
             },
             {
-              role: "Super Admin Vault",
-              desc: "Root platform telemetry, global fleet coordinates, hospital onboarding, and database maintenance.",
-              loginPath: "/super-admin/login",
-              icon: <ShieldAlert className="w-6 h-6 text-rose-500" />
+              role: "Hospital Network",
+              desc: "Join LifeLink emergency network. Submit your healthcare facility registration for verified dispatch integration.",
+              loginPath: "/admin/login",
+              registerPath: "/register-hospital",
+              icon: <Building className="w-6 h-6 text-emerald-400" />
             }
           ].map((card, idx) => (
             <motion.div
@@ -970,8 +957,8 @@ export const Landing: React.FC = () => {
           <span>&copy; 2026 LifeLink Inc.</span>
         </div>
         <div className="flex gap-6 items-center flex-wrap">
-          <Link to="/admin/login" className="text-emerald-400/80 hover:text-emerald-300 transition-colors">Hospital Admin</Link>
-          <Link to="/super-admin/login" className="text-rose-400/80 hover:text-rose-300 transition-colors">Super Admin Vault</Link>
+          <Link to="/register-hospital" className="text-emerald-400/80 hover:text-emerald-300 transition-colors">Register Hospital</Link>
+          <Link to="/admin/login" className="text-white/60 hover:text-white transition-colors">Hospital Staff Portal</Link>
           <a href="#privacy" className="hover:text-white transition-colors">Privacy</a>
           <a href="#terms" className="hover:text-white transition-colors">Terms</a>
           <a href="#security" className="hover:text-white transition-colors">Security</a>

@@ -169,13 +169,6 @@ export const AdminLogin: React.FC = () => {
             >
               ← Patient / Driver Portal
             </button>
-            <button
-              type="button"
-              onClick={() => navigate('/super-admin/login')}
-              className="hover:text-rose-500 transition-colors cursor-pointer"
-            >
-              Super Admin Vault →
-            </button>
           </div>
         </div>
       </div>

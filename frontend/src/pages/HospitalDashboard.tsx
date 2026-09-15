@@ -4,6 +4,7 @@ import { useSocket } from '../context/SocketContext';
 import { LeafletMap } from '../components/LeafletMap';
 import { ThemeToggle } from '../components/ui/ThemeToggle';
 import { HeartbeatLoader } from '../components/ui/HeartbeatLoader';
+import { DoctorAppointmentsSection } from '../components/hospital/DoctorAppointmentsSection';
 import {
   Activity,
   Heart,
@@ -47,7 +48,7 @@ export const HospitalDashboard: React.FC = () => {
 
   // Active dashboard view tab
   const [activeDashboardTab, setActiveDashboardTab] = useState<
-    'DISPATCHES' | 'BEDS' | 'BOOKINGS' | 'CLEANING' | 'QUEUE' | 'FLEET' | 'ROSTER'
+    'DISPATCHES' | 'BEDS' | 'BOOKINGS' | 'APPOINTMENTS_DOCTORS' | 'CLEANING' | 'QUEUE' | 'FLEET' | 'ROSTER'
   >('BEDS');
 
   // ER Beds & Clinical Capacity State
@@ -881,6 +882,18 @@ export const HospitalDashboard: React.FC = () => {
           </button>
 
           <button
+            onClick={() => setActiveDashboardTab('APPOINTMENTS_DOCTORS')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shrink-0 ${
+              activeDashboardTab === 'APPOINTMENTS_DOCTORS'
+                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-900'
+            }`}
+          >
+            <Stethoscope className="w-4 h-4" />
+            <span>Doctors & Appointment Slots</span>
+          </button>
+
+          <button
             onClick={() => setActiveDashboardTab('CLEANING')}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shrink-0 ${
               activeDashboardTab === 'CLEANING'
@@ -1526,6 +1539,13 @@ export const HospitalDashboard: React.FC = () => {
             )}
 
           </div>
+        )}
+
+        {/* ============================================================
+            TAB: DOCTORS & OUTPATIENT APPOINTMENT SLOTS
+            ============================================================ */}
+        {activeDashboardTab === 'APPOINTMENTS_DOCTORS' && (
+          <DoctorAppointmentsSection apiFetch={apiFetch} hospitalName={user?.hospital?.name} />
         )}
 
         {/* ============================================================

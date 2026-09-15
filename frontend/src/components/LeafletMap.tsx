@@ -4,7 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import { Navigation, Compass } from 'lucide-react';
 
 interface LeafletMapProps {
-  patientLoc: [number, number];
+  patientLoc?: [number, number] | null;
   driverLoc?: [number, number] | null;
   hospitalLoc?: [number, number] | null;
   status?: string;
