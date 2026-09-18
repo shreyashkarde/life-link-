@@ -1,7 +1,10 @@
 import { Server, Socket } from 'socket.io';
-import { RequestStatus, TripType, AmbulanceType } from '@prisma/client';
+import { RequestStatus, TripType, AmbulanceType, Role } from '@prisma/client';
+import * as jwt from 'jsonwebtoken';
 import prisma from './db';
 import { sendEmergencyAlertToContacts } from './utils/smsService';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'lifelink_jwt_secret_key_2026_super_secure';
 
 // Haversine formula to compute distance in km
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -18,6 +21,21 @@ function getDistance(lat1: number, lon1: number, lat2: number, lon2: number): nu
 
 function deg2rad(deg: number): number {
   return deg * (Math.PI / 180);
+}
+
+function isValidCoordinate(lat: any, lng: any): boolean {
+  const nLat = parseFloat(lat);
+  const nLng = parseFloat(lng);
+  return (
+    !isNaN(nLat) &&
+    !isNaN(nLng) &&
+    isFinite(nLat) &&
+    isFinite(nLng) &&
+    nLat >= -90 &&
+    nLat <= 90 &&
+    nLng >= -180 &&
+    nLng <= 180
+  );
 }
 
 // Maps driver userId to socket ID
@@ -75,26 +93,54 @@ export function broadcastToSuperAdmin(event: string, data: any) {
 
 export function setupSocketHandlers(io: Server) {
   ioInstance = io;
+
+  // Socket authentication middleware
+  io.use((socket: Socket, next: (err?: any) => void) => {
+    const token =
+      socket.handshake.auth?.token ||
+      (socket.handshake.headers?.authorization && socket.handshake.headers.authorization.split(' ')[1]);
+
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET) as any;
+        socket.data.user = decoded;
+      } catch (err) {
+        // Token invalid, allow anonymous socket connection but socket.data.user will be undefined
+        console.warn(`[Socket Auth] Invalid token on socket ${socket.id}`);
+      }
+    }
+    next();
+  });
+
   io.on('connection', (socket: Socket) => {
     console.log(`Socket connected: ${socket.id}`);
 
-    // Register Patient
+    // Register Patient (validates user context)
     socket.on('patient:register', (patientId: string) => {
-      patientSockets.set(patientId, socket.id);
-      console.log(`Registered Patient: ${patientId} on socket ${socket.id}`);
+      const effectiveId = socket.data.user?.id || patientId;
+      if (effectiveId) {
+        patientSockets.set(effectiveId, socket.id);
+        console.log(`Registered Patient: ${effectiveId} on socket ${socket.id}`);
+      }
     });
 
     // Register Driver
     socket.on('driver:register', (driverId: string) => {
-      driverSockets.set(driverId, socket.id);
-      console.log(`Registered Driver: ${driverId} on socket ${socket.id}`);
+      const effectiveId = socket.data.user?.id || driverId;
+      if (effectiveId) {
+        driverSockets.set(effectiveId, socket.id);
+        console.log(`Registered Driver: ${effectiveId} on socket ${socket.id}`);
+      }
     });
 
     // Register Hospital Admin
     socket.on('hospital:register', (adminUserId: string) => {
-      hospitalSockets.set(adminUserId, socket.id);
-      console.log(`Registered Hospital Admin: ${adminUserId} on socket ${socket.id}`);
-      socket.join('hospital_room');
+      const effectiveId = socket.data.user?.id || adminUserId;
+      if (effectiveId) {
+        hospitalSockets.set(effectiveId, socket.id);
+        console.log(`Registered Hospital Admin: ${effectiveId} on socket ${socket.id}`);
+        socket.join('hospital_room');
+      }
     });
 
     // Register Super Admin Telemetry and Activity
@@ -121,10 +167,42 @@ export function setupSocketHandlers(io: Server) {
       ambulanceType?: string;
       hospitalId?: string;
     }) => {
-      const { patientId, lat, lng, tripType, ambulanceType, hospitalId } = data;
+      const { patientId: rawPatientId, lat, lng, tripType, ambulanceType, hospitalId } = data;
+      const patientId = socket.data.user?.id || rawPatientId;
+
+      if (!isValidCoordinate(lat, lng)) {
+        socket.emit('sos:error', { message: 'Invalid GPS coordinates provided.' });
+        return;
+      }
+
       console.log(`SOS/Standard Triggered by ${patientId} at (${lat}, ${lng})`);
 
       try {
+        // Idempotency / Duplicate SOS Check:
+        // If patient already has an active pending or in-progress trip, recover it instead of creating duplicates
+        const existingActiveRequest = await prisma.emergencyRequest.findFirst({
+          where: {
+            patientId,
+            status: {
+              notIn: [RequestStatus.COMPLETED, RequestStatus.REJECTED],
+            },
+          },
+          include: {
+            patient: { include: { patientProfile: true } },
+            hospital: true,
+            driver: { include: { ambulance: true } },
+          },
+        });
+
+        if (existingActiveRequest) {
+          console.log(`[SOS Deduplication] Active request ${existingActiveRequest.id} already exists for patient ${patientId}`);
+          socket.emit('sos:initiated', {
+            request: existingActiveRequest,
+            hospital: existingActiveRequest.hospital,
+          });
+          return;
+        }
+
         // Fetch patient details and medical profile
         const patient = await prisma.user.findUnique({
           where: { id: patientId },
@@ -136,7 +214,7 @@ export function setupSocketHandlers(io: Server) {
           return;
         }
 
-        // 1. Locate all available online drivers within 10 km
+        // 1. Locate all available online drivers within 15 km
         const allAvailableAmbulances = await prisma.ambulance.findMany({
           where: { isAvailable: true },
           include: { driver: true },
@@ -144,12 +222,11 @@ export function setupSocketHandlers(io: Server) {
 
         let nearbyDrivers = allAvailableAmbulances.filter((amb) => {
           const distance = getDistance(lat, lng, amb.currentLat, amb.currentLng);
-          // If ambulanceType is specified, filter by type (if SOS, pick any available or matching)
           const typeMatches = !ambulanceType || amb.ambulanceType === ambulanceType;
           return distance <= 15.0 && typeMatches;
         });
 
-        // Ensure there is always an available ambulance unit in patient's local vicinity (~1.5 km)
+        // Ensure there is always an available ambulance unit in patient's local vicinity (~1.5 km fallback)
         if (nearbyDrivers.length === 0 && allAvailableAmbulances.length > 0) {
           const candidate = allAvailableAmbulances[0];
           const localLat = lat + 0.0085;
@@ -196,7 +273,7 @@ export function setupSocketHandlers(io: Server) {
           targetHospital = closestHospital;
         }
 
-        // If target hospital is further than 20km (e.g. user in another city), relocate nearby (~3 km away)
+        // If target hospital is further than 20km, relocate nearby (~3 km away for testing realism)
         if (targetHospital && minHospitalDist > 20.0) {
           targetHospital = await prisma.hospital.update({
             where: { id: targetHospital.id },
@@ -272,18 +349,18 @@ export function setupSocketHandlers(io: Server) {
           .sort((a, b) => a.dist - b.dist);
 
         const candidateDriverIds = sortedNearbyDrivers
-          .map(item => item.amb.driverId)
+          .map((item) => item.amb.driverId)
           .filter((id): id is string => !!id);
 
         if (candidateDriverIds.length > 0) {
           const firstDriverId = candidateDriverIds[0];
           const firstDriverSocketId = driverSockets.get(firstDriverId);
-          
+
           dispatchQueues.set(emergencyRequest.id, {
             requestId: emergencyRequest.id,
             candidates: candidateDriverIds,
             currentIndex: 0,
-            payload: payloadForDrivers
+            payload: payloadForDrivers,
           });
 
           if (firstDriverSocketId) {
@@ -311,29 +388,75 @@ export function setupSocketHandlers(io: Server) {
       }
     });
 
-    // Driver Slide to Accept Emergency Request
-    socket.on('request:accept', async (data: { requestId: string; driverId: string }) => {
-      const { requestId, driverId } = data;
-      console.log(`Driver ${driverId} attempting to accept request ${requestId}`);
+    // Real-Time SOS Cancellation Handler
+    socket.on('sos:cancel', async (data: { requestId: string }) => {
+      const { requestId } = data;
+      const patientId = socket.data.user?.id;
 
       try {
-        // Find request
-        const request = await prisma.emergencyRequest.findUnique({
-          where: { id: requestId },
+        const whereClause: any = { id: requestId };
+        if (patientId) whereClause.patientId = patientId;
+
+        const request = await prisma.emergencyRequest.findFirst({
+          where: whereClause,
+          include: { driver: true, hospital: true },
         });
 
         if (!request) {
-          socket.emit('request:accept_error', { message: 'Emergency request not found' });
+          socket.emit('sos:cancel_error', { message: 'Active emergency request not found' });
           return;
         }
 
-        // Check if request is still pending (locking mechanism)
-        if (request.status !== RequestStatus.PENDING) {
-          socket.emit('request:accept_error', { message: 'This request has already been claimed by another driver.' });
-          return;
+        // Atomic Cancellation
+        const updated = await prisma.$transaction(async (tx) => {
+          const req = await tx.emergencyRequest.update({
+            where: { id: requestId },
+            data: { status: RequestStatus.REJECTED },
+            include: { hospital: true, patient: true },
+          });
+
+          if (request.driverId) {
+            await tx.ambulance.update({
+              where: { driverId: request.driverId },
+              data: { isAvailable: true },
+            });
+          }
+
+          return req;
+        });
+
+        // Stop road simulations & clean up queue
+        stopRouteSimulation(requestId);
+        dispatchQueues.delete(requestId);
+
+        // Notify assigned driver
+        if (request.driverId) {
+          broadcastToDriver(request.driverId, 'request:cancelled', { requestId });
         }
 
-        // Check if driver has an active ambulance
+        // Broadcast to hospital & super admin
+        io.to('hospital_room').emit('hospital:emergency_status_changed', {
+          request: updated,
+          status: RequestStatus.REJECTED,
+        });
+        io.to('telemetry_room').emit('telemetry:update');
+
+        socket.emit('sos:cancelled', { requestId, success: true });
+        console.log(`Emergency request ${requestId} cancelled successfully.`);
+      } catch (err: any) {
+        console.error('Error cancelling emergency request:', err);
+        socket.emit('sos:cancel_error', { message: 'Failed to cancel emergency request' });
+      }
+    });
+
+    // Driver Slide to Accept Emergency Request (Atomic Concurrency Locking)
+    socket.on('request:accept', async (data: { requestId: string; driverId: string }) => {
+      const { requestId, driverId: rawDriverId } = data;
+      const driverId = socket.data.user?.id || rawDriverId;
+      console.log(`Driver ${driverId} attempting to accept request ${requestId}`);
+
+      try {
+        // 1. Check if driver has an active ambulance
         const ambulance = await prisma.ambulance.findUnique({
           where: { driverId },
           include: { driver: true },
@@ -344,15 +467,45 @@ export function setupSocketHandlers(io: Server) {
           return;
         }
 
-        // Transaction: Update request status and claim driver, and mark driver as unavailable
+        // 2. Prevent driver from accepting if already engaged on another uncompleted trip
+        const activeDriverTrip = await prisma.emergencyRequest.findFirst({
+          where: {
+            driverId,
+            status: { in: [RequestStatus.ACCEPTED, RequestStatus.ARRIVING, RequestStatus.IN_TRANSIT] },
+          },
+        });
+
+        if (activeDriverTrip && activeDriverTrip.id !== requestId) {
+          socket.emit('request:accept_error', { message: 'You already have an active emergency trip in progress.' });
+          return;
+        }
+
+        // 3. Atomic Database Concurrency Lock:
+        // Update request ONLY if status is strictly PENDING
         const updatedRequest = await prisma.$transaction(async (tx) => {
-          // Update request
-          const req = await tx.emergencyRequest.update({
-            where: { id: requestId },
+          const updateResult = await tx.emergencyRequest.updateMany({
+            where: {
+              id: requestId,
+              status: RequestStatus.PENDING,
+            },
             data: {
               status: RequestStatus.ACCEPTED,
               driverId: driverId,
             },
+          });
+
+          if (updateResult.count === 0) {
+            throw new Error('ALREADY_CLAIMED');
+          }
+
+          // Mark driver as unavailable on active trip
+          await tx.ambulance.update({
+            where: { driverId },
+            data: { isAvailable: false },
+          });
+
+          return tx.emergencyRequest.findUnique({
+            where: { id: requestId },
             include: {
               patient: {
                 include: { patientProfile: true },
@@ -360,15 +513,11 @@ export function setupSocketHandlers(io: Server) {
               hospital: true,
             },
           });
-
-          // Mark driver as unavailable (currently active on trip)
-          await tx.ambulance.update({
-            where: { driverId },
-            data: { isAvailable: false },
-          });
-
-          return req;
         });
+
+        if (!updatedRequest) {
+          throw new Error('REQUEST_FETCH_FAILED');
+        }
 
         // Broadcast to patient
         const patientSocketId = patientSockets.get(updatedRequest.patientId);
@@ -404,18 +553,23 @@ export function setupSocketHandlers(io: Server) {
         // Delete matching queue from in-memory dispatch queues
         dispatchQueues.delete(requestId);
 
-        // Start routing simulation on accept!
+        // Start routing simulation on accept
         startRouteSimulation(io, requestId, driverId, ambulance.currentLat, ambulance.currentLng, updatedRequest.pickupLat, updatedRequest.pickupLng);
 
       } catch (err: any) {
-        console.error('Accepting request error:', err);
-        socket.emit('request:accept_error', { message: 'Failed to process request acceptance.' });
+        if (err.message === 'ALREADY_CLAIMED') {
+          socket.emit('request:accept_error', { message: 'This request has already been claimed by another driver.' });
+        } else {
+          console.error('Accepting request error:', err);
+          socket.emit('request:accept_error', { message: 'Failed to process request acceptance.' });
+        }
       }
     });
 
     // Driver Slide to Decline/Reject Emergency Request (Pass to next driver)
     socket.on('request:reject', async (data: { requestId: string; driverId: string }) => {
-      const { requestId, driverId } = data;
+      const { requestId, driverId: rawDriverId } = data;
+      const driverId = socket.data.user?.id || rawDriverId;
       console.log(`Driver ${driverId} rejected request ${requestId}`);
 
       const queue = dispatchQueues.get(requestId);
@@ -434,18 +588,18 @@ export function setupSocketHandlers(io: Server) {
             // Update request status to REJECTED in database
             await prisma.emergencyRequest.update({
               where: { id: requestId },
-              data: { status: RequestStatus.REJECTED }
+              data: { status: RequestStatus.REJECTED },
             });
 
-            // Notify patient of failure
+            // Notify patient
             const request = await prisma.emergencyRequest.findUnique({
-              where: { id: requestId }
+              where: { id: requestId },
             });
             if (request) {
               const patientSocketId = patientSockets.get(request.patientId);
               if (patientSocketId) {
                 io.to(patientSocketId).emit('sos:error', {
-                  message: 'All nearby emergency ambulances are currently engaged. Please hold, dispatch command is routing out-of-network responders.'
+                  message: 'All nearby emergency ambulances are currently engaged. Please hold, dispatch command is routing out-of-network responders.',
                 });
               }
             }
@@ -461,19 +615,26 @@ export function setupSocketHandlers(io: Server) {
       driverId: string;
       status: 'ACCEPTED' | 'ARRIVING' | 'IN_TRANSIT' | 'AT_HOSPITAL' | 'COMPLETED' | 'REJECTED';
     }) => {
-      const { requestId, driverId, status } = data;
+      const { requestId, driverId: rawDriverId, status } = data;
+      const driverId = socket.data.user?.id || rawDriverId;
       console.log(`Driver ${driverId} updating request ${requestId} to status ${status}`);
 
       try {
         const reqStatus = status as RequestStatus;
 
-        // Fetch the request
+        // Fetch the request and verify authorization
         const request = await prisma.emergencyRequest.findUnique({
           where: { id: requestId },
         });
 
         if (!request) {
           socket.emit('trip:status_error', { message: 'Trip not found' });
+          return;
+        }
+
+        // Authorization check: only assigned driver or super admin can update
+        if (request.driverId && request.driverId !== driverId && socket.data.user?.role !== Role.SUPER_ADMIN) {
+          socket.emit('trip:status_error', { message: 'Unauthorized to update this trip status' });
           return;
         }
 
@@ -535,8 +696,20 @@ export function setupSocketHandlers(io: Server) {
 
         // Start or stop routing simulation based on trip phase
         if (reqStatus === RequestStatus.IN_TRANSIT) {
-          startRouteSimulation(io, requestId, driverId, updatedRequest.pickupLat, updatedRequest.pickupLng, updatedRequest.hospital.lat, updatedRequest.hospital.lng);
-        } else if (reqStatus === RequestStatus.COMPLETED || reqStatus === RequestStatus.REJECTED || reqStatus === RequestStatus.AT_HOSPITAL) {
+          startRouteSimulation(
+            io,
+            requestId,
+            driverId,
+            updatedRequest.pickupLat,
+            updatedRequest.pickupLng,
+            updatedRequest.hospital.lat,
+            updatedRequest.hospital.lng
+          );
+        } else if (
+          reqStatus === RequestStatus.COMPLETED ||
+          reqStatus === RequestStatus.REJECTED ||
+          reqStatus === RequestStatus.AT_HOSPITAL
+        ) {
           stopRouteSimulation(requestId);
         }
 
@@ -553,7 +726,12 @@ export function setupSocketHandlers(io: Server) {
       lng: number;
       requestId?: string;
     }) => {
-      const { driverId, lat, lng, requestId } = data;
+      const { driverId: rawDriverId, lat, lng, requestId } = data;
+      const driverId = socket.data.user?.id || rawDriverId;
+
+      if (!isValidCoordinate(lat, lng)) {
+        return; // Silently ignore invalid telemetry coordinates
+      }
 
       try {
         // 1. Update ambulance coordinates in database
@@ -603,7 +781,7 @@ export function setupSocketHandlers(io: Server) {
         });
 
       } catch (err) {
-        // Fail silently on periodic GPS updates to avoid flooding logs
+        // Fail silently on periodic GPS updates
       }
     });
 
@@ -611,7 +789,6 @@ export function setupSocketHandlers(io: Server) {
     socket.on('disconnect', () => {
       console.log(`Socket disconnected: ${socket.id}`);
 
-      // Remove socket maps
       for (const [key, value] of driverSockets.entries()) {
         if (value === socket.id) driverSockets.delete(key);
       }
@@ -682,7 +859,7 @@ async function fetchDirectionsRoute(startLat: number, startLng: number, endLat: 
   return points;
 }
 
-async function startRouteSimulation(
+export async function startRouteSimulation(
   io: Server,
   requestId: string,
   driverId: string,
@@ -790,7 +967,7 @@ async function startRouteSimulation(
   });
 }
 
-function stopRouteSimulation(requestId: string) {
+export function stopRouteSimulation(requestId: string) {
   const sim = activeSimulations.get(requestId);
   if (sim) {
     clearInterval(sim.interval);

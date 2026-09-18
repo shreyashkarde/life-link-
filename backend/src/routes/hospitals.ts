@@ -429,9 +429,19 @@ router.put('/beds/:id', authenticate, async (req: AuthRequest, res) => {
   const { status, patientName, patientId, assignedDoctor, notes, cleaningPriority, ward, bedNumber } = req.body;
 
   try {
+    const hospital = await getAdminHospital(req.user.id, req.user.role);
+    if (!hospital) {
+      return res.status(404).json({ message: 'Hospital not found for this administrator' });
+    }
+
     const bed = await prisma.hospitalBed.findUnique({ where: { id } });
     if (!bed) {
       return res.status(404).json({ message: 'Bed record not found' });
+    }
+
+    // IDOR / BOLA Prevention: Verify bed belongs to this admin's hospital
+    if (req.user.role === Role.ADMIN_HOSPITAL && bed.hospitalId !== hospital.id) {
+      return res.status(403).json({ message: 'Forbidden: Bed does not belong to your hospital' });
     }
 
     const updateData: any = {};
@@ -507,9 +517,19 @@ router.post('/beds/:id/clean', authenticate, async (req: AuthRequest, res) => {
   const { action, cleanedBy } = req.body; // action: 'START' | 'COMPLETE'
 
   try {
+    const hospital = await getAdminHospital(req.user.id, req.user.role);
+    if (!hospital) {
+      return res.status(404).json({ message: 'Hospital not found for this administrator' });
+    }
+
     const bed = await prisma.hospitalBed.findUnique({ where: { id } });
     if (!bed) {
       return res.status(404).json({ message: 'Bed not found' });
+    }
+
+    // IDOR / BOLA Prevention: Verify bed belongs to this admin's hospital
+    if (req.user.role === Role.ADMIN_HOSPITAL && bed.hospitalId !== hospital.id) {
+      return res.status(403).json({ message: 'Forbidden: Bed does not belong to your hospital' });
     }
 
     let updatedBed;
@@ -683,6 +703,11 @@ router.put('/bookings/:id/status', authenticate, async (req: AuthRequest, res) =
   const { status, assignedBedId, doctorName, notes } = req.body;
 
   try {
+    const hospital = await getAdminHospital(req.user.id, req.user.role);
+    if (!hospital) {
+      return res.status(404).json({ message: 'Hospital not found for this administrator' });
+    }
+
     const booking = await prisma.hospitalBooking.findUnique({
       where: { id },
       include: { assignedBed: true },
@@ -690,6 +715,11 @@ router.put('/bookings/:id/status', authenticate, async (req: AuthRequest, res) =
 
     if (!booking) {
       return res.status(404).json({ message: 'Booking not found' });
+    }
+
+    // IDOR / BOLA Prevention: Verify booking belongs to this admin's hospital
+    if (req.user.role === Role.ADMIN_HOSPITAL && booking.hospitalId !== hospital.id) {
+      return res.status(403).json({ message: 'Forbidden: Booking does not belong to your hospital' });
     }
 
     const updated = await prisma.$transaction(async (tx) => {
@@ -777,6 +807,11 @@ router.post('/requests/:id/assign-bay', authenticate, async (req: AuthRequest, r
   const { assignedBay, bedId, doctorName } = req.body;
 
   try {
+    const hospital = await getAdminHospital(req.user.id, req.user.role);
+    if (!hospital) {
+      return res.status(404).json({ message: 'Hospital not found for this administrator' });
+    }
+
     const request = await prisma.emergencyRequest.findUnique({
       where: { id },
       include: { patient: true, driver: true, hospital: true },
@@ -784,6 +819,11 @@ router.post('/requests/:id/assign-bay', authenticate, async (req: AuthRequest, r
 
     if (!request) {
       return res.status(404).json({ message: 'Emergency dispatch request not found' });
+    }
+
+    // IDOR / BOLA Prevention: Verify request is for this admin's hospital
+    if (req.user.role === Role.ADMIN_HOSPITAL && request.hospitalId !== hospital.id) {
+      return res.status(403).json({ message: 'Forbidden: Emergency request is not directed to your hospital' });
     }
 
     // Update request with assignedBay

@@ -2,8 +2,29 @@ import { Router } from 'express';
 import { RequestStatus } from '@prisma/client';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import prisma from '../db';
+import {
+  broadcastToDriver,
+  broadcastToHospital,
+  broadcastToSuperAdmin,
+  stopRouteSimulation,
+} from '../socket';
 
 const router = Router();
+
+function isValidCoordinate(lat: any, lng: any): boolean {
+  const nLat = parseFloat(lat);
+  const nLng = parseFloat(lng);
+  return (
+    !isNaN(nLat) &&
+    !isNaN(nLng) &&
+    isFinite(nLat) &&
+    isFinite(nLng) &&
+    nLat >= -90 &&
+    nLat <= 90 &&
+    nLng >= -180 &&
+    nLng <= 180
+  );
+}
 
 // Get active request for patient, driver, or hospital
 router.get('/active', authenticate, async (req: AuthRequest, res) => {
@@ -100,6 +121,7 @@ router.post('/cancel', authenticate, async (req: AuthRequest, res) => {
           notIn: [RequestStatus.COMPLETED, RequestStatus.REJECTED],
         },
       },
+      include: { hospital: true },
     });
 
     if (!activeRequest) {
@@ -112,6 +134,7 @@ router.post('/cancel', authenticate, async (req: AuthRequest, res) => {
         data: {
           status: RequestStatus.REJECTED,
         },
+        include: { hospital: true, patient: true },
       });
 
       if (activeRequest.driverId) {
@@ -123,6 +146,19 @@ router.post('/cancel', authenticate, async (req: AuthRequest, res) => {
 
       return req;
     });
+
+    // Real-Time Synchronized Broadcasts
+    stopRouteSimulation(activeRequest.id);
+
+    if (activeRequest.driverId) {
+      broadcastToDriver(activeRequest.driverId, 'request:cancelled', { requestId: activeRequest.id });
+    }
+
+    broadcastToHospital(activeRequest.hospitalId, 'hospital:emergency_status_changed', {
+      request: updatedRequest,
+      status: RequestStatus.REJECTED,
+    });
+    broadcastToSuperAdmin('telemetry:update', {});
 
     res.json({ message: 'Emergency request cancelled successfully', request: updatedRequest });
   } catch (err: any) {
@@ -197,8 +233,15 @@ router.post('/symptom-triage', authenticate, async (req: AuthRequest, res) => {
     return res.status(400).json({ message: 'Symptoms, lat, and lng are required parameters.' });
   }
 
+  if (!isValidCoordinate(lat, lng)) {
+    return res.status(400).json({ message: 'Invalid latitude or longitude coordinates provided.' });
+  }
+
+  const pLat = parseFloat(lat);
+  const pLng = parseFloat(lng);
+
   try {
-    const text = symptoms.toLowerCase();
+    const text = String(symptoms).toLowerCase();
     let specialty = 'General Medicine';
     let recommendedTier = 'BASIC_LIFE_SUPPORT';
     let analysis = 'Symptoms suggest general illness. BASIC LIFE SUPPORT vehicle is sufficient.';
@@ -244,27 +287,27 @@ router.post('/symptom-triage', authenticate, async (req: AuthRequest, res) => {
     // Retrieve hospitals from DB
     const allHospitals = await prisma.hospital.findMany();
 
-    // Map each hospital to include distance & mocked specialties list
+    // Map each hospital to include distance & specialties list
     const scoredHospitals = allHospitals
       .map((h) => {
         // Haversine distance calculator
         const R = 6371; // Earth radius in km
-        const dLat = ((h.lat - lat) * Math.PI) / 180;
-        const dLon = ((h.lng - lng) * Math.PI) / 180;
+        const dLat = ((h.lat - pLat) * Math.PI) / 180;
+        const dLon = ((h.lng - pLng) * Math.PI) / 180;
         const a =
           Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-          Math.cos((lat * Math.PI) / 180) * Math.cos((h.lat * Math.PI) / 180) *
+          Math.cos((pLat * Math.PI) / 180) * Math.cos((h.lat * Math.PI) / 180) *
           Math.sin(dLon / 2) * Math.sin(dLon / 2);
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         const distanceKm = R * c;
 
-        // Mock specialties mapping based on name
+        // Specialties mapping based on hospital profile/name
         let specialties = ['General Medicine'];
         if (h.name.includes('General')) {
           specialties = ['Cardiology', 'Neurology', 'Trauma', 'General Medicine'];
         } else if (h.name.includes('UCSF')) {
           specialties = ['Orthopedics', 'Pediatrics', 'Neurology', 'General Medicine'];
-        } else if (h.name.includes('CPMC')) {
+        } else if (h.name.includes('CPMC') || h.name.includes('Francis')) {
           specialties = ['Cardiology', 'Geriatrics', 'General Medicine'];
         }
 

@@ -4,6 +4,22 @@ import prisma from '../db';
 
 const router = Router();
 
+// Validate geographic coordinates
+function isValidCoordinate(lat: any, lng: any): boolean {
+  const nLat = parseFloat(lat);
+  const nLng = parseFloat(lng);
+  return (
+    !isNaN(nLat) &&
+    !isNaN(nLng) &&
+    isFinite(nLat) &&
+    isFinite(nLng) &&
+    nLat >= -90 &&
+    nLat <= 90 &&
+    nLng >= -180 &&
+    nLng <= 180
+  );
+}
+
 // Toggle availability
 router.put('/availability', authenticate, async (req: AuthRequest, res) => {
   if (!req.user || req.user.role !== 'DRIVER') {
@@ -34,6 +50,10 @@ router.put('/location', authenticate, async (req: AuthRequest, res) => {
 
   const { lat, lng } = req.body;
 
+  if (!isValidCoordinate(lat, lng)) {
+    return res.status(400).json({ message: 'Invalid latitude or longitude coordinates' });
+  }
+
   try {
     const ambulance = await prisma.ambulance.update({
       where: { driverId: req.user.id },
@@ -52,8 +72,8 @@ router.put('/location', authenticate, async (req: AuthRequest, res) => {
 // Get nearby available ambulances
 router.get('/nearby', authenticate, async (req: AuthRequest, res) => {
   const { lat, lng } = req.query;
-  if (!lat || !lng) {
-    return res.status(400).json({ message: 'Latitude and Longitude are required' });
+  if (!lat || !lng || !isValidCoordinate(lat, lng)) {
+    return res.status(400).json({ message: 'Valid latitude (-90 to 90) and longitude (-180 to 180) are required' });
   }
 
   const pLat = parseFloat(lat as string);

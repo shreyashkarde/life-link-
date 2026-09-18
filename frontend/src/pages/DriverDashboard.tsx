@@ -245,9 +245,24 @@ export const DriverDashboard: React.FC = () => {
       });
     });
 
+    // Emergency Request Cancelled by Patient
+    socket.on('request:cancelled', (data: { requestId: string }) => {
+      if (incomingRequest && incomingRequest.requestId === data.requestId) {
+        setIncomingRequest(null);
+      }
+      if (activeTrip && activeTrip.id === data.requestId) {
+        setActiveTrip(null);
+        if (simulationIntervalRef.current) {
+          clearInterval(simulationIntervalRef.current);
+          simulationIntervalRef.current = null;
+        }
+      }
+    });
+
     return () => {
       socket.off('request:new');
       socket.off('request:claimed');
+      socket.off('request:cancelled');
       socket.off('request:accept_success');
       socket.off('request:accept_error');
       socket.off('trip:status_success');

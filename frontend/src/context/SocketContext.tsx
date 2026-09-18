@@ -26,6 +26,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     const newSocket = io('http://localhost:5000', {
       transports: ['websocket', 'polling'],
+      auth: { token },
     });
 
     newSocket.on('connect', () => {

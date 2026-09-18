@@ -195,7 +195,7 @@ export const NaniChat: React.FC = () => {
     }
   };
 
-  // Send message to Gemini backend (Feature 4)
+  // Send message to Groq backend (Feature 4)
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!inputMessage.trim() || loading) return;
