@@ -37,6 +37,7 @@ export const BookAppointmentSection: React.FC<BookAppointmentSectionProps> = ({
   const [locating, setLocating] = useState(false);
   const [hospitals, setHospitals] = useState<any[]>([]);
   const [loadingHospitals, setLoadingHospitals] = useState(false);
+  const [hospitalError, setHospitalError] = useState('');
   const [hospitalSearch, setHospitalSearch] = useState('');
   const [selectedHospital, setSelectedHospital] = useState<any | null>(null);
 
@@ -99,9 +100,10 @@ export const BookAppointmentSection: React.FC<BookAppointmentSectionProps> = ({
     );
   };
 
-  // 2. Fetch Nearby Hospitals (Feature 1)
+  // 2. Fetch Nearby Hospitals: LifeLink registered + real hospitals (OpenStreetMap)
   const fetchHospitals = async (lat: number | null, lng: number | null, searchStr: string) => {
     setLoadingHospitals(true);
+    setHospitalError('');
     try {
       let query = '';
       if (lat !== null && lng !== null) {
@@ -111,14 +113,50 @@ export const BookAppointmentSection: React.FC<BookAppointmentSectionProps> = ({
         query += (query ? '&' : '') + `search=${encodeURIComponent(searchStr.trim())}`;
       }
 
-      const res = await apiFetch(`/hospitals/nearby?${query}`);
-      const list = res.hospitals || [];
+      // 1) Hospitals registered on LifeLink (bookable)
+      let registered: any[] = [];
+      let registeredFailed = false;
+      try {
+        const res = await apiFetch(`/hospitals/nearby?${query}`);
+        registered = (res.hospitals || []).map((h: any) => ({ ...h, isRegistered: true }));
+      } catch (err) {
+        registeredFailed = true;
+        console.error('Failed to load registered hospitals:', err);
+      }
+
+      // 2) Real hospitals near the user (OpenStreetMap, not bookable)
+      let real: any[] = [];
+      if (lat !== null && lng !== null) {
+        try {
+          const osm = await apiFetch(`/hospitals/nearby-osm?${query}`);
+          real = osm.hospitals || [];
+        } catch (err) {
+          console.warn('Failed to load real hospitals:', err);
+        }
+      }
+
+      // Hide far-away registered hospitals when we have real nearby ones
+      const nearRegistered = registered.filter(
+        (h: any) => h.distanceKm == null || h.distanceKm <= 15
+      );
+      let list = [...nearRegistered, ...real];
+      if (list.length === 0) list = registered;
+
+      list.sort((a: any, b: any) => (a.distanceKm ?? 99999) - (b.distanceKm ?? 99999));
       setHospitals(list);
-      if (list.length > 0 && !selectedHospital) {
-        setSelectedHospital(list[0]);
+
+      if (registeredFailed && list.length === 0) {
+        setHospitalError('Hospitals load nahi hue. Check karo ki backend chal raha hai ya nahi.');
+      }
+
+      const firstRegistered = list.find((h: any) => h.isRegistered !== false);
+      if (firstRegistered && !selectedHospital) {
+        setSelectedHospital(firstRegistered);
       }
     } catch (err: any) {
       console.error('Failed to load nearby hospitals:', err);
+      setHospitals([]);
+      setHospitalError('Hospitals load nahi hue. Check karo ki backend chal raha hai ya nahi.');
     } finally {
       setLoadingHospitals(false);
     }
@@ -332,7 +370,11 @@ export const BookAppointmentSection: React.FC<BookAppointmentSectionProps> = ({
           </span>
         </div>
 
-        {loadingHospitals ? (
+        {hospitalError ? (
+          <div className="p-8 text-center text-xs text-rose-500 bg-white dark:bg-slate-950 border border-rose-200 dark:border-rose-900/40 rounded-3xl">
+            {hospitalError}
+          </div>
+        ) : loadingHospitals ? (
           <div className="p-8 text-center text-xs text-slate-400 bg-white dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-3xl">
             Locating nearest hospitals with Haversine computation...
           </div>
@@ -347,7 +389,9 @@ export const BookAppointmentSection: React.FC<BookAppointmentSectionProps> = ({
               return (
                 <div
                   key={h.id}
-                  onClick={() => setSelectedHospital(h)}
+                  onClick={() => {
+                    if (h.isRegistered !== false) setSelectedHospital(h);
+                  }}
                   className={`p-5 rounded-3xl border transition-all cursor-pointer flex flex-col justify-between space-y-3 ${
                     isSelected
                       ? 'bg-rose-50/50 dark:bg-rose-950/20 border-rose-500 shadow-md shadow-rose-500/10'
@@ -373,10 +417,39 @@ export const BookAppointmentSection: React.FC<BookAppointmentSectionProps> = ({
 
                   <div className="pt-2 border-t border-gray-100 dark:border-slate-850 flex items-center justify-between text-3xs">
                     <span className="text-slate-400">
-                      {h.doctors ? `${h.doctors.length} Doctors on staff` : 'Specialists available'}
+                      {h.isRegistered === false ? (
+                        <span className="flex items-center gap-3">
+                          <a
+                            href={`https://www.google.com/maps/dir/?api=1&destination=${h.lat},${h.lng}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="font-bold text-blue-500 underline"
+                          >
+                            Get directions
+                          </a>
+                          {h.contactNumber && (
+                            <a
+                              href={`tel:${String(h.contactNumber).replace(/\s+/g, '')}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="font-bold text-emerald-600 underline"
+                            >
+                              Call
+                            </a>
+                          )}
+                        </span>
+                      ) : h.doctors ? (
+                        `${h.doctors.length} Doctors on staff`
+                      ) : (
+                        'Specialists available'
+                      )}
                     </span>
                     <span className={`font-bold ${isSelected ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500'}`}>
-                      {isSelected ? '✓ Selected' : 'Select Facility'}
+                      {h.isRegistered === false
+                        ? 'Not on LifeLink'
+                        : isSelected
+                        ? '✓ Selected'
+                        : 'Select Facility'}
                     </span>
                   </div>
                 </div>

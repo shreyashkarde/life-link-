@@ -160,6 +160,7 @@ router.get('/nearby', async (req, res) => {
     const userLng = hasCoords ? parseFloat(lngStr!) : null;
 
     let hospitals = await prisma.hospital.findMany({
+      where: { NOT: { adminUser: { email: { endsWith: '@osm.lifelink.local' } } } },
       include: {
         doctors: {
           where: { isActive: true },
@@ -1159,4 +1160,109 @@ router.put('/ambulances/:id', authenticate, async (req: AuthRequest, res) => {
   }
 });
 
+// -------------------------------------------------------------
+// Real hospitals near the user from OpenStreetMap (free, no API key)
+// -------------------------------------------------------------
+const osmCache = new Map<string, { time: number; data: any[] }>();
+
+router.get('/nearby-osm', async (req, res) => {
+  try {
+    const lat = parseFloat(req.query.lat as string);
+    const lng = parseFloat(req.query.lng as string);
+    const radiusKm = Math.min(parseFloat((req.query.radius as string) || '15') || 15, 25);
+    const search = (req.query.search as string | undefined)?.trim().toLowerCase();
+
+    if (isNaN(lat) || isNaN(lng)) {
+      return res.json({ count: 0, hospitals: [] });
+    }
+
+    const cacheKey = `${lat.toFixed(2)},${lng.toFixed(2)},${radiusKm}`;
+    const cached = osmCache.get(cacheKey);
+    let list: any[];
+
+    if (cached && Date.now() - cached.time < 10 * 60 * 1000) {
+      list = cached.data;
+    } else {
+      const around = `around:${radiusKm * 1000},${lat},${lng}`;
+      const query = `[out:json][timeout:20];(node["amenity"="hospital"](${around});way["amenity"="hospital"](${around}););out center tags;`;
+
+      const fetchFn: any = (globalThis as any).fetch;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 15000);
+      const response = await fetchFn('https://overpass-api.de/api/interpreter', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': 'LifeLink-App/1.0',
+        },
+        body: `data=${encodeURIComponent(query)}`,
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+
+      if (!response.ok) {
+        throw new Error(`Overpass error ${response.status}`);
+      }
+      const json: any = await response.json();
+
+      list = (json.elements || [])
+        .map((el: any) => {
+          const t = el.tags || {};
+          const name = t.name || t['name:en'];
+          const elLat = el.lat ?? el.center?.lat;
+          const elLng = el.lon ?? el.center?.lon;
+          if (!name || elLat == null || elLng == null) return null;
+
+          const addr = [
+            [t['addr:housenumber'], t['addr:street']].filter(Boolean).join(' '),
+            t['addr:suburb'],
+            t['addr:city'],
+          ]
+            .filter(Boolean)
+            .join(', ');
+
+          return {
+            id: `osm-${el.type}-${el.id}`,
+            name,
+            address: addr || 'Address not listed',
+            lat: elLat,
+            lng: elLng,
+            contactNumber: t.phone || t['contact:phone'] || null,
+            doctors: [],
+            isRegistered: false,
+            source: 'openstreetmap',
+          };
+        })
+        .filter(Boolean);
+
+      osmCache.set(cacheKey, { time: Date.now(), data: list });
+    }
+
+    let results = list
+      .map((h: any) => {
+        const d = haversineDistanceKm(lat, lng, h.lat, h.lng);
+        return {
+          ...h,
+          distanceKm: Math.round(d * 100) / 100,
+          distanceLabel: formatDistance(d),
+        };
+      })
+      .filter((h: any) => h.distanceKm <= radiusKm);
+
+    if (search) {
+      results = results.filter(
+        (h: any) =>
+          h.name.toLowerCase().includes(search) ||
+          h.address.toLowerCase().includes(search)
+      );
+    }
+
+    results.sort((a: any, b: any) => a.distanceKm - b.distanceKm);
+
+    return res.json({ count: results.length, hospitals: results });
+  } catch (error: any) {
+    console.error('OSM hospital fetch failed:', error?.message || error);
+    return res.json({ count: 0, hospitals: [], error: 'Real hospitals could not be loaded' });
+  }
+});
 export default router;
