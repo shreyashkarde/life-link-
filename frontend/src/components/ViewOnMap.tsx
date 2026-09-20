@@ -10,13 +10,12 @@ interface ViewOnMapProps {
 }
 
 export const ViewOnMap: React.FC<ViewOnMapProps> = ({
-  address = 'Boston Public Garden',
+  address = '42.3541,-71.0692',
   mapImageUrl = 'https://images.unsplash.com/photo-1526778548025-fa2f459cd5ce?q=80&w=2000&auto=format&fit=crop',
   className = '',
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
-  const [isDark] = useState(false);
 
   const toggleOpen = () => {
     setIsOpen(!isOpen);
@@ -30,7 +29,13 @@ export const ViewOnMap: React.FC<ViewOnMapProps> = ({
     mass: 0.8,
   };
 
-  const publicMapUrl = `https://maps.google.com/maps?q=${encodeURIComponent(address)}&t=&z=16&ie=UTF8&iwloc=&output=embed`;
+  // address "lat,lng" format me hona chahiye, jaise "21.1458,79.0882"
+  const [la, lo] = address.split(',').map((v) => parseFloat(v.trim()));
+  const hasCoords = Number.isFinite(la) && Number.isFinite(lo);
+  const d = 0.005;
+  const publicMapUrl = hasCoords
+    ? `https://www.openstreetmap.org/export/embed.html?bbox=${lo - d},${la - d},${lo + d},${la + d}&layer=mapnik&marker=${la},${lo}`
+    : '';
 
   return (
     <div className={`transition-colors duration-500`}>
@@ -82,30 +87,31 @@ export const ViewOnMap: React.FC<ViewOnMapProps> = ({
                 style={{ borderRadius: 32 }}
                 transition={springConfig}
               >
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.15 }}
-                  className="absolute inset-0 h-full w-full brightness-[1.02] contrast-[1.05] grayscale-[0.9] saturate-[0.8] sepia-[0.1]"
-                >
-                  <iframe
-                    title="Google Map"
-                    width="100%"
-                    height="100%"
-                    style={{
-                      border: 0,
-                      filter: isDark
-                        ? 'invert(90%) hue-rotate(180deg)'
-                        : 'invert(15%) hue-rotate(180deg)',
-                    }}
-                    src={publicMapUrl}
-                    allowFullScreen
-                    onLoad={() => setIsMapLoaded(true)}
-                    className={`transition-opacity duration-700 ${isMapLoaded ? 'opacity-100' : 'opacity-0'}`}
-                  />
-                </motion.div>
+                {hasCoords ? (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.15 }}
+                    className="absolute inset-0 h-full w-full"
+                  >
+                    <iframe
+                      title="Map"
+                      width="100%"
+                      height="100%"
+                      style={{ border: 0 }}
+                      src={publicMapUrl}
+                      allowFullScreen
+                      onLoad={() => setIsMapLoaded(true)}
+                      className={`transition-opacity duration-700 ${isMapLoaded ? 'opacity-100' : 'opacity-0'}`}
+                    />
+                  </motion.div>
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-gray-500">
+                    Location available nahi hai
+                  </div>
+                )}
 
-                {!isMapLoaded && (
+                {hasCoords && !isMapLoaded && (
                   <div className="absolute inset-0 flex items-center justify-center bg-[#E5E5E7] transition-colors dark:bg-[#1C1C1E]">
                     <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
                   </div>

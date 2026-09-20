@@ -3,6 +3,7 @@ import { RequestStatus, TripType, AmbulanceType, Role } from '@prisma/client';
 import * as jwt from 'jsonwebtoken';
 import prisma from './db';
 import { sendEmergencyAlertToContacts } from './utils/smsService';
+   import { getNearbyRealHospitals, getOrCreateRealHospital, OSM_EMAIL_DOMAIN } from './utils/osmHospitals';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'lifelink_jwt_secret_key_2026_super_secure';
 
@@ -240,10 +241,11 @@ export function setupSocketHandlers(io: Server) {
           nearbyDrivers = [candidate];
         }
 
-        // 2. Find the target hospital (either custom requested or closest fallback)
-        let targetHospital = null;
+                // 2. Find the target hospital
+        let targetHospital: any = null;
         let minHospitalDist = 0;
 
+        // 2a. Hospital chosen by the patient (registered on LifeLink)
         if (data.hospitalId) {
           targetHospital = await prisma.hospital.findUnique({
             where: { id: data.hospitalId },
@@ -253,39 +255,44 @@ export function setupSocketHandlers(io: Server) {
           }
         }
 
+        // 2b. Otherwise pick the nearest hospital within 20 km
         if (!targetHospital) {
-          const allHospitals = await prisma.hospital.findMany();
-          if (allHospitals.length === 0) {
-            socket.emit('sos:error', { message: 'No hospitals available on the network.' });
-            return;
-          }
+          // Hospitals registered on LifeLink (skip auto-created real-world ones)
+          const allHospitals = await prisma.hospital.findMany({
+            include: { adminUser: { select: { email: true } } },
+          });
 
-          let closestHospital = allHospitals[0];
-          minHospitalDist = getDistance(lat, lng, closestHospital.lat, closestHospital.lng);
-
-          for (let i = 1; i < allHospitals.length; i++) {
-            const dist = getDistance(lat, lng, allHospitals[i].lat, allHospitals[i].lng);
-            if (dist < minHospitalDist) {
-              minHospitalDist = dist;
-              closestHospital = allHospitals[i];
+          let closestRegistered: any = null;
+          let closestRegisteredDist = Infinity;
+          for (const h of allHospitals) {
+            if (h.adminUser?.email?.endsWith(OSM_EMAIL_DOMAIN)) continue;
+            const dist = getDistance(lat, lng, h.lat, h.lng);
+            if (dist < closestRegisteredDist) {
+              closestRegisteredDist = dist;
+              const { adminUser, ...hospitalOnly } = h;
+              closestRegistered = hospitalOnly;
             }
           }
-          targetHospital = closestHospital;
+
+          if (closestRegistered && closestRegisteredDist <= 20.0) {
+            targetHospital = closestRegistered;
+            minHospitalDist = closestRegisteredDist;
+          } else {
+            // Real hospitals near the patient (OpenStreetMap)
+            const realHospitals = await getNearbyRealHospitals(lat, lng, 20);
+            if (realHospitals.length > 0) {
+              targetHospital = await getOrCreateRealHospital(realHospitals[0]);
+              minHospitalDist = realHospitals[0].distanceKm;
+            }
+          }
         }
 
-        // If target hospital is further than 20km, relocate nearby (~3 km away for testing realism)
-        if (targetHospital && minHospitalDist > 20.0) {
-          targetHospital = await prisma.hospital.update({
-            where: { id: targetHospital.id },
-            data: {
-              lat: lat + 0.016,
-              lng: lng + 0.014,
-            },
+        if (!targetHospital) {
+          socket.emit('sos:error', {
+            message: 'No hospital found near your location. Please call 112 immediately.',
           });
-          minHospitalDist = getDistance(lat, lng, targetHospital.lat, targetHospital.lng);
-        }
-
-        // Calculate realistic ETA (2 minutes per kilometer + 2 minutes base)
+          return;
+        }// Calculate realistic ETA (2 minutes per kilometer + 2 minutes base)
         const etaMinutes = Math.max(3, Math.round(minHospitalDist * 2.0 + 2));
 
         // 3. Create the EmergencyRequest in database
@@ -370,7 +377,21 @@ export function setupSocketHandlers(io: Server) {
         } else {
           console.log(`No available ambulance drivers within range for SOS request ${emergencyRequest.id}`);
         }
-
+        // DEMO MODE (DEMO_AUTO_ASSIGN=true in .env): if no driver app is online to
+        // answer the request, auto-accept it with the nearest ambulance so the live
+        // tracking flow can be shown. The ambulance movement is simulated.
+        if (
+          process.env.DEMO_AUTO_ASSIGN === 'true' &&
+          sortedNearbyDrivers.length > 0 &&
+          !candidateDriverIds.some((id) => driverSockets.has(id))
+        ) {
+          const demoAmbulanceId = sortedNearbyDrivers[0].amb.id;
+          const demoRequestId = emergencyRequest.id;
+          const demoPatientSocketId = socket.id;
+          setTimeout(() => {
+            autoAssignDemoDriver(io, demoRequestId, demoAmbulanceId, demoPatientSocketId);
+          }, 4000);
+        }
         // 6. Broadcast to the assigned hospital ER board
         io.to('hospital_room').emit('hospital:new_emergency', {
           request: emergencyRequest,
@@ -973,5 +994,77 @@ export function stopRouteSimulation(requestId: string) {
     clearInterval(sim.interval);
     activeSimulations.delete(requestId);
     console.log(`Stopped simulation for request ${requestId}`);
+  }
+}
+// DEMO ONLY: accept a pending request on behalf of the nearest ambulance
+async function autoAssignDemoDriver(
+  io: Server,
+  requestId: string,
+  ambulanceId: string,
+  fallbackSocketId: string
+) {
+  try {
+    const ambulance = await prisma.ambulance.findUnique({
+      where: { id: ambulanceId },
+      include: { driver: true },
+    });
+    if (!ambulance || !ambulance.driverId) return;
+    const driverId = ambulance.driverId;
+
+    const updatedRequest = await prisma.$transaction(async (tx) => {
+      const result = await tx.emergencyRequest.updateMany({
+        where: { id: requestId, status: RequestStatus.PENDING },
+        data: { status: RequestStatus.ACCEPTED, driverId },
+      });
+      if (result.count === 0) return null; // cancelled or taken by a real driver meanwhile
+
+      await tx.ambulance.update({
+        where: { id: ambulanceId },
+        data: { isAvailable: false },
+      });
+
+      return tx.emergencyRequest.findUnique({
+        where: { id: requestId },
+        include: {
+          patient: { include: { patientProfile: true } },
+          hospital: true,
+          driver: { include: { ambulance: true } },
+        },
+      });
+    });
+    if (!updatedRequest) return;
+
+    dispatchQueues.delete(requestId);
+
+    const patientSocketId = patientSockets.get(updatedRequest.patientId) || fallbackSocketId;
+    io.to(patientSocketId).emit('request:accepted', {
+      request: updatedRequest,
+      driverName: ambulance.driver?.name || 'Demo Driver',
+      driverPhone: ambulance.driver?.phone || '',
+      vehicleNumber: ambulance.vehicleNumber,
+      ambulanceType: ambulance.ambulanceType,
+      lat: ambulance.currentLat,
+      lng: ambulance.currentLng,
+    });
+
+    io.to('hospital_room').emit('hospital:emergency_claimed', {
+      request: updatedRequest,
+      driverName: ambulance.driver?.name || 'Demo Driver',
+      driverPhone: ambulance.driver?.phone || '',
+      vehicleNumber: ambulance.vehicleNumber,
+    });
+    io.to('telemetry_room').emit('telemetry:update');
+
+    startRouteSimulation(
+      io,
+      requestId,
+      driverId,
+      ambulance.currentLat,
+      ambulance.currentLng,
+      updatedRequest.pickupLat,
+      updatedRequest.pickupLng
+    );
+  } catch (err) {
+    console.error('[Demo auto-assign error]', err);
   }
 }
