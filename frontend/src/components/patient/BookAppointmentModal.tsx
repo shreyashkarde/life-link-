@@ -3,6 +3,7 @@ import { Doctor } from '../../types';
 import { Modal } from '../common/Modal';
 import { appointmentAPI } from '../../api';
 import { useToast } from '../../context/ToastContext';
+import { useSocket } from '../../context/SocketContext';
 import { Calendar, Clock, AlertCircle } from 'lucide-react';
 
 interface BookAppointmentModalProps {
@@ -19,6 +20,7 @@ export const BookAppointmentModal: React.FC<BookAppointmentModalProps> = ({
   onSuccess,
 }) => {
   const { addToast } = useToast();
+  const { socket } = useSocket();
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
@@ -43,12 +45,16 @@ export const BookAppointmentModal: React.FC<BookAppointmentModalProps> = ({
 
     setLoading(true);
     try {
-      await appointmentAPI.book({
+      const res = await appointmentAPI.book({
         doctorId: doctor._id,
         slotDate: selectedDate,
         slotTime: selectedSlot,
         symptoms,
       });
+
+      if (socket && res.data.appointment) {
+        socket.emit('appointment:new', res.data.appointment);
+      }
 
       addToast('success', `Appointment confirmed with ${doctor.userId?.name} for ${selectedDate} at ${selectedSlot}`);
       onSuccess();

@@ -7,6 +7,8 @@ import { StarRating } from '../components/common/StarRating';
 import { Modal } from '../components/common/Modal';
 import { doctorAPI, appointmentAPI } from '../api';
 import { useToast } from '../context/ToastContext';
+import { useSocket } from '../context/SocketContext';
+import { useAuth } from '../context/AuthContext';
 import { Appointment, DoctorSlot } from '../types';
 import {
   Calendar,
@@ -22,6 +24,8 @@ import {
 
 export const DoctorDashboard: React.FC = () => {
   const { addToast } = useToast();
+  const { socket } = useSocket();
+  const { user } = useAuth();
   const [stats, setStats] = useState<any>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [slots, setSlots] = useState<DoctorSlot[]>([]);
@@ -61,6 +65,29 @@ export const DoctorDashboard: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Real-time socket sync for new appointments
+  useEffect(() => {
+    if (!socket || !user) return;
+    const docId = user.id || user._id;
+    socket.emit('join_doctor', docId);
+
+    const handleNewAppt = (newAppt: Appointment) => {
+      console.log('[Socket] New real-time appointment received:', newAppt);
+      setAppointments((prev) => [newAppt, ...prev]);
+      addToast(
+        'warning',
+        `🩺 New Consultation Booked by ${newAppt.patientId?.name || 'Patient'} for ${newAppt.slotTime}!`,
+        'Live Appointment Alert'
+      );
+    };
+
+    socket.on('appointment:new', handleNewAppt);
+
+    return () => {
+      socket.off('appointment:new', handleNewAppt);
+    };
+  }, [socket, user]);
 
   const handleAddSlot = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,6 +129,15 @@ export const DoctorDashboard: React.FC = () => {
         prescription,
         notes: doctorNotes,
       });
+
+      // Emit real-time completion notification to patient
+      if (socket) {
+        socket.emit('appointment:completed', {
+          appointmentId: completingAppt._id,
+          patientId: completingAppt.patientId?._id || completingAppt.patientId?.id,
+          doctorName: user?.name || 'Doctor',
+        });
+      }
 
       addToast('success', 'Consultation marked completed and prescription recorded.');
       setCompletingAppt(null);

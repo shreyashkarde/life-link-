@@ -3,7 +3,7 @@ import { Navbar } from '../components/common/Navbar';
 import { Sidebar } from '../components/common/Sidebar';
 import { StatCard } from '../components/common/StatCard';
 import { Badge } from '../components/common/Badge';
-import { LiveTrackingMap } from '../components/map/LiveTrackingMap';
+import { GoogleLiveTrackingMap } from '../components/map/GoogleLiveTrackingMap';
 import { IncomingRideModal } from '../components/driver/IncomingRideModal';
 import { RideStatusCard } from '../components/driver/RideStatusCard';
 import { GPSSimulator } from '../components/driver/GPSSimulator';
@@ -306,7 +306,7 @@ export const DriverDashboard: React.FC = () => {
                   </span>
                 </div>
 
-                <LiveTrackingMap
+                <GoogleLiveTrackingMap
                   driverLocation={ambulance?.currentLocation}
                   pickupLocation={activeBooking?.pickupLocation}
                   hospitalLocation={{

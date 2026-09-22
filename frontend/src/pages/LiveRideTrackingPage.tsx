@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { LiveTrackingMap } from '../components/map/LiveTrackingMap';
+import { GoogleLiveTrackingMap } from '../components/map/GoogleLiveTrackingMap';
 import { Navbar } from '../components/common/Navbar';
 import { Sidebar } from '../components/common/Sidebar';
 import { Badge } from '../components/common/Badge';
@@ -195,7 +195,7 @@ export const LiveRideTrackingPage: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Live Map Area (2 cols) */}
             <div className="lg:col-span-2 rounded-3xl overflow-hidden border border-surface-200/80 shadow-luxury">
-              <LiveTrackingMap
+              <GoogleLiveTrackingMap
                 driverLocation={driverCoords || undefined}
                 pickupLocation={booking.pickupLocation}
                 hospitalLocation={{

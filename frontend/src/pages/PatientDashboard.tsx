@@ -10,6 +10,8 @@ import { RatingModal } from '../components/patient/RatingModal';
 import { SOSAlertButton } from '../components/patient/SOSAlertButton';
 import { Badge } from '../components/common/Badge';
 import { doctorAPI, appointmentAPI, bookingAPI } from '../api';
+import { useSocket } from '../context/SocketContext';
+import { useToast } from '../context/ToastContext';
 import { Doctor, Appointment, AmbulanceBooking } from '../types';
 import {
   Calendar,
@@ -86,9 +88,46 @@ export const PatientDashboard: React.FC = () => {
     }
   };
 
+  const { socket } = useSocket();
+  const { addToast } = useToast();
+
   useEffect(() => {
     fetchData();
   }, [selectedSpecialty, searchQuery]);
+
+  // Real-time multi-dashboard socket sync
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleRideAccepted = (data: any) => {
+      addToast('success', '🚑 Ambulance Driver has ACCEPTED your request! En route now.', 'Driver Assigned');
+      fetchData();
+    };
+
+    const handleStatusUpdate = (data: any) => {
+      addToast('info', `Ambulance update: Status is now ${data.status?.replace(/_/g, ' ')}`);
+      fetchData();
+    };
+
+    const handleApptCompleted = (data: any) => {
+      addToast(
+        'success',
+        `🩺 Consultation with Dr. ${data.doctorName || 'Specialist'} marked completed. Prescription ready!`,
+        'Consultation Complete'
+      );
+      fetchData();
+    };
+
+    socket.on('booking:acceptedNotification', handleRideAccepted);
+    socket.on('booking:statusChanged', handleStatusUpdate);
+    socket.on('appointment:completedNotification', handleApptCompleted);
+
+    return () => {
+      socket.off('booking:acceptedNotification', handleRideAccepted);
+      socket.off('booking:statusChanged', handleStatusUpdate);
+      socket.off('appointment:completedNotification', handleApptCompleted);
+    };
+  }, [socket]);
 
   // Active ongoing ambulance booking check
   const activeBooking = bookings.find((b) =>
