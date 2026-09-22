@@ -50,27 +50,27 @@ export const Modal: React.FC<ModalProps> = ({
     <div className="fixed inset-0 z-50 overflow-y-auto">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-surface-900/60 backdrop-blur-xs transition-opacity animate-fadeIn"
+        className="fixed inset-0 bg-surface-950/70 backdrop-blur-md transition-opacity animate-fadeIn"
         onClick={onClose}
       />
 
       {/* Modal Dialog */}
       <div className="flex min-h-full items-center justify-center p-4 text-center">
         <div
-          className={`relative w-full ${widthClasses[maxWidth]} transform overflow-hidden rounded-2xl bg-white p-6 text-left shadow-elevated transition-all border border-surface-100 animate-scaleUp`}
+          className={`relative w-full ${widthClasses[maxWidth]} transform overflow-hidden rounded-3xl bg-white/95 backdrop-blur-xl p-6 sm:p-7 text-left shadow-luxury transition-all border border-surface-200/80 animate-scaleUp`}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
           <div className="flex items-start justify-between pb-4 border-b border-surface-100">
             <div>
-              {title && <h3 className="text-lg font-bold text-surface-900">{title}</h3>}
-              {subtitle && <p className="text-xs text-surface-500 mt-0.5">{subtitle}</p>}
+              {title && <h3 className="text-base sm:text-lg font-black text-surface-900 tracking-tight">{title}</h3>}
+              {subtitle && <p className="text-xs text-surface-500 mt-0.5 font-medium">{subtitle}</p>}
             </div>
             <button
               onClick={onClose}
-              className="rounded-lg p-1.5 text-surface-400 hover:bg-surface-100 hover:text-surface-600 transition-colors"
+              className="rounded-xl p-2 text-surface-400 hover:bg-surface-100 hover:text-surface-700 transition-colors border border-transparent hover:border-surface-200"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
 

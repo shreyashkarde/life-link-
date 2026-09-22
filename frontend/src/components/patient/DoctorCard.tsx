@@ -2,7 +2,7 @@ import React from 'react';
 import { Doctor } from '../../types';
 import { StarRating } from '../common/StarRating';
 import { Badge } from '../common/Badge';
-import { Calendar, Award, Building2 } from 'lucide-react';
+import { Calendar, Award, Building2, ChevronRight } from 'lucide-react';
 
 interface DoctorCardProps {
   doctor: Doctor;
@@ -13,29 +13,31 @@ export const DoctorCard: React.FC<DoctorCardProps> = ({ doctor, onBookAppointmen
   const availableSlotsCount = doctor.availableSlots?.filter((s) => !s.isBooked).length || 0;
 
   return (
-    <div className="bg-white rounded-2xl p-5 border border-surface-100 shadow-card hover:shadow-soft transition-all duration-200 flex flex-col justify-between group">
+    <div className="glass-card rounded-3xl p-5 border border-surface-200/80 shadow-luxury glass-card-hover flex flex-col justify-between group">
       <div>
         {/* Top Info */}
-        <div className="flex items-start gap-4">
+        <div className="flex items-start gap-3.5">
           <img
             src={
               doctor.userId?.avatar ||
               `https://ui-avatars.com/api/?name=${encodeURIComponent(
                 doctor.userId?.name || 'Dr'
-              )}&background=2563EB&color=fff`
+              )}&background=2563EB&color=fff&bold=true`
             }
             alt={doctor.userId?.name}
-            className="w-16 h-16 rounded-2xl object-cover border border-surface-200 shadow-xs shrink-0 group-hover:scale-105 transition-transform"
+            className="w-14 h-14 rounded-2xl object-cover ring-2 ring-blue-600/20 shadow-xs shrink-0 group-hover:scale-105 transition-transform"
           />
           <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between gap-2">
-              <h4 className="text-sm font-bold text-surface-900 truncate">
+            <div className="flex items-center justify-between gap-1.5">
+              <h4 className="text-xs font-black text-surface-900 truncate tracking-tight">
                 {doctor.userId?.name}
               </h4>
-              <Badge variant="primary">{doctor.specialization}</Badge>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 shrink-0">
+                {doctor.specialization}
+              </span>
             </div>
-            <p className="text-xs text-surface-500 truncate mt-0.5">{doctor.qualifications}</p>
-            <div className="flex items-center gap-2 mt-2">
+            <p className="text-[11px] text-surface-500 truncate mt-0.5 font-medium">{doctor.qualifications}</p>
+            <div className="flex items-center gap-1.5 mt-1.5">
               <StarRating
                 rating={doctor.averageRating}
                 showNumber
@@ -47,17 +49,17 @@ export const DoctorCard: React.FC<DoctorCardProps> = ({ doctor, onBookAppointmen
         </div>
 
         {/* Hospital & Experience meta */}
-        <div className="mt-4 pt-3 border-t border-surface-50 space-y-2 text-xs text-surface-600">
-          <div className="flex items-center gap-2">
+        <div className="mt-4 pt-3 border-t border-surface-100 space-y-2 text-xs text-surface-600">
+          <div className="flex items-center gap-1.5">
             <Building2 className="w-3.5 h-3.5 text-surface-400 shrink-0" />
-            <span className="truncate">{doctor.hospitalId?.name || 'LifeLink Network Hospital'}</span>
+            <span className="truncate font-medium text-[11px]">{doctor.hospitalId?.name || 'LifeLink Central Hospital'}</span>
           </div>
-          <div className="flex items-center justify-between text-surface-500">
-            <div className="flex items-center gap-1.5">
+          <div className="flex items-center justify-between text-surface-500 text-[11px]">
+            <div className="flex items-center gap-1">
               <Award className="w-3.5 h-3.5 text-blue-600" />
-              <span>{doctor.experienceYears} Years Exp.</span>
+              <span className="font-semibold">{doctor.experienceYears} Yrs Practice</span>
             </div>
-            <span className="font-bold text-surface-900 text-sm">
+            <span className="font-black text-surface-900 text-xs font-mono">
               ₹{doctor.consultationFee}
             </span>
           </div>
@@ -65,14 +67,14 @@ export const DoctorCard: React.FC<DoctorCardProps> = ({ doctor, onBookAppointmen
       </div>
 
       {/* Action Footer */}
-      <div className="mt-4 pt-3 border-t border-surface-50 flex items-center justify-between">
-        <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full bg-emerald-500" />
-          {availableSlotsCount > 0 ? `${availableSlotsCount} slots today` : 'Check slots'}
+      <div className="mt-4 pt-3 border-t border-surface-100 flex items-center justify-between">
+        <span className="text-[11px] text-emerald-600 font-bold flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          {availableSlotsCount > 0 ? `${availableSlotsCount} slots open` : 'Check slots'}
         </span>
         <button
           onClick={() => onBookAppointment(doctor)}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs transition-colors shadow-xs"
+          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-all shadow-xs group-hover:shadow-glow-blue"
         >
           <Calendar className="w-3.5 h-3.5" />
           <span>Book Slot</span>

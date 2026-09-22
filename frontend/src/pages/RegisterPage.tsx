@@ -11,6 +11,10 @@ import {
   ArrowRight,
   Truck,
   Activity,
+  ShieldCheck,
+  Stethoscope,
+  Sparkles,
+  CheckCircle2,
 } from 'lucide-react';
 import { UserRole } from '../types';
 
@@ -61,41 +65,55 @@ export const RegisterPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        <div className="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center text-white mx-auto shadow-soft mb-3">
-          <HeartPulse className="w-6 h-6 animate-pulse" />
-        </div>
-        <h2 className="text-2xl font-black text-surface-900 tracking-tight">Create your LifeLink Account</h2>
-        <p className="text-xs text-surface-500 mt-1">Join the smart healthcare and ambulance dispatch network</p>
+    <div className="min-h-screen bg-[#F8FAFC] mesh-ambient-light flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+      {/* Background ambient orbs */}
+      <div className="absolute top-0 right-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-0 left-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
+
+      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center relative z-10">
+        <Link to="/" className="inline-flex items-center gap-2 mb-3 group">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-700 via-blue-600 to-cyan-500 flex items-center justify-center text-white mx-auto shadow-soft ring-2 ring-blue-600/20 group-hover:scale-105 transition-transform">
+            <HeartPulse className="w-6 h-6 animate-pulse" />
+          </div>
+        </Link>
+        <h2 className="text-3xl font-black text-surface-900 tracking-tight">Create your LifeLink Account</h2>
+        <p className="text-xs text-surface-500 mt-1 font-medium">
+          Join the smart healthcare and emergency ambulance dispatch grid
+        </p>
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-xl">
-        <div className="bg-white py-8 px-6 sm:px-10 rounded-3xl border border-surface-100 shadow-card">
+      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-xl relative z-10">
+        <div className="glass-card py-8 px-6 sm:px-10 rounded-3xl border border-surface-200/80 shadow-luxury">
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Role Selection Tabs */}
             <div>
-              <label className="block text-xs font-semibold text-surface-700 mb-1.5">Select Account Role</label>
-              <div className="grid grid-cols-3 gap-2">
+              <label className="block text-xs font-bold text-surface-700 mb-2">
+                Select Your Role in the Network
+              </label>
+              <div className="grid grid-cols-3 gap-2.5">
                 {[
-                  { role: 'PATIENT', label: 'Patient', icon: HeartPulse },
-                  { role: 'DOCTOR', label: 'Doctor', icon: Activity },
-                  { role: 'DRIVER', label: 'Ambulance Driver', icon: Truck },
+                  { role: 'PATIENT', label: 'Patient', icon: HeartPulse, desc: 'Book rides & care' },
+                  { role: 'DOCTOR', label: 'Doctor', icon: Stethoscope, desc: 'Manage clinic slots' },
+                  { role: 'DRIVER', label: 'Ambulance Driver', icon: Truck, desc: 'Emergency pilot' },
                 ].map((item) => {
                   const Icon = item.icon;
+                  const isSelected = role === item.role;
                   return (
                     <button
                       key={item.role}
                       type="button"
                       onClick={() => setRole(item.role as UserRole)}
-                      className={`flex flex-col items-center gap-1.5 p-3 rounded-2xl border text-xs font-bold transition-all ${
-                        role === item.role
-                          ? 'bg-blue-600 text-white border-blue-600 shadow-soft'
-                          : 'bg-surface-50 text-surface-700 border-surface-200 hover:bg-white hover:border-blue-400'
+                      className={`flex flex-col items-center gap-1.5 p-3.5 rounded-2xl border text-xs font-bold transition-all ${
+                        isSelected
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-glow-blue'
+                          : 'bg-white text-surface-700 border-surface-200 hover:bg-surface-50'
                       }`}
                     >
-                      <Icon className="w-4 h-4" />
-                      <span>{item.label}</span>
+                      <Icon className={`w-5 h-5 ${isSelected ? 'text-white' : 'text-blue-600'}`} />
+                      <span className="font-black text-xs leading-none">{item.label}</span>
+                      <span className={`text-[10px] font-normal ${isSelected ? 'text-blue-100' : 'text-surface-400'}`}>
+                        {item.desc}
+                      </span>
                     </button>
                   );
                 })}
@@ -103,7 +121,9 @@ export const RegisterPage: React.FC = () => {
             </div>
 
             <div>
-              <label htmlFor="reg-name" className="block text-xs font-semibold text-surface-700 mb-1">Full Name</label>
+              <label htmlFor="reg-name" className="block text-xs font-bold text-surface-700 mb-1.5">
+                Full Name
+              </label>
               <div className="relative">
                 <input
                   id="reg-name"
@@ -113,7 +133,7 @@ export const RegisterPage: React.FC = () => {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="e.g. Dr. Aryan Khan / Ramesh Kumar"
-                  className="w-full pl-9 pr-3.5 py-2.5 bg-surface-50 border border-surface-200 rounded-xl text-xs font-medium text-surface-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+                  className="w-full pl-9 pr-3.5 py-2.5 bg-white border border-surface-200 rounded-xl text-xs font-medium text-surface-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-xs"
                   required
                 />
                 <UserIcon className="w-4 h-4 text-surface-400 absolute left-3 top-3" />
@@ -122,7 +142,9 @@ export const RegisterPage: React.FC = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label htmlFor="reg-email" className="block text-xs font-semibold text-surface-700 mb-1">Email Address</label>
+                <label htmlFor="reg-email" className="block text-xs font-bold text-surface-700 mb-1.5">
+                  Email Address
+                </label>
                 <div className="relative">
                   <input
                     id="reg-email"
@@ -132,7 +154,7 @@ export const RegisterPage: React.FC = () => {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="name@domain.com"
-                    className="w-full pl-9 pr-3.5 py-2.5 bg-surface-50 border border-surface-200 rounded-xl text-xs font-medium text-surface-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+                    className="w-full pl-9 pr-3.5 py-2.5 bg-white border border-surface-200 rounded-xl text-xs font-medium text-surface-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-xs"
                     required
                   />
                   <Mail className="w-4 h-4 text-surface-400 absolute left-3 top-3" />
@@ -140,7 +162,9 @@ export const RegisterPage: React.FC = () => {
               </div>
 
               <div>
-                <label htmlFor="reg-phone" className="block text-xs font-semibold text-surface-700 mb-1">Phone Number</label>
+                <label htmlFor="reg-phone" className="block text-xs font-bold text-surface-700 mb-1.5">
+                  Phone Number
+                </label>
                 <div className="relative">
                   <input
                     id="reg-phone"
@@ -150,7 +174,7 @@ export const RegisterPage: React.FC = () => {
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="+91 98200 00000"
-                    className="w-full pl-9 pr-3.5 py-2.5 bg-surface-50 border border-surface-200 rounded-xl text-xs font-medium text-surface-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+                    className="w-full pl-9 pr-3.5 py-2.5 bg-white border border-surface-200 rounded-xl text-xs font-medium text-surface-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-xs"
                     required
                   />
                   <Phone className="w-4 h-4 text-surface-400 absolute left-3 top-3" />
@@ -159,7 +183,9 @@ export const RegisterPage: React.FC = () => {
             </div>
 
             <div>
-              <label htmlFor="reg-password" className="block text-xs font-semibold text-surface-700 mb-1">Password</label>
+              <label htmlFor="reg-password" className="block text-xs font-bold text-surface-700 mb-1.5">
+                Password
+              </label>
               <div className="relative">
                 <input
                   id="reg-password"
@@ -169,7 +195,7 @@ export const RegisterPage: React.FC = () => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Min 6 characters"
-                  className="w-full pl-9 pr-3.5 py-2.5 bg-surface-50 border border-surface-200 rounded-xl text-xs font-medium text-surface-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+                  className="w-full pl-9 pr-3.5 py-2.5 bg-white border border-surface-200 rounded-xl text-xs font-medium text-surface-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-xs"
                   minLength={6}
                   required
                 />
@@ -180,13 +206,15 @@ export const RegisterPage: React.FC = () => {
             {/* Doctor specific fields */}
             {role === 'DOCTOR' && (
               <div>
-                <label htmlFor="reg-specialization" className="block text-xs font-semibold text-surface-700 mb-1">Medical Specialization</label>
+                <label htmlFor="reg-specialization" className="block text-xs font-bold text-surface-700 mb-1.5">
+                  Medical Specialization
+                </label>
                 <select
                   id="reg-specialization"
                   name="specialization"
                   value={specialization}
                   onChange={(e) => setSpecialization(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-surface-50 border border-surface-200 rounded-xl text-xs font-medium text-surface-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+                  className="w-full px-3.5 py-2.5 bg-white border border-surface-200 rounded-xl text-xs font-semibold text-surface-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-xs"
                 >
                   <option value="Cardiology">Cardiology</option>
                   <option value="Neurology">Neurology</option>
@@ -202,7 +230,9 @@ export const RegisterPage: React.FC = () => {
             {role === 'DRIVER' && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label htmlFor="reg-vehicle" className="block text-xs font-semibold text-surface-700 mb-1">Vehicle Plate No.</label>
+                  <label htmlFor="reg-vehicle" className="block text-xs font-bold text-surface-700 mb-1.5">
+                    Vehicle Plate No.
+                  </label>
                   <input
                     id="reg-vehicle"
                     name="vehicleNumber"
@@ -210,18 +240,20 @@ export const RegisterPage: React.FC = () => {
                     value={vehicleNumber}
                     onChange={(e) => setVehicleNumber(e.target.value)}
                     placeholder="MH01AB1234"
-                    className="w-full px-3.5 py-2.5 bg-surface-50 border border-surface-200 rounded-xl text-xs font-medium text-surface-800 uppercase focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+                    className="w-full px-3.5 py-2.5 bg-white border border-surface-200 rounded-xl text-xs font-medium text-surface-800 uppercase focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-xs"
                     required
                   />
                 </div>
                 <div>
-                  <label htmlFor="reg-ambulance-type" className="block text-xs font-semibold text-surface-700 mb-1">Ambulance Type</label>
+                  <label htmlFor="reg-ambulance-type" className="block text-xs font-bold text-surface-700 mb-1.5">
+                    Ambulance Category
+                  </label>
                   <select
                     id="reg-ambulance-type"
                     name="ambulanceType"
                     value={ambulanceType}
                     onChange={(e) => setAmbulanceType(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-surface-50 border border-surface-200 rounded-xl text-xs font-medium text-surface-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+                    className="w-full px-3.5 py-2.5 bg-white border border-surface-200 rounded-xl text-xs font-semibold text-surface-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-xs"
                   >
                     <option value="BASIC">Basic Support (BLS)</option>
                     <option value="ADVANCED_ALS">Advanced Life Support (ALS)</option>
@@ -234,14 +266,14 @@ export const RegisterPage: React.FC = () => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-soft disabled:opacity-50"
+              className="w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black transition-all shadow-glow-blue hover:shadow-blue-600/40 disabled:opacity-50"
             >
-              <span>{loading ? 'Registering...' : 'Complete Registration'}</span>
+              <span>{loading ? 'Creating Credentials...' : 'Complete Registration & Access Grid'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
 
-          <p className="text-center text-xs text-surface-500 mt-6">
+          <p className="text-center text-xs text-surface-500 mt-6 font-medium">
             Already have an account?{' '}
             <Link to="/login" className="font-bold text-blue-600 hover:underline">
               Sign In
