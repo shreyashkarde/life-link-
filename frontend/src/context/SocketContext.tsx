@@ -19,22 +19,14 @@ export const SocketProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   useEffect(() => {
     const s = io(SOCKET_URL, {
-      transports: ['websocket', 'polling'],
-      autoConnect: true,
+      transports: ['polling', 'websocket'],
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
     });
 
     s.on('connect', () => {
       console.log('[Socket.io Client] Connected with ID:', s.id);
       setIsConnected(true);
-
-      if (user?.id || user?._id) {
-        const uId = user.id || user._id;
-        s.emit('join_user', uId);
-
-        if (user.role === 'DRIVER') {
-          s.emit('join_driver', uId);
-        }
-      }
     });
 
     s.on('disconnect', () => {
@@ -47,7 +39,19 @@ export const SocketProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     return () => {
       s.disconnect();
     };
-  }, [user]);
+  }, []);
+
+  // Handle user and driver room joining when user changes
+  useEffect(() => {
+    if (socket && socket.connected && (user?.id || user?._id)) {
+      const uId = user.id || user._id;
+      socket.emit('join_user', uId);
+
+      if (user.role === 'DRIVER') {
+        socket.emit('join_driver', uId);
+      }
+    }
+  }, [socket, isConnected, user]);
 
   const joinBookingRoom = (bookingId: string) => {
     if (socket && bookingId) {
