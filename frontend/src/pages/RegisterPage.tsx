@@ -103,10 +103,13 @@ export const RegisterPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-surface-700 mb-1">Full Name</label>
+              <label htmlFor="reg-name" className="block text-xs font-semibold text-surface-700 mb-1">Full Name</label>
               <div className="relative">
                 <input
+                  id="reg-name"
+                  name="name"
                   type="text"
+                  autoComplete="name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="e.g. Dr. Aryan Khan / Ramesh Kumar"
@@ -119,10 +122,13 @@ export const RegisterPage: React.FC = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-surface-700 mb-1">Email Address</label>
+                <label htmlFor="reg-email" className="block text-xs font-semibold text-surface-700 mb-1">Email Address</label>
                 <div className="relative">
                   <input
+                    id="reg-email"
+                    name="email"
                     type="email"
+                    autoComplete="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="name@domain.com"
@@ -134,10 +140,13 @@ export const RegisterPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-surface-700 mb-1">Phone Number</label>
+                <label htmlFor="reg-phone" className="block text-xs font-semibold text-surface-700 mb-1">Phone Number</label>
                 <div className="relative">
                   <input
+                    id="reg-phone"
+                    name="phone"
                     type="tel"
+                    autoComplete="tel"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="+91 98200 00000"
@@ -150,10 +159,13 @@ export const RegisterPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-surface-700 mb-1">Password</label>
+              <label htmlFor="reg-password" className="block text-xs font-semibold text-surface-700 mb-1">Password</label>
               <div className="relative">
                 <input
+                  id="reg-password"
+                  name="password"
                   type="password"
+                  autoComplete="new-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Min 6 characters"
@@ -168,8 +180,10 @@ export const RegisterPage: React.FC = () => {
             {/* Doctor specific fields */}
             {role === 'DOCTOR' && (
               <div>
-                <label className="block text-xs font-semibold text-surface-700 mb-1">Medical Specialization</label>
+                <label htmlFor="reg-specialization" className="block text-xs font-semibold text-surface-700 mb-1">Medical Specialization</label>
                 <select
+                  id="reg-specialization"
+                  name="specialization"
                   value={specialization}
                   onChange={(e) => setSpecialization(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-surface-50 border border-surface-200 rounded-xl text-xs font-medium text-surface-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
@@ -188,8 +202,10 @@ export const RegisterPage: React.FC = () => {
             {role === 'DRIVER' && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-surface-700 mb-1">Vehicle Plate No.</label>
+                  <label htmlFor="reg-vehicle" className="block text-xs font-semibold text-surface-700 mb-1">Vehicle Plate No.</label>
                   <input
+                    id="reg-vehicle"
+                    name="vehicleNumber"
                     type="text"
                     value={vehicleNumber}
                     onChange={(e) => setVehicleNumber(e.target.value)}
@@ -199,8 +215,10 @@ export const RegisterPage: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-surface-700 mb-1">Ambulance Type</label>
+                  <label htmlFor="reg-ambulance-type" className="block text-xs font-semibold text-surface-700 mb-1">Ambulance Type</label>
                   <select
+                    id="reg-ambulance-type"
+                    name="ambulanceType"
                     value={ambulanceType}
                     onChange={(e) => setAmbulanceType(e.target.value)}
                     className="w-full px-3.5 py-2.5 bg-surface-50 border border-surface-200 rounded-xl text-xs font-medium text-surface-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"

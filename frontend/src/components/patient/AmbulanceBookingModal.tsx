@@ -111,12 +111,14 @@ export const AmbulanceBookingModal: React.FC<AmbulanceBookingModalProps> = ({
         {/* Pickup & Destination */}
         <div className="space-y-2.5">
           <div>
-            <label className="block text-xs font-semibold text-surface-700 mb-1 flex items-center gap-1.5">
+            <label htmlFor="amb-pickup" className="block text-xs font-semibold text-surface-700 mb-1 flex items-center gap-1.5">
               <MapPin className="w-3.5 h-3.5 text-rose-600" />
               Pickup Location
             </label>
             <div className="relative">
               <input
+                id="amb-pickup"
+                name="pickupLocation"
                 type="text"
                 value={pickupAddress}
                 onChange={(e) => setPickupAddress(e.target.value)}
@@ -129,12 +131,14 @@ export const AmbulanceBookingModal: React.FC<AmbulanceBookingModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-surface-700 mb-1 flex items-center gap-1.5">
+            <label htmlFor="amb-destination" className="block text-xs font-semibold text-surface-700 mb-1 flex items-center gap-1.5">
               <Navigation className="w-3.5 h-3.5 text-emerald-600" />
               Hospital Destination
             </label>
             <div className="relative">
               <input
+                id="amb-destination"
+                name="destinationLocation"
                 type="text"
                 value={destinationAddress}
                 onChange={(e) => setDestinationAddress(e.target.value)}
@@ -179,11 +183,13 @@ export const AmbulanceBookingModal: React.FC<AmbulanceBookingModalProps> = ({
 
         {/* Patient Condition */}
         <div>
-          <label className="block text-xs font-semibold text-surface-700 mb-1 flex items-center gap-1.5">
+          <label htmlFor="amb-patient-condition" className="block text-xs font-semibold text-surface-700 mb-1 flex items-center gap-1.5">
             <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
             Patient Current Condition
           </label>
           <select
+            id="amb-patient-condition"
+            name="patientCondition"
             value={patientCondition}
             onChange={(e) => setPatientCondition(e.target.value)}
             className="w-full px-3.5 py-2.5 bg-surface-50 border border-surface-200 rounded-xl text-xs font-medium text-surface-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"

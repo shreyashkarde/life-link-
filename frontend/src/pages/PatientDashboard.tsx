@@ -217,8 +217,11 @@ export const PatientDashboard: React.FC = () => {
               {/* Search & Specialty Filter */}
               <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
                 <div className="relative w-full sm:w-80">
+                  <label htmlFor="doctor-search" className="sr-only">Search doctor by name</label>
                   <input
-                    type="text"
+                    id="doctor-search"
+                    name="doctorSearch"
+                    type="search"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search doctor by name..."

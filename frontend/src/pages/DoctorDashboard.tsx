@@ -254,8 +254,10 @@ export const DoctorDashboard: React.FC = () => {
                 {/* Add Slot Form */}
                 <form onSubmit={handleAddSlot} className="space-y-2.5">
                   <div>
-                    <label className="block text-[11px] font-bold text-surface-500 mb-1">Date</label>
+                    <label htmlFor="slot-date" className="block text-[11px] font-bold text-surface-500 mb-1">Date</label>
                     <input
+                      id="slot-date"
+                      name="slotDate"
                       type="date"
                       value={newSlotDate}
                       onChange={(e) => setNewSlotDate(e.target.value)}
@@ -266,8 +268,10 @@ export const DoctorDashboard: React.FC = () => {
 
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="block text-[11px] font-bold text-surface-500 mb-1">Start Time</label>
+                      <label htmlFor="slot-start" className="block text-[11px] font-bold text-surface-500 mb-1">Start Time</label>
                       <input
+                        id="slot-start"
+                        name="slotStartTime"
                         type="time"
                         value={newSlotStart}
                         onChange={(e) => setNewSlotStart(e.target.value)}
@@ -276,8 +280,10 @@ export const DoctorDashboard: React.FC = () => {
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-bold text-surface-500 mb-1">End Time</label>
+                      <label htmlFor="slot-end" className="block text-[11px] font-bold text-surface-500 mb-1">End Time</label>
                       <input
+                        id="slot-end"
+                        name="slotEndTime"
                         type="time"
                         value={newSlotEnd}
                         onChange={(e) => setNewSlotEnd(e.target.value)}
@@ -337,10 +343,12 @@ export const DoctorDashboard: React.FC = () => {
       >
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-surface-700 mb-1">
+            <label htmlFor="doc-prescription" className="block text-xs font-semibold text-surface-700 mb-1">
               Prescription / Medications
             </label>
             <textarea
+              id="doc-prescription"
+              name="prescription"
               rows={3}
               value={prescription}
               onChange={(e) => setPrescription(e.target.value)}
@@ -350,10 +358,12 @@ export const DoctorDashboard: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-surface-700 mb-1">
+            <label htmlFor="doc-notes" className="block text-xs font-semibold text-surface-700 mb-1">
               Clinical Notes / Follow-up Advice
             </label>
             <textarea
+              id="doc-notes"
+              name="doctorNotes"
               rows={2}
               value={doctorNotes}
               onChange={(e) => setDoctorNotes(e.target.value)}

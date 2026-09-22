@@ -130,8 +130,13 @@ export const SuperAdminDashboard: React.FC = () => {
               {/* Filters */}
               <div className="flex flex-wrap items-center gap-2.5">
                 <div className="relative w-64">
+                  <label htmlFor="admin-user-search" className="sr-only">
+                    Search users by name or email
+                  </label>
                   <input
-                    type="text"
+                    id="admin-user-search"
+                    name="userSearch"
+                    type="search"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search name, email..."
@@ -140,18 +145,25 @@ export const SuperAdminDashboard: React.FC = () => {
                   <Search className="w-4 h-4 text-surface-400 absolute left-3 top-2" />
                 </div>
 
-                <select
-                  value={selectedRoleFilter}
-                  onChange={(e) => setSelectedRoleFilter(e.target.value)}
-                  className="px-3 py-1.5 bg-surface-50 border border-surface-200 rounded-xl text-xs font-semibold text-surface-800"
-                >
-                  <option value="ALL">All Roles</option>
-                  <option value="PATIENT">Patients</option>
-                  <option value="DOCTOR">Doctors</option>
-                  <option value="DRIVER">Ambulance Drivers</option>
-                  <option value="ADMIN_HOSPITAL">Hospital Admins</option>
-                  <option value="SUPER_ADMIN">Super Admins</option>
-                </select>
+                <div>
+                  <label htmlFor="admin-role-filter" className="sr-only">
+                    Filter users by role
+                  </label>
+                  <select
+                    id="admin-role-filter"
+                    name="roleFilter"
+                    value={selectedRoleFilter}
+                    onChange={(e) => setSelectedRoleFilter(e.target.value)}
+                    className="px-3 py-1.5 bg-surface-50 border border-surface-200 rounded-xl text-xs font-semibold text-surface-800"
+                  >
+                    <option value="ALL">All Roles</option>
+                    <option value="PATIENT">Patients</option>
+                    <option value="DOCTOR">Doctors</option>
+                    <option value="DRIVER">Ambulance Drivers</option>
+                    <option value="ADMIN_HOSPITAL">Hospital Admins</option>
+                    <option value="SUPER_ADMIN">Super Admins</option>
+                  </select>
+                </div>
               </div>
             </div>
 

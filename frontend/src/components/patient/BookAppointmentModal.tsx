@@ -71,11 +71,13 @@ export const BookAppointmentModal: React.FC<BookAppointmentModalProps> = ({
       <form onSubmit={handleBook} className="space-y-4">
         {/* Date Selection */}
         <div>
-          <label className="block text-xs font-semibold text-surface-700 mb-1.5 flex items-center gap-1.5">
+          <label htmlFor="appt-date" className="block text-xs font-semibold text-surface-700 mb-1.5 flex items-center gap-1.5">
             <Calendar className="w-3.5 h-3.5 text-blue-600" />
             Select Appointment Date
           </label>
           <input
+            id="appt-date"
+            name="appointmentDate"
             type="date"
             min={new Date().toISOString().split('T')[0]}
             value={selectedDate}
@@ -121,10 +123,12 @@ export const BookAppointmentModal: React.FC<BookAppointmentModalProps> = ({
 
         {/* Symptoms / Medical Notes */}
         <div>
-          <label className="block text-xs font-semibold text-surface-700 mb-1.5">
+          <label htmlFor="appt-symptoms" className="block text-xs font-semibold text-surface-700 mb-1.5">
             Symptoms / Reason for Visit (Optional)
           </label>
           <textarea
+            id="appt-symptoms"
+            name="symptoms"
             rows={3}
             value={symptoms}
             onChange={(e) => setSymptoms(e.target.value)}

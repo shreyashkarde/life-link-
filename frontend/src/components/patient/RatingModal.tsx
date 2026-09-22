@@ -84,10 +84,12 @@ export const RatingModal: React.FC<RatingModalProps> = ({
 
         {/* Written Review */}
         <div>
-          <label className="block text-xs font-semibold text-surface-700 mb-1">
+          <label htmlFor="rating-comment" className="block text-xs font-semibold text-surface-700 mb-1">
             Write your feedback or review
           </label>
           <textarea
+            id="rating-comment"
+            name="comment"
             rows={3}
             value={comment}
             onChange={(e) => setComment(e.target.value)}
