@@ -32,6 +32,9 @@ router.get('/hospitals/:id', getHospitalById);
 router.put('/hospitals/:id', updateHospital);
 router.delete('/hospitals/:id', deleteHospital);
 router.get('/superadmin/overview', getSuperAdminOverview);
+router.get('/overview', getSuperAdminOverview);
+router.get('/', getAllHospitals);
+router.post('/', createHospital);
 
 // 📁 SuperAdmin Bulk Upload Hospitals
 router.post(

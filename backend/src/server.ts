@@ -74,6 +74,7 @@ app.use('/api/bookings', bookingRouter);
 app.use('/api/ratings', ratingRouter);
 app.use('/api/hospitals', hospitalRouter);
 app.use('/api/hospital', hospitalRouter);
+app.use('/api/superadmin', hospitalRouter);
 
 // Advanced Modular Features (Tracking, Hospitals, Notifications, Auth Enhancements, Rate Limiter)
 import { registerModularFeatures } from './features';
