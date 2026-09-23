@@ -10,5 +10,11 @@ export const ENV = {
   CURRENCY: process.env.CURRENCY || '$',
   CLIENT_URL: process.env.CLIENT_URL || 'http://localhost:5173',
   NODE_ENV: process.env.NODE_ENV || 'development',
+  GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
+  SMTP_HOST: process.env.SMTP_HOST || 'smtp.ethereal.email',
+  SMTP_PORT: Number(process.env.SMTP_PORT) || 587,
+  SMTP_USER: process.env.SMTP_USER || '',
+  SMTP_PASS: process.env.SMTP_PASS || '',
+  EMAIL_FROM: process.env.EMAIL_FROM || 'b.well Healthcare <no-reply@bwell-healthcare.com>',
 };
 

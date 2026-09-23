@@ -24,6 +24,10 @@ export interface IUser extends Document {
   phone: string;
   googleId?: string;
   isVerified?: boolean;
+  verificationToken?: string;
+  verificationTokenExpires?: Date;
+  resetPasswordToken?: string;
+  resetPasswordExpires?: Date;
   hospitalId?: string;
   hospitalName?: string;
   createdAt: Date;
@@ -52,7 +56,11 @@ const userSchema = new Schema<IUser>(
     dob: { type: String, default: 'Not Selected' },
     phone: { type: String, default: '0000000000' },
     googleId: { type: String, required: false },
-    isVerified: { type: Boolean, default: true },
+    isVerified: { type: Boolean, default: false },
+    verificationToken: { type: String, required: false },
+    verificationTokenExpires: { type: Date, required: false },
+    resetPasswordToken: { type: String, required: false },
+    resetPasswordExpires: { type: Date, required: false },
     hospitalId: { type: String, default: 'hosp_lilavati', ref: 'Hospital' },
     hospitalName: { type: String, default: 'Lilavati Hospital & Research Centre' },
   },

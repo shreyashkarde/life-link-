@@ -15,6 +15,8 @@ import MyProfile from './pages/MyProfile';
 import MyAppointments from './pages/MyAppointments';
 import About from './pages/About';
 import Contact from './pages/Contact';
+import ResetPassword from './pages/ResetPassword';
+import VerifyEmail from './pages/VerifyEmail';
 
 // Admin & Doctor Pages
 import AdminLayout from './pages/admin/AdminLayout';
@@ -70,6 +72,8 @@ export const App: React.FC = () => {
           {/* Primary Portal Entry: Unified 5-Role Login Page */}
           <Route path="/" element={<Login />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/home" element={<Navigate to="/" replace />} />
           <Route
             path="/doctors"

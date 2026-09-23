@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useApp } from '../context/AppContext';
 import ForgotPasswordModal from '../features/auth/ForgotPasswordModal';
+import GoogleLoginButton from '../features/auth/GoogleLoginButton';
 
 export interface LoginProps {
   embedded?: boolean;
@@ -20,6 +21,8 @@ export const Login: React.FC<LoginProps> = ({ embedded = false, initialMode = 'L
   const [loading, setLoading] = useState(false);
   const [language, setLanguage] = useState('English (Ingles)');
   const [showSupportModal, setShowSupportModal] = useState(false);
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
+  const [resendingVerification, setResendingVerification] = useState(false);
 
   const navigate = useNavigate();
   const { backendUrl, setToken, setDToken, setAToken, showToast } = useApp();
@@ -76,29 +79,56 @@ export const Login: React.FC<LoginProps> = ({ embedded = false, initialMode = 'L
     }
   };
 
+  const handleResendVerification = async (targetEmail: string) => {
+    try {
+      setResendingVerification(true);
+      const { data } = await axios.post(`${backendUrl}/api/auth/resend-verification`, {
+        email: targetEmail.trim().toLowerCase(),
+      });
+      if (data.success) {
+        showToast('Verification email sent! Please check your inbox.', 'success');
+      } else {
+        showToast(data.message || 'Failed to resend verification email.', 'error');
+      }
+    } catch (err: any) {
+      showToast(err.response?.data?.message || 'Error resending verification email.', 'error');
+    } finally {
+      setResendingVerification(false);
+    }
+  };
+
   const onSubmitHandler = async (event: React.FormEvent) => {
     event.preventDefault();
     setLoading(true);
+    setUnverifiedEmail(null);
 
     try {
       if (state === 'Sign Up') {
         const { data } = await axios.post(`${backendUrl}/api/auth/register`, {
           name: name || email.split('@')[0],
-          email,
+          email: email.trim().toLowerCase(),
           password,
           role: 'PATIENT',
         });
 
         if (data.success) {
           if (rememberMe) localStorage.setItem('remembered_email', email);
-          handleRoleRouting('PATIENT', data.token);
+          showToast(
+            'Registration successful! Please check your email inbox to verify your account.',
+            'success'
+          );
+          // If in dev/fallback with a direct preview, toast a notification
+          if (data.verificationToken) {
+            console.log('Verification Token:', data.verificationToken);
+          }
+          setState('Login');
         } else {
           showToast(data.message || 'Registration failed', 'error');
         }
       } else {
         // Unified single login for all 5 roles
         const { data } = await axios.post(`${backendUrl}/api/auth/login`, {
-          email,
+          email: email.trim().toLowerCase(),
           password,
         });
 
@@ -110,7 +140,13 @@ export const Login: React.FC<LoginProps> = ({ embedded = false, initialMode = 'L
         }
       }
     } catch (error: any) {
-      showToast(error.response?.data?.message || 'Authentication error. Please check your credentials.', 'error');
+      if (error.response?.data?.isUnverified) {
+        const targetEmail = error.response.data.email || email;
+        setUnverifiedEmail(targetEmail);
+        showToast(error.response.data.message || 'Please verify your email before logging in.', 'error');
+      } else {
+        showToast(error.response?.data?.message || 'Authentication error. Please check your credentials.', 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -261,6 +297,29 @@ export const Login: React.FC<LoginProps> = ({ embedded = false, initialMode = 'L
                 </button>
               </div>
 
+              {/* Unverified Email Warning Banner */}
+              {unverifiedEmail && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-xs space-y-2 text-amber-900 animate-in fade-in duration-200">
+                  <div className="flex items-start gap-2">
+                    <span className="text-base">⚠️</span>
+                    <div>
+                      <p className="font-bold">Email Verification Required</p>
+                      <p className="text-[11px] text-amber-800 leading-tight">
+                        Please verify your account via the link sent to <strong>{unverifiedEmail}</strong>.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={resendingVerification}
+                    onClick={() => handleResendVerification(unverifiedEmail)}
+                    className="w-full py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-[11px] transition-colors disabled:opacity-50"
+                  >
+                    {resendingVerification ? 'Sending Email...' : 'Resend Verification Email'}
+                  </button>
+                </div>
+              )}
+
               {/* Primary Action Button */}
               <button
                 type="submit"
@@ -270,6 +329,21 @@ export const Login: React.FC<LoginProps> = ({ embedded = false, initialMode = 'L
                 {loading ? 'Authenticating...' : state === 'Sign Up' ? 'Create account' : 'Log in'}
               </button>
 
+              {/* Divider */}
+              <div className="relative flex items-center justify-center my-2">
+                <div className="border-t border-gray-200 w-full"></div>
+                <span className="bg-white px-3 text-[10px] uppercase font-bold text-gray-400 tracking-wider">
+                  or continue with
+                </span>
+                <div className="border-t border-gray-200 w-full"></div>
+              </div>
+
+              {/* Google OAuth Login Button */}
+              <GoogleLoginButton
+                onSuccess={(data) => handleRoleRouting(data.user?.role || 'PATIENT', data.token)}
+                onError={(err) => showToast(err, 'error')}
+              />
+
               {/* Switch Sign Up / Log In */}
               <div className="text-center text-xs text-gray-600 pt-1">
                 {state === 'Login' ? (
@@ -277,7 +351,10 @@ export const Login: React.FC<LoginProps> = ({ embedded = false, initialMode = 'L
                     Don't have an account?{' '}
                     <button
                       type="button"
-                      onClick={() => setState('Sign Up')}
+                      onClick={() => {
+                        setState('Sign Up');
+                        setUnverifiedEmail(null);
+                      }}
                       className="text-blue-600 hover:underline font-semibold"
                     >
                       Sign up.
@@ -288,7 +365,10 @@ export const Login: React.FC<LoginProps> = ({ embedded = false, initialMode = 'L
                     Already have an account?{' '}
                     <button
                       type="button"
-                      onClick={() => setState('Login')}
+                      onClick={() => {
+                        setState('Login');
+                        setUnverifiedEmail(null);
+                      }}
                       className="text-blue-600 hover:underline font-semibold"
                     >
                       Log in.
