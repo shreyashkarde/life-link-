@@ -1,98 +1,167 @@
-# 👨‍⚕️ Prescripto - Full Stack Doctor Appointment Booking System (MERN Stack)
+# 🚑 LifeLink & Prescripto - Smart Healthcare & Emergency Ambulance Dispatch System (MERN Stack)
 
-A production-grade, full-stack **MERN** (MongoDB, Express.js, React + Vite, Node.js) doctor appointment scheduling and healthcare management platform based on the **GreatStack** architecture.
-
-Featuring **3-Level Authentication (Patient, Doctor, and Admin)**, dynamic **7-day slot booking calendar**, comprehensive **specialty discovery**, integrated **online payment processing simulation**, doctor **earnings analytics**, and a real-time **doctor availability manager**.
+A production-grade, enterprise **MERN** (MongoDB, Express.js, React + Vite, Node.js + TypeScript, Socket.IO) full-stack healthcare ecosystem featuring **5-Tier Hierarchical Role Management**, **Real-Time Code-Red Emergency Ambulance Dispatch & Live GPS Telemetry**, **Doctor Consultation Scheduling**, and **Bulk Excel (.xlsx) Data Ingestion**.
 
 ---
 
-## 🌟 Key Features
+## 🏛️ System Hierarchy & Architecture
 
-### 1. 🏥 Patient Portal
-- **Speciality Discovery**: Browse doctors across 6 core specialties:
-  1. *General physician*
-  2. *Gynecologist*
-  3. *Dermatologist*
-  4. *Pediatricians*
-  5. *Neurologist*
-  6. *Gastroenterologist*
-- **Dynamic 7-Day Slot Booking**: Real-time date selector and time slot chips with automatic double-booking prevention.
-- **Related Doctors**: Instant discovery of other specialists in the same field.
-- **My Profile Manager**: Edit contact info, phone, address (Line 1 & Line 2), gender, and birthday.
-- **My Appointments**:
-  - View upcoming and past appointments with doctor photo, specialty, and formatted date/time.
-  - **Pay Online**: Simulated payment gateway (Razorpay / Stripe / Pay at Clinic).
-  - **Cancel Appointment**: Instant cancellation with automatic slot release.
+The platform enforces a strict hierarchical data model and relational foreign-key integrity across all entities:
 
-### 2. 👨‍⚕️ Doctor Dashboard & Portal
-- **Secure Doctor Login**: Dedicated portal for registered physicians.
-- **Earnings & Practice Analytics**: Real-time earnings counter ($), total appointments, and unique patient counts.
-- **Appointment Queue**:
-  - Full list of scheduled consultations with patient details and payment status.
-  - One-click **Complete Appointment** (✓) to credit doctor earnings.
-  - One-click **Cancel Appointment** (✕) with slot restoration.
-- **Doctor Profile Management**:
-  - Edit consultation fee ($) and clinic address.
-  - Interactive **Availability Toggle** to turn patient booking on/off.
-
-### 3. 🎯 Admin Management Panel
-- **Secure Admin Authentication**: Centralized system administration portal.
-- **Global Platform Dashboard**: Metrics on total doctors, total appointments, total patients, and latest bookings.
-- **All Appointments Directory**: Complete master table across all physicians with administrative cancellation control.
-- **Add Doctor Form**: Onboard new verified doctors with specialty, experience, degree, fees, photo, and clinic address.
-- **Doctors List**: Real-time card view with interactive **Available toggle checkbox** for instant availability updates.
+```
+                      👑 SuperAdmin (Master System Owner)
+                                    │
+                  ┌─────────────────┴─────────────────┐
+                  ▼                                   ▼
+        🏥 Hospital Admin (Lilavati)        🏥 Hospital Admin (Kokilaben)
+            │                  │
+    ┌───────┴────────┐   ┌─────┴──────────┐
+    ▼                ▼   ▼                ▼
+👨‍⚕️ Doctors       🚑 Drivers         👨‍⚕️ Doctors
+    │                │
+    ▼                ▼
+👤 Patient Consultations & Emergency SOS Rides
+```
 
 ---
 
-## 👥 Demo Credentials
+## 🌟 Core Modules & Capabilities
 
-| Role | Email | Password | Access Capabilities |
+### 1. 👑 SuperAdmin Portal (`admin@prescripto.com`)
+- **Hospital Management**: Complete CRUD operations for hospitals across cities, trauma levels (Level 1 Apex, Level 2), bed capacity, and ICU resuscitation units.
+- **System-Wide Telemetry**: Live metrics tracking total hospitals, registered physicians, ambulance fleet, active appointments, and emergency rides.
+- **Bulk Hospital Ingestion**: Upload dozens of hospital branches simultaneously via Excel (`.xlsx`).
+- **Zero-Data Purge**: One-click purge endpoint (`/api/admin/clear-all-data`) to reset mock data for clean real-time operations.
+
+### 2. 🏥 Hospital Admin Portal (`hospital@prescripto.com`)
+- **Dedicated Hospital Desk**: Manages staff, facilities, and emergency intake for a specific hospital (e.g. *Lilavati Hospital & Research Centre*).
+- **Physician Roster**: Onboard doctors individually or bulk upload via Excel (`/api/hospital/upload/doctors`).
+- **Ambulance Fleet & Paramedics**: Recruit and dispatch drivers, manage vehicle numbers (`MH-01-EQ-1108`), or bulk upload via Excel (`/api/hospital/upload/drivers`).
+- **ICU Bed Allocation & Inbound Radar**: Real-time bed counter and incoming trauma patient alerts.
+- **Hospital Appointment Queue**: Complete oversight of all appointments scheduled at this hospital.
+
+### 3. 👨‍⚕️ Doctor Consultation Portal (`doc1@prescripto.com`)
+- **Practice & Earnings Dashboard**: Real-time revenue counter ($), scheduled patient queues, and unique patient history.
+- **Dynamic 7-Day Slot Management**: Automatic slot reservation and double-booking collision prevention.
+- **Prescription Generator**: Issue clinical diagnoses, dosage instructions, and medications directly to the patient's portal in real-time.
+- **Consultation Lifecycle**: Mark consultations as Completed (✓) or Cancelled (✕) with instant slot release.
+
+### 4. 🚑 Paramedic Driver Portal (`driver1@prescripto.com`)
+- **Emergency Dispatch Radar**: Real-time Socket.IO dispatch alerts with patient condition, pickup GPS coordinates, and hospital destination.
+- **Accept / Reject Flow**: Accept emergency requests or decline with an explanatory reason.
+- **5-Stage Ride Lifecycle**:
+  `PENDING` $\rightarrow$ `ACCEPTED` $\rightarrow$ `EN_ROUTE_PICKUP` $\rightarrow$ `PATIENT_ONBOARD` $\rightarrow$ `COMPLETED`
+- **Duty Toggle**: Instant Online / Offline status switcher.
+
+### 5. 👤 Patient Care Portal (`patient@prescripto.com`)
+- **Doctor Appointment Booking**: Search by specialty (General physician, Gynecologist, Dermatologist, Pediatrician, Neurologist, Gastroenterologist) and filter by hospital.
+- **3-Way Appointment Relation**: Stores `patientId` + `doctorId` + `hospitalId`.
+- **🚨 1-Click Code-Red Emergency SOS**: Instantly detects and dispatches the nearest available ambulance unit with live ETA calculation and room-based tracking.
+- **Patient Health Console**: Live vitals monitoring (Heart Rate, Blood Pressure, Fasting Glucose, Blood Group) and appointments history.
+
+---
+
+## 📊 Bulk Excel Data Import (.xlsx)
+
+The backend features an in-memory streaming engine powered by **Multer** and **SheetJS (`xlsx`)** for bulk data ingestion with duplicate validation and itemized error reports:
+
+| Entity | API Route | Required Excel Columns |
+| :--- | :--- | :--- |
+| **Doctors** | `POST /api/hospital/upload/doctors` | `name`, `email`, `specialization`, `phone` |
+| **Drivers** | `POST /api/hospital/upload/drivers` | `name`, `email`, `phone`, `vehicleNumber` |
+| **Hospitals** | `POST /api/superadmin/upload/hospitals` | `name`, `address`, `email`, `phone` |
+
+> [!TIP]
+> Ready-to-use sample templates are generated in [`backend/samples/`](file:///c:/Users/Ashut/Desktop/Shreyash/backend/samples/):
+> - `sample_doctors.xlsx`
+> - `sample_drivers.xlsx`
+> - `sample_hospitals.xlsx`
+
+---
+
+## 👥 Demo Login Credentials
+
+| Role | Email | Password | Access Highlights |
 | :--- | :--- | :--- | :--- |
-| **Admin** | `admin@prescripto.com` | `admin123` | Dashboard metrics, All appointments oversight, Add doctors, Doctors availability toggle |
-| **Doctor** | `doc1@prescripto.com` | `doc123` | Dr. Richard James (General physician) - Earnings dashboard, Appointments queue, Profile |
-| **Patient** | `patient@prescripto.com` | `password123` | Edward Vincent - Book appointments, Profile editor, Online payment, Cancellation |
+| 👑 **Super Admin** | `admin@prescripto.com` | `admin123` | Master platform control, Hospital CRUD, System metrics, Bulk hospital upload |
+| 🏥 **Hospital Admin** | `hospital@prescripto.com` | `hospital123` | Lilavati Hospital desk, Staff management, Bulk doctor/driver upload, ICU beds |
+| 👨‍⚕️ **Doctor** | `doc1@prescripto.com` | `doc123` | Dr. Richard James - Consultation queue, Prescription creator, Availability toggle |
+| 🚑 **Ambulance Driver** | `driver1@prescripto.com` | `driver123` | Paramedic Rajesh Kumar - Emergency SOS intake, Accept/Reject, Ride status |
+| 👤 **Patient** | `patient@prescripto.com` | `password123` | Edward Vincent - Appointment booking, Emergency SOS, Health vitals |
 
 ---
 
-## 🛠️ Tech Stack & Architecture
+## 🛠️ Technology Stack
 
 - **Frontend**:
-  - React 18 / Vite
-  - Tailwind CSS (`primary: #5f6fff`)
+  - React 18 & Vite (TypeScript)
+  - Tailwind CSS with customized medical themes
   - Google Fonts (`Outfit`)
-  - Axios with JWT Interceptors
+  - Axios with JWT Interceptors & Token Service
   - React Router DOM v6
+  - Socket.IO Client
 - **Backend**:
   - Node.js & Express (TypeScript)
-  - MongoDB & Mongoose ORM
+  - MongoDB Atlas & Mongoose ORM
+  - High-availability dual store (automatic seamless fallback to in-memory store if offline)
+  - Socket.IO Server (Room-based real-time telemetry and alerts)
+  - Multer & SheetJS (`xlsx`) for binary Excel parsing
   - JSON Web Tokens (JWT) & bcryptjs
-  - High-performance dual store with zero-downtime offline support
   - CORS, Dotenv
 
 ---
 
-## 🚀 How to Run Locally
+## 🚀 Quick Start Guide
 
-### 1. Install Dependencies
-From the root workspace folder:
+### 1. Prerequisites
+- Node.js (v18+)
+- npm or yarn
+
+### 2. Install Dependencies
 ```powershell
+# From root workspace directory:
 npm run install:all
 ```
 
-### 2. Start Both Backend & Frontend
-Run both the API server (Port 5000) and Frontend (Port 5173):
+### 3. Start Development Servers
+Run both backend and frontend concurrently:
 ```powershell
 npm run dev
 ```
 
-Or run individually:
-- **Backend**: `cd backend && npm run dev`
-- **Frontend**: `cd frontend && npm run dev`
+Or start individually in separate terminals:
+- **Backend** (Port 5000):
+  ```powershell
+  cd backend
+  npm run dev
+  ```
+- **Frontend** (Port 5173):
+  ```powershell
+  cd frontend
+  npm run dev
+  ```
 
-Open your browser at: **`http://localhost:5173`**  
-Access Admin / Doctor Panel directly via the **"Admin Panel"** button in the header or at **`http://localhost:5173/admin`**.
+### 4. Access Application
+- **Main Web Application**: [`http://localhost:5173`](http://localhost:5173)
+- **API Health Check**: [`http://localhost:5000/api/health`](http://localhost:5000/api/health)
+
+---
+
+## 🧹 Database & Test Data Purge
+
+To reset all appointments, bookings, ratings, and doctor calendar slots for fresh real-time testing:
+
+- **Via API**:
+  ```http
+  POST http://localhost:5000/api/admin/clear-all-data
+  ```
+- **Via CLI Script**:
+  ```powershell
+  cd backend
+  npx ts-node src/scripts/clearDb.ts
+  ```
 
 ---
 
 ## 📄 License
-MIT License. Inspired by GreatStack Prescripto Full Stack MERN tutorial.
+MIT License. Built for Smart Healthcare & Emergency Dispatch Operations.
