@@ -38,13 +38,16 @@ const doctorSchema = new Schema<IDoctor>(
     available: { type: Boolean, default: true },
     fees: { type: Number, required: true },
     address: { type: Object, required: true },
-    hospitalId: { type: String, default: 'hosp_lilavati', ref: 'Hospital' },
+    hospitalId: { type: String, default: 'hosp_lilavati', ref: 'Hospital', index: true },
     hospitalName: { type: String, default: 'Lilavati Hospital & Research Centre' },
     date: { type: Number, required: true },
     slots_booked: { type: Object, default: {} },
   },
   { timestamps: true, minimize: false }
 );
+
+doctorSchema.index({ hospitalId: 1, available: 1 });
+doctorSchema.index({ hospitalId: 1, speciality: 1 });
 
 export const Doctor = mongoose.models.Doctor || mongoose.model<IDoctor>('Doctor', doctorSchema);
 export default Doctor;

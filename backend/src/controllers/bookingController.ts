@@ -20,38 +20,66 @@ const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => 
 // POST /api/bookings/create
 export const createAmbulanceBooking = async (req: AuthRequest, res: Response) => {
   try {
-    const { pickupLocation, destinationHospital, patientName, patientPhone, patientCondition, ambulanceId, hospitalId } = req.body;
+    const { pickupLocation, destinationHospital, patientName, patientPhone, patientCondition, ambulanceId, hospitalId: explicitHospitalId } = req.body;
+    const headerHospitalId = req.headers['x-hospital-id'] as string;
+    const targetHospitalId = explicitHospitalId || headerHospitalId || destinationHospital?.hospitalId;
     const patientId = req.user?.id || 'guest_patient';
 
     if (!pickupLocation?.address || !pickupLocation?.lat || !pickupLocation?.lng) {
       return res.status(400).json({ success: false, message: 'Valid pickup address and coordinates required' });
     }
 
-    // Resolve ambulance details
+    // Resolve ambulance details with strict hospital tenancy check
     let assignedAmbulance: any = null;
     if (isMongoConnected()) {
       if (ambulanceId) {
         assignedAmbulance = await Ambulance.findById(ambulanceId);
+        // 🛡️ Cross-Hospital Mismatch Validation Rule
+        if (assignedAmbulance && targetHospitalId && assignedAmbulance.hospitalId && assignedAmbulance.hospitalId !== targetHospitalId) {
+          return res.status(400).json({
+            success: false,
+            message: `Cross-hospital dispatch mismatch: Selected ambulance '${assignedAmbulance.vehicleNumber}' belongs to '${assignedAmbulance.hospitalName || assignedAmbulance.hospitalId}', but the booking requested hospital '${targetHospitalId}'. Inter-hospital cross-dispatch is strictly prohibited.`,
+            code: 'HOSPITAL_MISMATCH',
+            ambulanceHospitalId: assignedAmbulance.hospitalId,
+            requestedHospitalId: targetHospitalId,
+          });
+        }
       }
-      if (!assignedAmbulance && hospitalId) {
-        assignedAmbulance = await Ambulance.findOne({ hospitalId, isAvailable: true });
+      if (!assignedAmbulance && targetHospitalId) {
+        assignedAmbulance = await Ambulance.findOne({ hospitalId: targetHospitalId, isAvailable: true });
+        if (!assignedAmbulance) {
+          assignedAmbulance = await Ambulance.findOne({ hospitalId: targetHospitalId });
+        }
       }
       if (!assignedAmbulance) {
-        assignedAmbulance = await Ambulance.findOne({ isAvailable: true }) || await Ambulance.findOne();
+        assignedAmbulance = (await Ambulance.findOne({ isAvailable: true })) || (await Ambulance.findOne());
       }
     } else {
       if (ambulanceId) {
         assignedAmbulance = prescriptoStore.ambulances.find((a) => a._id === ambulanceId || a.id === ambulanceId);
+        // 🛡️ Cross-Hospital Mismatch Validation Rule
+        if (assignedAmbulance && targetHospitalId && assignedAmbulance.hospitalId && assignedAmbulance.hospitalId !== targetHospitalId) {
+          return res.status(400).json({
+            success: false,
+            message: `Cross-hospital dispatch mismatch: Selected ambulance '${assignedAmbulance.vehicleNumber}' belongs to '${assignedAmbulance.hospitalName || assignedAmbulance.hospitalId}', but the booking requested hospital '${targetHospitalId}'. Inter-hospital cross-dispatch is strictly prohibited.`,
+            code: 'HOSPITAL_MISMATCH',
+            ambulanceHospitalId: assignedAmbulance.hospitalId,
+            requestedHospitalId: targetHospitalId,
+          });
+        }
       }
-      if (!assignedAmbulance && hospitalId) {
-        assignedAmbulance = prescriptoStore.ambulances.find((a) => a.hospitalId === hospitalId);
+      if (!assignedAmbulance && targetHospitalId) {
+        assignedAmbulance = prescriptoStore.ambulances.find((a) => a.hospitalId === targetHospitalId && a.isAvailable !== false);
+        if (!assignedAmbulance) {
+          assignedAmbulance = prescriptoStore.ambulances.find((a) => a.hospitalId === targetHospitalId);
+        }
       }
       if (!assignedAmbulance) {
         assignedAmbulance = prescriptoStore.ambulances[0];
       }
     }
 
-    const resolvedHospitalId = assignedAmbulance?.hospitalId || hospitalId || 'hosp_lilavati';
+    const resolvedHospitalId = targetHospitalId || assignedAmbulance?.hospitalId || 'hosp_lilavati';
     const resolvedHospitalName = assignedAmbulance?.hospitalName || assignedAmbulance?.assignedHospital || 'Lilavati Hospital & Research Centre';
 
     const bookingData = {
@@ -104,20 +132,39 @@ export const createAmbulanceBooking = async (req: AuthRequest, res: Response) =>
 // POST /api/bookings/emergency-sos
 export const triggerEmergencySOS = async (req: AuthRequest, res: Response) => {
   try {
-    const { pickupLocation, patientName, patientPhone, condition = 'Critical Emergency SOS' } = req.body;
+    const { pickupLocation, patientName, patientPhone, condition = 'Critical Emergency SOS', hospitalId: explicitHospitalId } = req.body;
+    const headerHospitalId = req.headers['x-hospital-id'] as string;
+    const targetHospitalId = explicitHospitalId || headerHospitalId;
     const patientId = req.user?.id || 'emergency_patient';
 
     const pLat = pickupLocation?.lat || 19.0760;
     const pLng = pickupLocation?.lng || 72.8777;
     const pAddress = pickupLocation?.address || 'GPS Emergency Ping Location';
 
-    // Auto-detect nearest available driver
+    // Auto-detect nearest available driver within the target hospital fleet
     let fleet: any[] = [];
     if (isMongoConnected()) {
-      fleet = await Ambulance.find({ isAvailable: true });
+      const query: any = { isAvailable: true };
+      if (targetHospitalId) query.hospitalId = targetHospitalId;
+      fleet = await Ambulance.find(query);
+      if (fleet.length === 0 && targetHospitalId) {
+        fleet = await Ambulance.find({ hospitalId: targetHospitalId });
+      }
+      if (fleet.length === 0) {
+        fleet = await Ambulance.find({ isAvailable: true });
+      }
     }
     if (!fleet || fleet.length === 0) {
-      fleet = prescriptoStore.ambulances.filter((a) => a.isAvailable !== false);
+      fleet = (prescriptoStore.ambulances || []).filter((a) => {
+        const matchesHospital = !targetHospitalId || a.hospitalId === targetHospitalId;
+        return matchesHospital && a.isAvailable !== false;
+      });
+      if (fleet.length === 0 && targetHospitalId) {
+        fleet = (prescriptoStore.ambulances || []).filter((a) => a.hospitalId === targetHospitalId);
+      }
+      if (fleet.length === 0) {
+        fleet = prescriptoStore.ambulances || [];
+      }
     }
 
     let nearestAmbulance = fleet[0] || {
@@ -125,6 +172,8 @@ export const triggerEmergencySOS = async (req: AuthRequest, res: Response) => {
       driverName: 'Rajesh Kumar',
       driverPhone: '+91 98201 10800',
       vehicleNumber: 'MH-01-EQ-1108',
+      hospitalId: targetHospitalId || 'hosp_lilavati',
+      hospitalName: 'Lilavati Hospital & Research Centre',
     };
 
     let minDistance = Infinity;
@@ -136,6 +185,9 @@ export const triggerEmergencySOS = async (req: AuthRequest, res: Response) => {
       }
     });
 
+    const resolvedHospitalId = nearestAmbulance.hospitalId || targetHospitalId || 'hosp_lilavati';
+    const resolvedHospitalName = nearestAmbulance.hospitalName || nearestAmbulance.assignedHospital || 'Lilavati Hospital & Research Centre';
+
     const bookingData = {
       patientId,
       patientName: patientName || 'Emergency Patient',
@@ -145,11 +197,11 @@ export const triggerEmergencySOS = async (req: AuthRequest, res: Response) => {
       driverName: nearestAmbulance.driverName,
       driverPhone: nearestAmbulance.driverPhone,
       vehicleNumber: nearestAmbulance.vehicleNumber,
-      hospitalId: nearestAmbulance.hospitalId || 'hosp_lilavati',
-      hospitalName: nearestAmbulance.hospitalName || nearestAmbulance.assignedHospital || 'Lilavati Hospital & Research Centre',
+      hospitalId: resolvedHospitalId,
+      hospitalName: resolvedHospitalName,
       pickupLocation: { address: pAddress, lat: pLat, lng: pLng },
       destinationHospital: {
-        name: nearestAmbulance.hospitalName || nearestAmbulance.assignedHospital || 'Lilavati Hospital & Research Centre',
+        name: resolvedHospitalName,
         address: 'Trauma Resuscitation Center, Bandra West',
         lat: 19.0544,
         lng: 72.8277,
@@ -334,38 +386,53 @@ export const updateBookingStatus = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// GET /api/bookings/my-bookings
+// GET /api/bookings/my-bookings (supports optional hospitalId filter)
 export const getPatientBookings = async (req: AuthRequest, res: Response) => {
   try {
     const patientId = req.user?.id;
+    const hospitalId = (req.query.hospitalId as string) || (req.headers['x-hospital-id'] as string);
 
     if (isMongoConnected()) {
-      const bookings = await AmbulanceBooking.find({ patientId }).sort({ createdAt: -1 });
-      return res.json({ success: true, bookings });
+      const query: any = { patientId };
+      if (hospitalId) query.hospitalId = hospitalId;
+      const bookings = await AmbulanceBooking.find(query).sort({ createdAt: -1 });
+      return res.json({ success: true, count: bookings.length, bookings });
     }
 
-    const bookings = prescriptoStore.ambulanceBookings.filter(
+    let bookings = prescriptoStore.ambulanceBookings.filter(
       (b) => !patientId || b.patientId === patientId || b.patientId === 'user_1'
     );
-    return res.json({ success: true, bookings });
+    if (hospitalId) {
+      bookings = bookings.filter((b) => b.hospitalId === hospitalId);
+    }
+    return res.json({ success: true, count: bookings.length, bookings });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// GET /api/bookings/driver-trips
+// GET /api/bookings/driver-trips (supports hospital isolation)
 export const getDriverTrips = async (req: AuthRequest, res: Response) => {
   try {
     const driverId = req.user?.id;
+    const hospitalId = (req.query.hospitalId as string) || (req.headers['x-hospital-id'] as string) || req.user?.hospitalId;
 
     if (isMongoConnected()) {
-      const bookings = await AmbulanceBooking.find({
-        $or: [{ ambulanceId: driverId }, { driverName: 'Rajesh Kumar' }],
-      }).sort({ createdAt: -1 });
-      return res.json({ success: true, bookings });
+      const query: any = {
+        $or: [{ ambulanceId: driverId }, { driverId }, { driverName: 'Rajesh Kumar' }],
+      };
+      if (hospitalId && req.user?.role !== 'SUPER_ADMIN') {
+        query.hospitalId = hospitalId;
+      }
+      const bookings = await AmbulanceBooking.find(query).sort({ createdAt: -1 });
+      return res.json({ success: true, count: bookings.length, bookings });
     }
 
-    return res.json({ success: true, bookings: prescriptoStore.ambulanceBookings });
+    let bookings = prescriptoStore.ambulanceBookings;
+    if (hospitalId) {
+      bookings = bookings.filter((b) => b.hospitalId === hospitalId);
+    }
+    return res.json({ success: true, count: bookings.length, bookings });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
   }

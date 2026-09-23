@@ -16,34 +16,47 @@ const calculateDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: num
   return Math.round(R * c * 10) / 10;
 };
 
-// GET /api/ambulance/all
-export const getAllAmbulances = async (_req: Request, res: Response) => {
+// GET /api/ambulance/all (supports optional ?hospitalId= filter)
+export const getAllAmbulances = async (req: Request, res: Response) => {
   try {
+    const hospitalId = (req.query.hospitalId as string) || (req.headers['x-hospital-id'] as string) || (req.query.hospital_id as string);
+
     if (isMongoConnected()) {
-      const ambulances = await Ambulance.find({});
-      if (ambulances.length > 0) {
-        return res.json({ success: true, ambulances });
-      }
+      const query: any = {};
+      if (hospitalId) query.hospitalId = hospitalId;
+      const ambulances = await Ambulance.find(query).sort({ createdAt: -1 });
+      return res.json({ success: true, count: ambulances.length, hospitalId: hospitalId || 'ALL', ambulances });
     }
-    return res.json({ success: true, ambulances: prescriptoStore.ambulances || [] });
+
+    let ambulances = prescriptoStore.ambulances || [];
+    if (hospitalId) {
+      ambulances = ambulances.filter((a) => a.hospitalId === hospitalId);
+    }
+    return res.json({ success: true, count: ambulances.length, hospitalId: hospitalId || 'ALL', ambulances });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// GET /api/ambulance/nearby?lat=19.0760&lng=72.8777&radius=15
+// GET /api/ambulance/nearby?lat=19.0760&lng=72.8777&radius=15&hospitalId=hosp_lilavati
 export const getNearbyAmbulances = async (req: Request, res: Response) => {
   try {
     const lat = parseFloat(req.query.lat as string) || 19.0760;
     const lng = parseFloat(req.query.lng as string) || 72.8777;
     const maxRadiusKm = parseFloat(req.query.radius as string) || 25;
+    const hospitalId = (req.query.hospitalId as string) || (req.headers['x-hospital-id'] as string) || (req.query.hospital_id as string);
 
     let fleet: any[] = [];
     if (isMongoConnected()) {
-      fleet = await Ambulance.find({ isAvailable: true });
+      const query: any = { isAvailable: true };
+      if (hospitalId) query.hospitalId = hospitalId;
+      fleet = await Ambulance.find(query);
     }
     if (!fleet || fleet.length === 0) {
-      fleet = (prescriptoStore.ambulances || []).filter((a) => a.isAvailable !== false);
+      fleet = (prescriptoStore.ambulances || []).filter((a) => {
+        const matchesHospital = !hospitalId || a.hospitalId === hospitalId;
+        return matchesHospital && a.isAvailable !== false;
+      });
     }
 
     const calculated = fleet.map((amb) => {
@@ -68,6 +81,7 @@ export const getNearbyAmbulances = async (req: Request, res: Response) => {
     return res.json({
       success: true,
       userLocation: { lat, lng },
+      hospitalId: hospitalId || 'ALL',
       count: nearby.length,
       ambulances: nearby,
     });

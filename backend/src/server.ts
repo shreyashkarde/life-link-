@@ -33,16 +33,19 @@ const io = new SocketIOServer(server, {
 initSocket(io);
 
 // Middlewares - reflect origin for withCredentials support
+import { hospitalContextMiddleware } from './middleware/hospitalIsolation';
+
 app.use(
   cors({
     origin: (_origin, callback) => callback(null, true),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'token', 'aToken', 'dToken', 'x-refresh-token', 'x-role'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'token', 'aToken', 'dToken', 'x-refresh-token', 'x-role', 'x-hospital-id'],
   })
 );
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(hospitalContextMiddleware);
 
 // Health Check
 app.get('/api/health', (_req: Request, res: Response) => {

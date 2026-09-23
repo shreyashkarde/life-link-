@@ -36,7 +36,7 @@ const ambulanceSchema = new Schema<IAmbulance>(
     driverName: { type: String, required: true },
     driverPhone: { type: String, required: true },
     driverEmail: { type: String, required: true },
-    driverId: { type: String, required: false },
+    driverId: { type: String, required: false, index: true },
     vehicleNumber: { type: String, required: true, unique: true },
     ambulanceType: {
       type: String,
@@ -57,7 +57,7 @@ const ambulanceSchema = new Schema<IAmbulance>(
       default: 'IDLE',
     },
     assignedHospital: { type: String, default: 'Lilavati Hospital & Research Centre' },
-    hospitalId: { type: String, default: 'hosp_lilavati', ref: 'Hospital' },
+    hospitalId: { type: String, default: 'hosp_lilavati', ref: 'Hospital', index: true },
     hospitalName: { type: String, default: 'Lilavati Hospital & Research Centre' },
     rating: { type: Number, default: 4.9 },
     reviewCount: { type: Number, default: 35 },
@@ -68,6 +68,9 @@ const ambulanceSchema = new Schema<IAmbulance>(
   },
   { timestamps: true }
 );
+
+ambulanceSchema.index({ hospitalId: 1, isAvailable: 1 });
+ambulanceSchema.index({ hospitalId: 1, currentStatus: 1 });
 
 export const Ambulance = mongoose.models.Ambulance || mongoose.model<IAmbulance>('Ambulance', ambulanceSchema);
 export default Ambulance;

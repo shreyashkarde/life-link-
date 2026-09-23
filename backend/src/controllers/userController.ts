@@ -231,14 +231,16 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
   }
 };
 
-// API to book appointment
+// API to book appointment with strict hospital validation
 export const bookAppointment = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.body.userId || res.locals.userId;
-    const { docId, slotDate, slotTime } = req.body;
+    const { docId, slotDate, slotTime, hospitalId: explicitHospitalId } = req.body;
+    const headerHospitalId = req.headers['x-hospital-id'] as string;
+    const requestedHospitalId = explicitHospitalId || headerHospitalId;
 
     if (!docId || !slotDate || !slotTime) {
-      res.status(400).json({ success: false, message: 'Missing appointment scheduling parameters' });
+      res.status(400).json({ success: false, message: 'Missing appointment scheduling parameters (docId, slotDate, slotTime required)' });
       return;
     }
 
@@ -248,6 +250,19 @@ export const bookAppointment = async (req: Request, res: Response): Promise<void
         res.status(404).json({ success: false, message: 'Doctor not found' });
         return;
       }
+
+      // 🛡️ Cross-Hospital Mismatch Validation Rule
+      if (requestedHospitalId && doc.hospitalId && doc.hospitalId !== requestedHospitalId) {
+        res.status(400).json({
+          success: false,
+          message: `Cross-hospital booking violation: Doctor '${doc.name}' belongs to '${doc.hospitalName || doc.hospitalId}', but the booking requested hospital '${requestedHospitalId}'. Inter-hospital cross-booking is strictly prohibited.`,
+          code: 'HOSPITAL_MISMATCH',
+          doctorHospitalId: doc.hospitalId,
+          requestedHospitalId,
+        });
+        return;
+      }
+
       if (!doc.available) {
         res.status(400).json({ success: false, message: 'Doctor is currently not available for bookings' });
         return;
@@ -266,7 +281,7 @@ export const bookAppointment = async (req: Request, res: Response): Promise<void
       }
 
       const user = prescriptoStore.users.find((u) => u._id === userId || u.id === userId);
-      const hospitalId = doc.hospitalId || 'hosp_lilavati';
+      const hospitalId = doc.hospitalId || requestedHospitalId || 'hosp_lilavati';
       const hospitalName = doc.hospitalName || 'Lilavati Hospital & Research Centre';
 
       const newAppt = {
@@ -302,13 +317,29 @@ export const bookAppointment = async (req: Request, res: Response): Promise<void
       };
 
       prescriptoStore.appointments.unshift(newAppt);
-      res.json({ success: true, message: 'Appointment Booked Successfully!' });
+      res.json({
+        success: true,
+        message: `Appointment Booked Successfully at ${hospitalName}!`,
+        appointment: newAppt,
+      });
       return;
     }
 
     const docData = await Doctor.findById(docId).select('-password');
     if (!docData) {
       res.status(404).json({ success: false, message: 'Doctor not found' });
+      return;
+    }
+
+    // 🛡️ Cross-Hospital Mismatch Validation Rule
+    if (requestedHospitalId && docData.hospitalId && docData.hospitalId !== requestedHospitalId) {
+      res.status(400).json({
+        success: false,
+        message: `Cross-hospital booking violation: Doctor '${docData.name}' belongs to '${docData.hospitalName || docData.hospitalId}', but the booking requested hospital '${requestedHospitalId}'. Inter-hospital cross-booking is strictly prohibited.`,
+        code: 'HOSPITAL_MISMATCH',
+        doctorHospitalId: docData.hospitalId,
+        requestedHospitalId,
+      });
       return;
     }
 
@@ -336,7 +367,7 @@ export const bookAppointment = async (req: Request, res: Response): Promise<void
       return;
     }
 
-    const hospitalId = docData.hospitalId || 'hosp_lilavati';
+    const hospitalId = docData.hospitalId || requestedHospitalId || 'hosp_lilavati';
     const hospitalName = docData.hospitalName || 'Lilavati Hospital & Research Centre';
 
     const docSnapshot = {
@@ -376,27 +407,40 @@ export const bookAppointment = async (req: Request, res: Response): Promise<void
 
     await Doctor.findByIdAndUpdate(docId, { slots_booked });
 
-    res.json({ success: true, message: 'Appointment Booked Successfully!' });
+    res.json({
+      success: true,
+      message: `Appointment Booked Successfully at ${hospitalName}!`,
+      appointment: newAppointment,
+    });
   } catch (error: any) {
     console.error('Book Appointment Error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// API to get user appointments for frontend 'My Appointments' page
+// API to get user appointments for frontend 'My Appointments' page (supports optional hospitalId filter)
 export const listAppointment = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.body.userId || res.locals.userId;
+    const hospitalId = (req.query.hospitalId as string) || (req.headers['x-hospital-id'] as string);
 
     if (!isMongoConnected()) {
-      const appointments = prescriptoStore.appointments.filter(
+      let appointments = prescriptoStore.appointments.filter(
         (a) => a.userId === userId || a.userData?._id === userId
       );
+      if (hospitalId) {
+        appointments = appointments.filter((a) => a.hospitalId === hospitalId);
+      }
       res.json({ success: true, appointments });
       return;
     }
 
-    const appointments = await Appointment.find({ userId }).sort({ createdAt: -1 });
+    const query: any = { userId };
+    if (hospitalId) {
+      query.hospitalId = hospitalId;
+    }
+
+    const appointments = await Appointment.find(query).sort({ createdAt: -1 });
     res.json({ success: true, appointments });
   } catch (error: any) {
     console.error('List Appointments Error:', error);

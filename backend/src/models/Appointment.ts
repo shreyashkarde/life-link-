@@ -22,11 +22,11 @@ export interface IAppointment extends Document {
 
 const appointmentSchema = new Schema<IAppointment>(
   {
-    userId: { type: String, required: true },
-    patientId: { type: String, required: false },
-    docId: { type: String, required: true },
-    doctorId: { type: String, required: false },
-    hospitalId: { type: String, default: 'hosp_lilavati', ref: 'Hospital' },
+    userId: { type: String, required: true, index: true },
+    patientId: { type: String, required: false, index: true },
+    docId: { type: String, required: true, index: true },
+    doctorId: { type: String, required: false, index: true },
+    hospitalId: { type: String, default: 'hosp_lilavati', ref: 'Hospital', index: true },
     hospitalName: { type: String, default: 'Lilavati Hospital & Research Centre' },
     slotDate: { type: String, required: true },
     slotTime: { type: String, required: true },
@@ -40,6 +40,10 @@ const appointmentSchema = new Schema<IAppointment>(
   },
   { timestamps: true }
 );
+
+appointmentSchema.index({ hospitalId: 1, docId: 1 });
+appointmentSchema.index({ hospitalId: 1, slotDate: 1 });
+appointmentSchema.index({ hospitalId: 1, isCompleted: 1 });
 
 export const Appointment =
   mongoose.models.Appointment ||

@@ -59,15 +59,15 @@ export interface IAmbulanceBooking extends Document {
 
 const ambulanceBookingSchema = new Schema<IAmbulanceBooking>(
   {
-    patientId: { type: String, required: true },
+    patientId: { type: String, required: true, index: true },
     patientName: { type: String, required: true },
     patientPhone: { type: String, required: true },
-    ambulanceId: { type: String, required: false },
-    driverId: { type: String, required: false },
+    ambulanceId: { type: String, required: false, index: true },
+    driverId: { type: String, required: false, index: true },
     driverName: { type: String, required: false },
     driverPhone: { type: String, required: false },
     vehicleNumber: { type: String, required: false },
-    hospitalId: { type: String, default: 'hosp_lilavati', ref: 'Hospital' },
+    hospitalId: { type: String, default: 'hosp_lilavati', ref: 'Hospital', index: true },
     hospitalName: { type: String, default: 'Lilavati Hospital & Research Centre' },
     pickupLocation: {
       address: { type: String, required: true },
@@ -122,6 +122,9 @@ const ambulanceBookingSchema = new Schema<IAmbulanceBooking>(
   },
   { timestamps: true }
 );
+
+ambulanceBookingSchema.index({ hospitalId: 1, status: 1 });
+ambulanceBookingSchema.index({ hospitalId: 1, bookingType: 1 });
 
 export const AmbulanceBooking =
   mongoose.models.AmbulanceBooking ||

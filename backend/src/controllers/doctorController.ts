@@ -7,26 +7,35 @@ import { ENV } from '../config/env';
 import { isMongoConnected } from '../config/db';
 import { prescriptoStore } from '../config/prescriptoStore';
 
-// Public API to get doctor list for frontend display (supports optional ?hospitalId= filter)
+// Public API to get doctor list for frontend display (supports strict ?hospitalId= filter & x-hospital-id header)
 export const doctorList = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { hospitalId } = req.query;
+    const hospitalId = (req.query.hospitalId as string) || (req.headers['x-hospital-id'] as string) || (req.query.hospital_id as string);
+    const speciality = req.query.speciality as string;
 
     if (!isMongoConnected()) {
       let docs = prescriptoStore.doctors;
       if (hospitalId) {
         docs = docs.filter((d) => d.hospitalId === hospitalId);
       }
+      if (speciality) {
+        docs = docs.filter((d) => d.speciality?.toLowerCase() === speciality.toLowerCase());
+      }
       const doctors = docs.map(({ password, email, ...rest }) => rest);
-      res.json({ success: true, doctors });
+      res.json({ success: true, count: doctors.length, hospitalId: hospitalId || 'ALL', doctors });
       return;
     }
 
     const filter: any = {};
-    if (hospitalId) filter.hospitalId = hospitalId;
+    if (hospitalId) {
+      filter.hospitalId = hospitalId;
+    }
+    if (speciality) {
+      filter.speciality = { $regex: `^${speciality}$`, $options: 'i' };
+    }
 
-    const doctors = await Doctor.find(filter).select(['-password', '-email']);
-    res.json({ success: true, doctors });
+    const doctors = await Doctor.find(filter).select(['-password', '-email']).sort({ createdAt: -1 });
+    res.json({ success: true, count: doctors.length, hospitalId: hospitalId || 'ALL', doctors });
   } catch (error: any) {
     console.error('Doctor List Error:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -50,7 +59,13 @@ export const loginDoctor = async (req: Request, res: Response): Promise<void> =>
         return;
       }
       const token = jwt.sign(
-        { id: doctor._id, role: 'doctor' },
+        {
+          id: doctor._id,
+          role: 'doctor',
+          email: doctor.email,
+          hospitalId: doctor.hospitalId || 'hosp_lilavati',
+          hospitalName: doctor.hospitalName || 'Lilavati Hospital & Research Centre',
+        },
         ENV.JWT_SECRET,
         { expiresIn: '7d' }
       );
@@ -63,6 +78,8 @@ export const loginDoctor = async (req: Request, res: Response): Promise<void> =>
           email: doctor.email,
           image: doctor.image,
           speciality: doctor.speciality,
+          hospitalId: doctor.hospitalId || 'hosp_lilavati',
+          hospitalName: doctor.hospitalName || 'Lilavati Hospital & Research Centre',
         },
       });
       return;
@@ -81,7 +98,13 @@ export const loginDoctor = async (req: Request, res: Response): Promise<void> =>
     }
 
     const token = jwt.sign(
-      { id: doctor._id, role: 'doctor' },
+      {
+        id: doctor._id,
+        role: 'doctor',
+        email: doctor.email,
+        hospitalId: doctor.hospitalId || 'hosp_lilavati',
+        hospitalName: doctor.hospitalName || 'Lilavati Hospital & Research Centre',
+      },
       ENV.JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -95,6 +118,8 @@ export const loginDoctor = async (req: Request, res: Response): Promise<void> =>
         email: doctor.email,
         image: doctor.image,
         speciality: doctor.speciality,
+        hospitalId: doctor.hospitalId || 'hosp_lilavati',
+        hospitalName: doctor.hospitalName || 'Lilavati Hospital & Research Centre',
       },
     });
   } catch (error: any) {
