@@ -201,14 +201,19 @@ export const Login: React.FC<LoginProps> = ({ embedded = false, initialMode = 'L
         <div className="w-full md:w-1/2 p-6 sm:p-10 lg:p-12 flex flex-col justify-between space-y-6">
           <div className="space-y-6">
             {/* Logo & Tagline */}
-            <div className="text-center pt-2">
+            <div className="text-center pt-2 flex flex-col items-center">
+              <img
+                src="/lifelink_logo.png"
+                alt="LifeLink Logo"
+                className="w-16 h-16 object-contain rounded-full shadow-md mb-2 hover:scale-105 transition-transform"
+              />
               <div className="inline-flex items-center justify-center gap-1">
                 <span className="text-3xl sm:text-4xl font-extrabold tracking-tight text-gray-900 flex items-center">
-                  <span className="text-blue-600">Life</span>Link<span className="inline-block w-2.5 h-2.5 bg-blue-600 rounded-full ml-1 animate-pulse"></span>
+                  <span className="text-blue-600">Life</span>Link
                 </span>
               </div>
-              <p className="text-xs sm:text-sm font-semibold text-gray-600 mt-1">
-                Smart Healthcare & Emergency Response
+              <p className="text-xs sm:text-sm font-semibold text-gray-600 mt-0.5">
+                CARE CONNECTS LIVES
               </p>
             </div>
 

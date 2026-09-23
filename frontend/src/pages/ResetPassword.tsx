@@ -64,10 +64,15 @@ export const ResetPassword: React.FC = () => {
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans">
       <div className="bg-white rounded-[32px] sm:rounded-[40px] shadow-2xl border border-gray-100 max-w-md w-full p-8 sm:p-10 space-y-6 animate-in fade-in zoom-in-95 duration-200">
         {/* Brand & Title */}
-        <div className="text-center space-y-2">
+        <div className="text-center space-y-2 flex flex-col items-center">
+          <img
+            src="/lifelink_logo.png"
+            alt="LifeLink Logo"
+            className="w-14 h-14 object-contain rounded-full shadow-md mb-1"
+          />
           <div className="inline-flex items-center justify-center gap-1">
             <span className="text-3xl font-extrabold tracking-tight text-gray-900 flex items-center">
-              <span className="text-blue-600">Life</span>Link<span className="inline-block w-2.5 h-2.5 bg-blue-600 rounded-full ml-1 animate-pulse"></span>
+              <span className="text-blue-600">Life</span>Link
             </span>
           </div>
           <h2 className="text-xl font-bold text-gray-900">Create New Password</h2>

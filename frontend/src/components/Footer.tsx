@@ -7,13 +7,20 @@ export const Footer: React.FC = () => {
       <div className="flex flex-col sm:grid grid-cols-[3fr_1fr_1fr] gap-14 my-10 text-sm">
         {/* Left Section */}
         <div>
-          <div className="flex items-center gap-2 mb-5">
-            <span className="text-2xl font-black tracking-tight text-gray-900 flex items-center">
-              <span className="text-blue-600">Life</span>Link<span className="inline-block w-2 h-2 bg-blue-600 rounded-full ml-1"></span>
-            </span>
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-              HEALTHCARE
-            </span>
+          <div className="flex items-center gap-2.5 mb-5">
+            <img
+              src="/lifelink_logo.png"
+              alt="LifeLink Logo"
+              className="w-9 h-9 object-contain rounded-full shadow-xs"
+            />
+            <div className="flex flex-col">
+              <span className="text-2xl font-black tracking-tight text-gray-900 flex items-center leading-none">
+                <span className="text-blue-600">Life</span>Link
+              </span>
+              <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest -mt-0.5">
+                CARE CONNECTS LIVES
+              </span>
+            </div>
           </div>
           <p className="w-full md:w-2/3 text-gray-600 leading-6">
             LifeLink Healthcare is committed to excellence in modern medical delivery. We connect patients with

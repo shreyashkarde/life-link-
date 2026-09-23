@@ -300,6 +300,8 @@ export const fallbackDoctors: DoctorItem[] = [
 ];
 
 export const assets = {
+  logo: '/lifelink_logo.png',
+  lifelink_logo: '/lifelink_logo.png',
   header_img: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=600',
   appointment_img: 'https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=600',
   about_image: 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=600',

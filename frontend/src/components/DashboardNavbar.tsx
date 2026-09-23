@@ -57,9 +57,14 @@ export const DashboardNavbar: React.FC<DashboardNavbarProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
         {/* Brand & Role Tag */}
         <div className="flex items-center gap-3">
-          <Link to={getDashboardHome()} className="flex items-center gap-1.5 group">
-            <span className="text-2xl font-black tracking-tight text-gray-900 group-hover:opacity-90 transition-opacity flex items-center">
-              <span className="text-blue-600">Life</span>Link<span className="inline-block w-2 h-2 bg-blue-600 rounded-full ml-1"></span>
+          <Link to={getDashboardHome()} className="flex items-center gap-2.5 group">
+            <img
+              src="/lifelink_logo.png"
+              alt="LifeLink Logo"
+              className="w-8 h-8 object-contain rounded-full shadow-xs group-hover:scale-105 transition-transform"
+            />
+            <span className="text-xl sm:text-2xl font-black tracking-tight text-gray-900 group-hover:opacity-90 transition-opacity flex items-center leading-none">
+              <span className="text-blue-600">Life</span>Link
             </span>
           </Link>
 

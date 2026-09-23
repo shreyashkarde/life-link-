@@ -21,10 +21,12 @@ export const AdminLayout: React.FC = () => {
       {/* Top Navbar */}
       <div className="flex items-center justify-between px-4 sm:px-10 py-3 border-b bg-white">
         <div className="flex items-center gap-3 text-xs">
-          <Link to="/admin/dashboard" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-white font-bold text-lg">
-              +
-            </div>
+          <Link to="/admin/dashboard" className="flex items-center gap-2.5">
+            <img
+              src="/lifelink_logo.png"
+              alt="LifeLink Logo"
+              className="w-8 h-8 object-contain rounded-full shadow-xs"
+            />
             <span className="text-xl font-bold tracking-tight text-gray-900 flex items-center">
               <span className="text-blue-600">Life</span>Link
             </span>
