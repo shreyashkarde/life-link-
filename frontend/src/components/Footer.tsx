@@ -8,15 +8,15 @@ export const Footer: React.FC = () => {
         {/* Left Section */}
         <div>
           <div className="flex items-center gap-2 mb-5">
-            <span className="text-2xl font-black tracking-tight text-gray-900">
-              b<span className="inline-block w-2.5 h-2.5 bg-blue-600 rounded-full mx-0.5 align-baseline"></span>well
+            <span className="text-2xl font-black tracking-tight text-gray-900 flex items-center">
+              <span className="text-blue-600">Life</span>Link<span className="inline-block w-2 h-2 bg-blue-600 rounded-full ml-1"></span>
             </span>
             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
               HEALTHCARE
             </span>
           </div>
           <p className="w-full md:w-2/3 text-gray-600 leading-6">
-            b.well Healthcare is committed to excellence in modern medical delivery. We connect patients with
+            LifeLink Healthcare is committed to excellence in modern medical delivery. We connect patients with
             trusted, certified medical professionals and real-time emergency ambulance telemetry whenever you need it.
           </p>
         </div>
@@ -37,7 +37,7 @@ export const Footer: React.FC = () => {
           <p className="text-xl font-medium mb-5 text-gray-900">GET IN TOUCH</p>
           <ul className="flex flex-col gap-2 text-gray-600">
             <li>+1-212-456-7890</li>
-            <li>support@prescripto.com</li>
+            <li>support@lifelink.com</li>
           </ul>
         </div>
       </div>
@@ -45,7 +45,7 @@ export const Footer: React.FC = () => {
       {/* Copyright */}
       <div className="border-t border-gray-200">
         <p className="py-5 text-sm text-center text-gray-500">
-          Copyright 2026 @ Prescripto - All Right Reserved.
+          Copyright 2026 @ LifeLink - All Rights Reserved.
         </p>
       </div>
     </div>

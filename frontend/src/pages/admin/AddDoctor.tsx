@@ -71,7 +71,7 @@ export const AddDoctor: React.FC = () => {
     <form onSubmit={onSubmitHandler} className="m-2 sm:m-5 w-full max-w-4xl">
       <div className="mb-6 pb-4 border-b border-gray-200">
         <h1 className="text-2xl font-black text-gray-900 tracking-tight">Onboard New Doctor</h1>
-        <p className="text-xs text-gray-500 mt-1">Register a new verified physician into the Prescripto booking system.</p>
+        <p className="text-xs text-gray-500 mt-1">Register a new verified physician into the LifeLink booking system.</p>
       </div>
 
       <div className="bg-white p-8 sm:p-10 border-2 border-gray-100 rounded-3xl w-full shadow-sm max-h-[85vh] overflow-y-scroll">
@@ -114,7 +114,7 @@ export const AddDoctor: React.FC = () => {
               <input
                 className="border-2 border-gray-200 rounded-xl px-3.5 py-2.5 w-full focus:border-primary focus:outline-none"
                 type="email"
-                placeholder="doctor@prescripto.com"
+                placeholder="doctor@lifelink.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required

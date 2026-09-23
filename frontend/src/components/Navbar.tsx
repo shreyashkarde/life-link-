@@ -17,8 +17,8 @@ export const Navbar: React.FC = () => {
     <div className="flex items-center justify-between text-sm py-4 mb-5 border-b border-gray-200">
       {/* Brand Logo */}
       <Link to={token ? "/patient/dashboard" : "/login"} className="flex items-center gap-2.5 cursor-pointer group">
-        <span className="text-2xl font-black tracking-tight text-gray-900 group-hover:opacity-90 transition-opacity">
-          b<span className="inline-block w-2.5 h-2.5 bg-blue-600 rounded-full mx-0.5 align-baseline"></span>well
+        <span className="text-2xl font-black tracking-tight text-gray-900 group-hover:opacity-90 transition-opacity flex items-center">
+          <span className="text-blue-600">Life</span>Link<span className="inline-block w-2 h-2 bg-blue-600 rounded-full ml-1"></span>
         </span>
         <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden sm:inline">
           HEALTHCARE
@@ -127,8 +127,8 @@ export const Navbar: React.FC = () => {
           <div className="fixed inset-0 z-50 bg-white p-6 flex flex-col md:hidden">
             <div className="flex items-center justify-between pb-6 border-b">
               <div className="flex items-center gap-2">
-                <span className="text-2xl font-black tracking-tight text-gray-900">
-                  b<span className="inline-block w-2.5 h-2.5 bg-blue-600 rounded-full mx-0.5 align-baseline"></span>well
+                <span className="text-2xl font-black tracking-tight text-gray-900 flex items-center">
+                  <span className="text-blue-600">Life</span>Link<span className="inline-block w-2 h-2 bg-blue-600 rounded-full ml-1"></span>
                 </span>
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                   HEALTHCARE

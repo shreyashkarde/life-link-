@@ -58,8 +58,8 @@ export const DashboardNavbar: React.FC<DashboardNavbarProps> = ({
         {/* Brand & Role Tag */}
         <div className="flex items-center gap-3">
           <Link to={getDashboardHome()} className="flex items-center gap-1.5 group">
-            <span className="text-2xl font-black tracking-tight text-[#1e2e6e] group-hover:opacity-90 transition-opacity">
-              b<span className="inline-block w-2.5 h-2.5 bg-emerald-500 rounded-full mx-0.5"></span>well
+            <span className="text-2xl font-black tracking-tight text-gray-900 group-hover:opacity-90 transition-opacity flex items-center">
+              <span className="text-blue-600">Life</span>Link<span className="inline-block w-2 h-2 bg-blue-600 rounded-full ml-1"></span>
             </span>
           </Link>
 

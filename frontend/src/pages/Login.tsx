@@ -73,7 +73,7 @@ export const Login: React.FC<LoginProps> = ({ embedded = false, initialMode = 'L
       default:
         setToken(targetToken);
         sessionStorage.setItem('token', targetToken);
-        showToast('Welcome to b.well Healthcare! Redirecting to Patient Portal...', 'success');
+        showToast('Welcome to LifeLink Healthcare! Redirecting to Patient Portal...', 'success');
         navigate('/patient/dashboard', { replace: true });
         break;
     }
@@ -203,12 +203,12 @@ export const Login: React.FC<LoginProps> = ({ embedded = false, initialMode = 'L
             {/* Logo & Tagline */}
             <div className="text-center pt-2">
               <div className="inline-flex items-center justify-center gap-1">
-                <span className="text-3xl sm:text-4xl font-extrabold tracking-tight text-[#1e2e6e]">
-                  b<span className="inline-block w-2.5 h-2.5 bg-emerald-500 rounded-full mx-0.5 animate-pulse"></span>well
+                <span className="text-3xl sm:text-4xl font-extrabold tracking-tight text-gray-900 flex items-center">
+                  <span className="text-blue-600">Life</span>Link<span className="inline-block w-2.5 h-2.5 bg-blue-600 rounded-full ml-1 animate-pulse"></span>
                 </span>
               </div>
-              <p className="text-xs sm:text-sm font-semibold text-[#1e2e6e]/90 mt-1">
-                The heart of your healthcare
+              <p className="text-xs sm:text-sm font-semibold text-gray-600 mt-1">
+                Smart Healthcare & Emergency Response
               </p>
             </div>
 
@@ -501,7 +501,7 @@ export const Login: React.FC<LoginProps> = ({ embedded = false, initialMode = 'L
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-gray-900 flex items-center gap-1.5">
-                <span>💬</span> b.well Customer Support
+                <span>💬</span> LifeLink Customer Support
               </h3>
               <button onClick={() => setShowSupportModal(false)} className="text-gray-400 hover:text-gray-600 text-xs">
                 ✕
@@ -512,7 +512,7 @@ export const Login: React.FC<LoginProps> = ({ embedded = false, initialMode = 'L
             </p>
             <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs space-y-1">
               <p><strong>📞 Emergency Helpline:</strong> 108 / 102</p>
-              <p><strong>✉️ Email:</strong> support@bwell-healthcare.com</p>
+              <p><strong>✉️ Email:</strong> support@lifelink.com</p>
               <p><strong>⏰ Hours:</strong> 24/7 Real-Time Triage</p>
             </div>
             <button

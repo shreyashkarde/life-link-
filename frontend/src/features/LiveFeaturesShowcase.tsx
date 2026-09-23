@@ -75,7 +75,7 @@ export const LiveFeaturesShowcase: React.FC = () => {
               href="/"
               className="text-xs font-semibold text-gray-600 hover:text-blue-600 px-3 py-1.5 rounded-xl border border-gray-200 hover:border-blue-300 transition-colors"
             >
-              ← Back to Prescripto Home
+              ← Back to LifeLink Home
             </a>
             <button
               onClick={() => generateBookingReceiptPDF()}

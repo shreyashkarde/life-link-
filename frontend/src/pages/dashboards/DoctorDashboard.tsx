@@ -242,7 +242,7 @@ export const DoctorDashboard: React.FC = () => {
       <DashboardNavbar
         currentRole="DOCTOR"
         userName={doctorData?.name || 'Dr. Richard James'}
-        userSubtitle={`${doctorData?.speciality || 'General Physician'} • Prescripto Certified`}
+        userSubtitle={`${doctorData?.speciality || 'General Physician'} • LifeLink Verified`}
         avatarUrl={doctorData?.image || 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=300'}
       />
 
@@ -501,7 +501,7 @@ export const DoctorDashboard: React.FC = () => {
                   <div className="py-12 text-center text-[#64748B] bg-slate-50/60 rounded-2xl border border-dashed border-slate-200 space-y-2">
                     <span className="text-3xl block">📋</span>
                     <p className="text-sm font-semibold text-[#0F172A]">No appointments in this category.</p>
-                    <p className="text-xs text-[#64748B]">New patient intakes from Prescripto will automatically populate here.</p>
+                    <p className="text-xs text-[#64748B]">New patient intakes from LifeLink will automatically populate here.</p>
                   </div>
                 )}
               </div>

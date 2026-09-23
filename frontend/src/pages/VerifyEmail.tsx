@@ -35,7 +35,7 @@ export const VerifyEmail: React.FC = () => {
             setToken(data.token);
             sessionStorage.setItem('token', data.token);
           }
-          showToast('Email verified successfully! Welcome to b.well Healthcare.', 'success');
+          showToast('Email verified successfully! Welcome to LifeLink Healthcare.', 'success');
         } else {
           setStatus('error');
           setErrorMessage(data.message || 'Verification failed.');
@@ -78,8 +78,8 @@ export const VerifyEmail: React.FC = () => {
       <div className="bg-white rounded-[32px] sm:rounded-[40px] shadow-2xl border border-gray-100 max-w-md w-full p-8 sm:p-10 space-y-6 text-center animate-in fade-in zoom-in-95 duration-200">
         {/* Brand */}
         <div className="inline-flex items-center justify-center gap-1">
-          <span className="text-3xl font-extrabold tracking-tight text-[#1e2e6e]">
-            b<span className="inline-block w-2.5 h-2.5 bg-emerald-500 rounded-full mx-0.5 animate-pulse"></span>well
+          <span className="text-3xl font-extrabold tracking-tight text-gray-900 flex items-center">
+            <span className="text-blue-600">Life</span>Link<span className="inline-block w-2.5 h-2.5 bg-blue-600 rounded-full ml-1 animate-pulse"></span>
           </span>
         </div>
 

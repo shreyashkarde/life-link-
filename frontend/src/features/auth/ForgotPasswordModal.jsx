@@ -75,7 +75,7 @@ export const ForgotPasswordModal = ({ isOpen, onClose }) => {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="e.g. patient@prescripto.com"
+              placeholder="e.g. patient@lifelink.com"
               required
               className="w-full text-xs px-3.5 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-800 transition-all"
             />

@@ -25,7 +25,9 @@ export const AdminLayout: React.FC = () => {
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-white font-bold text-lg">
               +
             </div>
-            <span className="text-xl font-bold tracking-tight text-gray-900">Prescripto.</span>
+            <span className="text-xl font-bold tracking-tight text-gray-900 flex items-center">
+              <span className="text-blue-600">Life</span>Link
+            </span>
           </Link>
           <span className="border px-3 py-1 rounded-full border-gray-400 text-gray-600 font-semibold uppercase text-[10px]">
             {aToken ? 'Admin Panel' : `Doctor Panel: ${doctorData?.name || ''}`}

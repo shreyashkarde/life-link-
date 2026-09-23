@@ -25,7 +25,7 @@ export const Banner: React.FC = () => {
           </h2>
 
           <p className="text-xs sm:text-sm text-blue-100/90 max-w-lg leading-relaxed">
-            Join over 50,000+ patients who trust b.well for same-day doctor appointments, medical records, and 24/7 priority emergency ambulance dispatch.
+            Join over 50,000+ patients who trust LifeLink for same-day doctor appointments, medical records, and 24/7 priority emergency ambulance dispatch.
           </p>
 
           {/* Trust Badges */}

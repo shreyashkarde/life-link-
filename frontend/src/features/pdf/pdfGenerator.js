@@ -195,7 +195,7 @@ export const generateBookingReceiptPDF = (bookingData = {}) => {
         </table>
 
         <div class="footer">
-          Verified Medical Transport • 24/7 Emergency Dispatch Helpline: 108 / 102 • Prescripto Healthcare Group
+          Verified Medical Transport • 24/7 Emergency Dispatch Helpline: 108 / 102 • LifeLink Healthcare Platform
         </div>
       </div>
       <script>
@@ -238,7 +238,7 @@ export const generateAppointmentReceiptPDF = (appointmentData = {}) => {
     <html lang="en">
     <head>
       <meta charset="UTF-8">
-      <title>Prescripto Doctor Consultation Receipt - ${receiptNumber}</title>
+      <title>LifeLink Doctor Consultation Receipt - ${receiptNumber}</title>
       <style>
         body {
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -348,7 +348,7 @@ export const generateAppointmentReceiptPDF = (appointmentData = {}) => {
       <div class="receipt-card">
         <div class="header">
           <div>
-            <div class="brand">b<span>•</span>well <span style="font-size: 12px; color: #64748b; font-weight: 600; margin-left: 8px;">PRESCRIPTO HEALTHCARE</span></div>
+            <div class="brand"><span style="color: #2563eb;">Life</span>Link <span style="font-size: 12px; color: #64748b; font-weight: 600; margin-left: 8px;">HEALTHCARE PLATFORM</span></div>
             <p style="margin: 4px 0 0 0; font-size: 12px; color: #64748b;">Official Physician Consultation Invoice & Confirmation</p>
           </div>
           <span class="badge">${status}</span>
@@ -406,8 +406,8 @@ export const generateAppointmentReceiptPDF = (appointmentData = {}) => {
         </table>
 
         <div class="footer">
-          This is an official computer-generated receipt issued by Prescripto Healthcare.<br/>
-          For inquiries or rescheduling, contact Prescripto Careline at <strong>+1-212-456-7890</strong> or email <strong>support@prescripto.com</strong>.
+          This is an official computer-generated receipt issued by LifeLink Healthcare.<br/>
+          For inquiries or rescheduling, contact LifeLink Careline at <strong>+1-212-456-7890</strong> or email <strong>support@lifelink.com</strong>.
         </div>
       </div>
       <script>

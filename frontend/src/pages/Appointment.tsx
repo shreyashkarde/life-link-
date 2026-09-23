@@ -25,7 +25,7 @@ export const Appointment: React.FC = () => {
     }
   };
 
-  // Generate 7-day slot schedule matching Prescripto
+  // Generate 7-day slot schedule matching LifeLink
   const getAvailableSlots = () => {
     setDocSlots([]);
     const today = new Date();

@@ -66,8 +66,8 @@ export const ResetPassword: React.FC = () => {
         {/* Brand & Title */}
         <div className="text-center space-y-2">
           <div className="inline-flex items-center justify-center gap-1">
-            <span className="text-3xl font-extrabold tracking-tight text-[#1e2e6e]">
-              b<span className="inline-block w-2.5 h-2.5 bg-emerald-500 rounded-full mx-0.5 animate-pulse"></span>well
+            <span className="text-3xl font-extrabold tracking-tight text-gray-900 flex items-center">
+              <span className="text-blue-600">Life</span>Link<span className="inline-block w-2.5 h-2.5 bg-blue-600 rounded-full ml-1 animate-pulse"></span>
             </span>
           </div>
           <h2 className="text-xl font-bold text-gray-900">Create New Password</h2>
@@ -84,7 +84,7 @@ export const ResetPassword: React.FC = () => {
             <div className="space-y-2">
               <h3 className="text-base font-bold text-gray-900">Password Updated Successfully</h3>
               <p className="text-xs text-gray-600 leading-relaxed">
-                Your password has been securely reset. You can now log into your b.well account with your new credentials.
+                Your password has been securely reset. You can now log into your LifeLink account with your new credentials.
               </p>
             </div>
             <button

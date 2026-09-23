@@ -14,7 +14,7 @@ export const Contact: React.FC = () => {
         <img
           className="w-full md:max-w-[360px] rounded-2xl object-cover shadow-sm"
           src={assets.contact_image}
-          alt="Contact Prescripto"
+          alt="Contact LifeLink"
         />
 
         <div className="flex flex-col justify-center items-start gap-6">
@@ -23,10 +23,10 @@ export const Contact: React.FC = () => {
             54709 Willms Station <br /> Suite 350, Washington, USA
           </p>
           <p className="text-gray-500 leading-6">
-            Tel: (415) 555-0132 <br /> Email: support@prescripto.com
+            Tel: (415) 555-0132 <br /> Email: support@lifelink.com
           </p>
 
-          <p className="font-semibold text-lg text-gray-700">CAREERS AT PRESCRIPTO</p>
+          <p className="font-semibold text-lg text-gray-700">CAREERS AT LIFELINK</p>
           <p className="text-gray-500">
             Learn more about our teams, job openings, and clinical affiliations.
           </p>
