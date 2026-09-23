@@ -1,26 +1,40 @@
 import React, { useState, useEffect } from 'react';
 
+export interface LocationCoord {
+  lat: number;
+  lng: number;
+  address?: string;
+}
+
+export interface MapViewProps {
+  userLocation?: LocationCoord;
+  onSelectAmbulance?: (ambulance: any) => void;
+  onSelectHospital?: (hospital: any) => void;
+  onSelectDoctor?: (doctor: any) => void;
+}
+
 /**
- * 📍 MapView.jsx
- * Interactive Map View supporting Google Maps API & Interactive Telemetry Radar
+ * 📍 MapView.tsx
+ * Interactive Map View supporting Google Maps API & Interactive Telemetry
  * Displays:
  *  1. User Location
  *  2. Nearby Ambulances
  *  3. Nearby Hospitals
+ *  4. Doctors
  */
-export const MapView = ({
+export const MapView: React.FC<MapViewProps> = ({
   userLocation = { lat: 19.0760, lng: 72.8777, address: 'Bandra West, Mumbai' },
-  onSelectAmbulance = null,
-  onSelectHospital = null,
-  onSelectDoctor = null,
+  onSelectAmbulance,
+  onSelectHospital,
+  onSelectDoctor,
 }) => {
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
-  const [ambulances, setAmbulances] = useState([]);
-  const [hospitals, setHospitals] = useState([]);
-  const [doctors, setDoctors] = useState([]);
-  const [selectedEntity, setSelectedEntity] = useState(null);
-  const [filter, setFilter] = useState('ALL'); // ALL, DOCTORS, HOSPITALS, AMBULANCES
-  const [loading, setLoading] = useState(true);
+  const apiKey = (import.meta.env.VITE_MAP_KEY || import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '').trim();
+  const [ambulances, setAmbulances] = useState<any[]>([]);
+  const [hospitals, setHospitals] = useState<any[]>([]);
+  const [doctors, setDoctors] = useState<any[]>([]);
+  const [selectedEntity, setSelectedEntity] = useState<any>(null);
+  const [filter, setFilter] = useState<'ALL' | 'DOCTORS' | 'HOSPITALS' | 'AMBULANCES'>('ALL');
+  const [loading, setLoading] = useState<boolean>(true);
 
   // Load nearby ambulances, hospitals, and verified doctors
   useEffect(() => {
@@ -140,15 +154,15 @@ export const MapView = ({
         {/* Doctor Pins */}
         {(filter === 'ALL' || filter === 'DOCTORS') &&
           doctors.map((doc, index) => {
-            // Distribute doctors around clinic perimeter
             const angle = (index / Math.max(1, doctors.length)) * 2 * Math.PI;
-            const radius = 28 + (index % 2) * 12; // percentage offset
+            const radius = 28 + (index % 2) * 12;
             const topPercent = 50 + radius * Math.sin(angle);
             const leftPercent = 50 + radius * Math.cos(angle);
 
             return (
               <button
                 key={doc._id || index}
+                type="button"
                 onClick={() => {
                   setSelectedEntity({ type: 'DOCTOR', data: doc });
                   if (onSelectDoctor) onSelectDoctor(doc);
@@ -169,7 +183,6 @@ export const MapView = ({
         {/* Ambulance Pins */}
         {(filter === 'ALL' || filter === 'AMBULANCES') &&
           ambulances.map((amb, index) => {
-            // Place on circular radius based on relative coords
             const dLat = (amb.currentLocation?.lat - userLocation.lat) * 1000;
             const dLng = (amb.currentLocation?.lng - userLocation.lng) * 1000;
             const topPercent = Math.max(15, Math.min(85, 50 + dLat * 2.2));
@@ -178,6 +191,7 @@ export const MapView = ({
             return (
               <button
                 key={amb._id || index}
+                type="button"
                 onClick={() => {
                   setSelectedEntity({ type: 'AMBULANCE', data: amb });
                   if (onSelectAmbulance) onSelectAmbulance(amb);
@@ -206,6 +220,7 @@ export const MapView = ({
             return (
               <button
                 key={hosp.id || index}
+                type="button"
                 onClick={() => {
                   setSelectedEntity({ type: 'HOSPITAL', data: hosp });
                   if (onSelectHospital) onSelectHospital(hosp);
@@ -281,6 +296,7 @@ export const MapView = ({
           )}
 
           <button
+            type="button"
             onClick={() => setSelectedEntity(null)}
             className="text-xs text-gray-500 hover:text-gray-800 px-2 py-1 bg-white rounded border border-gray-200"
           >
