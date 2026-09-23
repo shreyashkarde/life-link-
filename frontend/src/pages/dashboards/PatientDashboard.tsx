@@ -143,37 +143,65 @@ export const PatientDashboard: React.FC = () => {
                 onClick={() => navigate('/my-appointments')}
                 className="text-xs font-bold text-blue-600 hover:text-blue-800"
               >
-                View Details ({appointments.length || 1}) →
+                View Details ({appointments.length}) →
               </button>
             </div>
 
-            <div className="p-4 rounded-2xl border border-blue-100 bg-blue-50/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex items-center gap-3.5">
-                <img
-                  src="https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=300"
-                  alt="Dr. Richard James"
-                  className="w-12 h-12 rounded-2xl object-cover border border-blue-200"
-                />
-                <div className="space-y-0.5">
-                  <span className="text-[10px] bg-emerald-50 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-200">
-                    Confirmed
-                  </span>
-                  <h3 className="text-sm font-bold text-gray-900">Dr. Richard James</h3>
-                  <p className="text-xs text-gray-500">General Physician • MBBS, MD</p>
-                  <p className="text-xs text-blue-700 font-semibold">🕒 Tomorrow, 10:30 am</p>
-                </div>
-              </div>
-
-              <div className="flex sm:flex-col items-center sm:items-end justify-between gap-2 border-t sm:border-t-0 pt-2 sm:pt-0">
-                <span className="text-sm font-black text-gray-900">$50.00</span>
-                <button
-                  onClick={() => navigate('/my-appointments')}
-                  className="px-3.5 py-1.5 bg-[#1e2e6e] text-white rounded-xl text-xs font-bold"
+            {appointments && appointments.length > 0 ? (
+              appointments.map((item: any, index: number) => (
+                <div
+                  key={item._id || index}
+                  className="p-4 rounded-2xl border border-blue-100 bg-blue-50/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
                 >
-                  Manage
+                  <div className="flex items-center gap-3.5">
+                    <img
+                      src={
+                        item.docData?.image ||
+                        'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=300'
+                      }
+                      alt={item.docData?.name || 'Doctor'}
+                      className="w-12 h-12 rounded-2xl object-cover border border-blue-200"
+                    />
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] bg-emerald-50 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-200">
+                        {item.cancelled ? 'Cancelled' : item.isCompleted ? 'Completed' : 'Confirmed'}
+                      </span>
+                      <h3 className="text-sm font-bold text-gray-900">{item.docData?.name}</h3>
+                      <p className="text-xs text-gray-500">
+                        {item.docData?.speciality} • {item.hospitalName || 'Healthcare Facility'}
+                      </p>
+                      <p className="text-xs text-blue-700 font-semibold">
+                        🕒 {item.slotDate?.replace(/_/g, ' ')} | {item.slotTime}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex sm:flex-col items-center sm:items-end justify-between gap-2 border-t sm:border-t-0 pt-2 sm:pt-0">
+                    <span className="text-sm font-black text-gray-900">
+                      ${item.amount || item.docData?.fees || 50}.00
+                    </span>
+                    <button
+                      onClick={() => navigate('/my-appointments')}
+                      className="px-3.5 py-1.5 bg-[#1e2e6e] text-white rounded-xl text-xs font-bold"
+                    >
+                      Manage
+                    </button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="py-10 text-center text-gray-400 space-y-3 bg-slate-50/50 rounded-2xl border border-dashed border-gray-200">
+                <span className="text-3xl block">🩺</span>
+                <p className="text-sm font-semibold text-gray-600">No upcoming doctor consultations scheduled.</p>
+                <p className="text-xs text-gray-400">Your database is completely clear and ready for real-time bookings.</p>
+                <button
+                  onClick={() => navigate('/doctors')}
+                  className="px-4 py-2 bg-[#1e2e6e] hover:bg-[#162354] text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
+                >
+                  + Book Doctor Consultation
                 </button>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Real-Time Live Ambulance Tracking Card with Dynamic Google Maps */}

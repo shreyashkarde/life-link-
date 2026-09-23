@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import DashboardNavbar from '../../components/DashboardNavbar';
 import { LiveMap } from '../../features/maps/LiveMap';
@@ -8,16 +8,41 @@ export const DriverDashboard: React.FC = () => {
   const { showToast, backendUrl } = useApp();
   const apiBase = backendUrl || 'http://localhost:5000';
   const [isOnDuty, setIsOnDuty] = useState(true);
-  const [tripStatus, setTripStatus] = useState<'IDLE' | 'ASSIGNED' | 'EN_ROUTE_PICKUP' | 'PATIENT_ONBOARD' | 'COMPLETED'>('ASSIGNED');
+  const [activeBooking, setActiveBooking] = useState<any>(null);
+  const [tripStatus, setTripStatus] = useState<'IDLE' | 'ASSIGNED' | 'EN_ROUTE_PICKUP' | 'PATIENT_ONBOARD' | 'COMPLETED'>('IDLE');
 
   // 📍 Live Driver Location Telemetry Hook
   const { currentLocation, pickupLocation, updateLocation } = useLiveLocation({
     role: 'driver',
     driverId: 'driver_108',
-    patientId: 'user_edward_101',
-    bookingId: 'SOS-108992',
+    patientId: activeBooking?.patientId || 'user_edward_101',
+    bookingId: activeBooking?.bookingId || activeBooking?._id || 'SOS-STANDBY',
     autoWatchGps: true,
   });
+
+  const fetchDriverTrips = async () => {
+    try {
+      const token = sessionStorage.getItem('token') || localStorage.getItem('token') || '';
+      const res = await fetch(`${apiBase}/api/booking/driver-trips`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.success && data.trips && data.trips.length > 0) {
+        const current = data.trips.find((t: any) => t.status !== 'COMPLETED' && t.status !== 'CANCELLED') || data.trips[0];
+        setActiveBooking(current);
+        setTripStatus(current.status || 'ASSIGNED');
+      } else {
+        setActiveBooking(null);
+        setTripStatus('IDLE');
+      }
+    } catch (e) {
+      // Standby mode
+    }
+  };
+
+  useEffect(() => {
+    fetchDriverTrips();
+  }, [apiBase]);
 
   const handleDutyToggle = async () => {
     const nextStatus = !isOnDuty;
@@ -41,13 +66,16 @@ export const DriverDashboard: React.FC = () => {
     };
     showToast(messages[status] || `Status updated to ${status}`, 'success');
 
-    // Notify backend and patient room
+    const bookingId = activeBooking?._id || activeBooking?.bookingId || 'trip_108992';
     try {
-      await fetch(`${apiBase}/api/driver/trips/trip_108992/status`, {
+      await fetch(`${apiBase}/api/booking/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token') || localStorage.getItem('token') || ''}` },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ bookingId, status }),
       });
+      if (status === 'COMPLETED') {
+        fetchDriverTrips();
+      }
     } catch (e) {}
   };
 
@@ -107,7 +135,7 @@ export const DriverDashboard: React.FC = () => {
           <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-1">
             <p className="text-xs font-semibold text-gray-400">Live GPS Speed</p>
             <p className="text-2xl font-black text-gray-900">
-              45 <span className="text-xs text-gray-400 font-normal">km/h</span>
+              {isOnDuty ? '45' : '0'} <span className="text-xs text-gray-400 font-normal">km/h</span>
             </p>
             <span className="text-[10px] text-emerald-600 font-bold">Telemetry Active</span>
           </div>
@@ -115,23 +143,23 @@ export const DriverDashboard: React.FC = () => {
           <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-1">
             <p className="text-xs font-semibold text-gray-400">Oxygen Cylinder (O2)</p>
             <p className="text-2xl font-black text-[#1e2e6e]">
-              94% <span className="text-xs text-gray-400 font-normal">Full</span>
+              98% <span className="text-xs text-gray-400 font-normal">Full</span>
             </p>
             <span className="text-[10px] text-blue-600 font-bold">Defibrillator Ready</span>
           </div>
 
           <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-1">
-            <p className="text-xs font-semibold text-gray-400">Today's Completed Trips</p>
+            <p className="text-xs font-semibold text-gray-400">Duty Status</p>
             <p className="text-2xl font-black text-gray-900">
-              4 <span className="text-xs text-gray-400 font-normal">Runs</span>
+              {isOnDuty ? 'ACTIVE' : 'OFFLINE'}
             </p>
-            <span className="text-[10px] text-emerald-600 font-bold">100% On-Time</span>
+            <span className="text-[10px] text-emerald-600 font-bold">GPS Streaming</span>
           </div>
 
           <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-1">
             <p className="text-xs font-semibold text-gray-400">Driver Rating</p>
             <p className="text-2xl font-black text-amber-500">5.0 ★</p>
-            <span className="text-[10px] text-gray-400">42 Verified Reviews</span>
+            <span className="text-[10px] text-gray-400">Verified ALS Driver</span>
           </div>
         </div>
 
@@ -139,11 +167,13 @@ export const DriverDashboard: React.FC = () => {
         <div className="bg-white rounded-3xl p-6 sm:p-8 border border-gray-100 shadow-sm space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-4">
             <div>
-              <span className="text-[10px] bg-red-50 text-red-700 font-bold px-2.5 py-0.5 rounded-full border border-red-200 uppercase tracking-wider">
-                Priority Emergency Alert
+              <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border uppercase tracking-wider ${
+                activeBooking ? 'bg-red-50 text-red-700 border-red-200' : 'bg-slate-100 text-slate-600 border-slate-200'
+              }`}>
+                {activeBooking ? 'Priority Emergency Alert' : 'Standby Mode'}
               </span>
               <h2 className="text-base sm:text-lg font-bold text-gray-900 mt-1">
-                Dispatch Order #SOS-108992
+                {activeBooking ? `Dispatch Order #${activeBooking.bookingId || activeBooking._id?.slice(-6) || 'SOS'}` : 'Emergency Dispatch Standby'}
               </h2>
             </div>
 
@@ -152,25 +182,32 @@ export const DriverDashboard: React.FC = () => {
             </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-1.5">
-              <p className="font-bold text-gray-700 uppercase tracking-wider text-[10px]">Patient Information</p>
-              <p className="text-sm font-bold text-gray-900">Edward Vincent (45 yrs)</p>
-              <p className="text-gray-500">Phone: <strong className="text-gray-800">+91 98765 43210</strong></p>
-              <p className="text-red-700 font-semibold bg-red-50/70 p-2 rounded-xl border border-red-100">
-                Condition: Acute Chest Pain & Oxygen Support Needed
-              </p>
-            </div>
+          {activeBooking ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-1.5">
+                <p className="font-bold text-gray-700 uppercase tracking-wider text-[10px]">Patient Information</p>
+                <p className="text-sm font-bold text-gray-900">{activeBooking.patientName || 'Emergency Patient'}</p>
+                <p className="text-gray-500">Phone: <strong className="text-gray-800">{activeBooking.patientPhone || '+91 98765 43210'}</strong></p>
+                <p className="text-red-700 font-semibold bg-red-50/70 p-2 rounded-xl border border-red-100">
+                  Condition: {activeBooking.patientCondition || 'Emergency Medical Transport'}
+                </p>
+              </div>
 
-            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-1.5">
-              <p className="font-bold text-gray-700 uppercase tracking-wider text-[10px]">Route Details</p>
-              <p className="text-gray-700"><strong>Pickup:</strong> Bandra West Junction (1.2 km away)</p>
-              <p className="text-gray-700"><strong>Destination:</strong> Lilavati Hospital Trauma Center</p>
-              <p className="text-emerald-700 font-semibold bg-emerald-50/70 p-2 rounded-xl border border-emerald-100">
-                Resuscitation Bay #04 Confirmed Ready
-              </p>
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-1.5">
+                <p className="font-bold text-gray-700 uppercase tracking-wider text-[10px]">Route Details</p>
+                <p className="text-gray-700"><strong>Pickup:</strong> {activeBooking.pickupAddress || 'Live GPS Coordinates'}</p>
+                <p className="text-gray-700"><strong>Destination:</strong> {activeBooking.destinationHospital || 'Lilavati Hospital Trauma Center'}</p>
+                <p className="text-emerald-700 font-semibold bg-emerald-50/70 p-2 rounded-xl border border-emerald-100">
+                  Resuscitation Bay Confirmed Ready
+                </p>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="py-6 text-center text-gray-400 bg-slate-50/50 rounded-2xl border border-dashed border-gray-200 space-y-1 text-xs">
+              <p className="font-semibold text-gray-500">No active emergency SOS dispatch right now.</p>
+              <p className="text-gray-400">Unit MH-01-EQ-1108 is on active GPS standby for incoming emergencies.</p>
+            </div>
+          )}
 
           {/* Dynamic Google Maps Dispatch Radar */}
           <div className="space-y-2">
@@ -194,29 +231,31 @@ export const DriverDashboard: React.FC = () => {
 
           {/* Sequential Action Buttons + Live GPS Broadcaster */}
           <div className="pt-2 space-y-3">
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                onClick={() => handleStatusTransition('EN_ROUTE_PICKUP')}
-                disabled={tripStatus !== 'ASSIGNED'}
-                className="flex-1 py-3 bg-[#1e2e6e] hover:bg-[#162354] disabled:opacity-30 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
-              >
-                1. En Route to Pickup Point →
-              </button>
-              <button
-                onClick={() => handleStatusTransition('PATIENT_ONBOARD')}
-                disabled={tripStatus !== 'EN_ROUTE_PICKUP'}
-                className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-30 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
-              >
-                2. Patient Onboard (To Hospital) →
-              </button>
-              <button
-                onClick={() => handleStatusTransition('COMPLETED')}
-                disabled={tripStatus !== 'PATIENT_ONBOARD'}
-                className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-30 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
-              >
-                3. Complete Ride at Hospital ✓
-              </button>
-            </div>
+            {activeBooking && (
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  onClick={() => handleStatusTransition('EN_ROUTE_PICKUP')}
+                  disabled={tripStatus !== 'ASSIGNED'}
+                  className="flex-1 py-3 bg-[#1e2e6e] hover:bg-[#162354] disabled:opacity-30 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+                >
+                  1. En Route to Pickup Point →
+                </button>
+                <button
+                  onClick={() => handleStatusTransition('PATIENT_ONBOARD')}
+                  disabled={tripStatus !== 'EN_ROUTE_PICKUP'}
+                  className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-30 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+                >
+                  2. Patient Onboard (To Hospital) →
+                </button>
+                <button
+                  onClick={() => handleStatusTransition('COMPLETED')}
+                  disabled={tripStatus !== 'PATIENT_ONBOARD'}
+                  className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-30 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+                >
+                  3. Complete Ride at Hospital ✓
+                </button>
+              </div>
+            )}
 
             {/* Live GPS Broadcast Trigger */}
             <div className="flex items-center justify-between p-3 rounded-2xl bg-blue-50 border border-blue-200 text-xs">

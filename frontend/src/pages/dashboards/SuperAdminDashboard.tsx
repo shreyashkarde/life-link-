@@ -1,11 +1,35 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import { useApp } from '../../context/AppContext';
 import DashboardNavbar from '../../components/DashboardNavbar';
 
 export const SuperAdminDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { showToast } = useApp();
+  const { aToken, token, backendUrl } = useApp();
+  const [dashData, setDashData] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+
+  const fetchAdminDash = async () => {
+    try {
+      setLoading(true);
+      const authToken = aToken || token || sessionStorage.getItem('aToken') || localStorage.getItem('token') || '';
+      const { data } = await axios.get(`${backendUrl}/api/admin/dashboard`, {
+        headers: { atoken: authToken, token: authToken },
+      });
+      if (data.success && data.dashData) {
+        setDashData(data.dashData);
+      }
+    } catch (e: any) {
+      console.error('SuperAdmin Dashboard Fetch Error:', e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAdminDash();
+  }, [aToken, token, backendUrl]);
 
   return (
     <div className="min-h-screen bg-[#f8f9fd] text-slate-800 pb-16 font-sans">
@@ -36,13 +60,13 @@ export const SuperAdminDashboard: React.FC = () => {
           <div className="flex flex-wrap gap-2.5">
             <button
               onClick={() => navigate('/admin/add-doctor')}
-              className="px-5 py-2.5 bg-[#1e2e6e] hover:bg-[#162354] text-white text-xs font-bold rounded-xl shadow-sm transition-all"
+              className="px-5 py-2.5 bg-[#1e2e6e] hover:bg-[#162354] text-white text-xs font-bold rounded-xl shadow-sm transition-all cursor-pointer"
             >
               + Onboard Doctor
             </button>
             <button
               onClick={() => navigate('/admin/all-appointments')}
-              className="px-5 py-2.5 bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 text-xs font-bold rounded-xl transition-all"
+              className="px-5 py-2.5 bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 text-xs font-bold rounded-xl transition-all cursor-pointer"
             >
               All Appointments
             </button>
@@ -53,30 +77,30 @@ export const SuperAdminDashboard: React.FC = () => {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-1">
             <p className="text-xs font-semibold text-gray-400">Total Patients</p>
-            <p className="text-2xl font-black text-gray-900">1,248</p>
-            <span className="text-[10px] text-emerald-600 font-bold">+18 Joined Today</span>
+            <p className="text-2xl font-black text-gray-900">{dashData?.patients ?? 0}</p>
+            <span className="text-[10px] text-emerald-600 font-bold">Registered Users</span>
           </div>
 
           <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-1">
             <p className="text-xs font-semibold text-gray-400">Active Doctors</p>
             <p className="text-2xl font-black text-[#1e2e6e]">
-              15 <span className="text-xs text-gray-400 font-normal">/ 15</span>
+              {dashData?.doctors ?? 0} <span className="text-xs text-gray-400 font-normal">Verified</span>
             </p>
-            <span className="text-[10px] text-blue-600 font-bold">100% Online & Verified</span>
+            <span className="text-[10px] text-blue-600 font-bold">In-System Roster</span>
           </div>
 
           <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-1">
-            <p className="text-xs font-semibold text-gray-400">Ambulance Fleet</p>
+            <p className="text-xs font-semibold text-gray-400">Total Appointments</p>
             <p className="text-2xl font-black text-red-600">
-              5 <span className="text-xs text-gray-400 font-normal">/ 5 Units</span>
+              {dashData?.appointments ?? 0}
             </p>
-            <span className="text-[10px] text-emerald-600 font-bold">GPS Streaming Active</span>
+            <span className="text-[10px] text-emerald-600 font-bold">Consultation Orders</span>
           </div>
 
           <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-1">
-            <p className="text-xs font-semibold text-gray-400">Platform Volume</p>
-            <p className="text-2xl font-black text-emerald-700">$48,920</p>
-            <span className="text-[10px] text-emerald-600 font-bold">Consults & Dispatches</span>
+            <p className="text-xs font-semibold text-gray-400">Platform Status</p>
+            <p className="text-2xl font-black text-emerald-700">100%</p>
+            <span className="text-[10px] text-emerald-600 font-bold">Services Online</span>
           </div>
         </div>
 
@@ -86,7 +110,7 @@ export const SuperAdminDashboard: React.FC = () => {
           <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-4">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-                <span className="text-red-500">📡</span> Live Telemetry & Code-Red Feed
+                <span className="text-red-500">📡</span> Live Telemetry & Bookings Feed
               </h2>
               <span className="text-[10px] bg-red-50 text-red-600 font-bold px-2.5 py-0.5 rounded-full border border-red-200">
                 REALTIME STREAM
@@ -94,32 +118,23 @@ export const SuperAdminDashboard: React.FC = () => {
             </div>
 
             <div className="space-y-3 font-sans text-xs">
-              <div className="p-3.5 bg-red-50/50 rounded-2xl border border-red-100 space-y-1">
-                <div className="flex items-center justify-between text-red-700 font-bold">
-                  <span>[CODE-RED SOS] Booking #sos_108992</span>
-                  <span className="text-[11px] font-mono text-red-500">Just Now</span>
+              {dashData?.latestAppointments && dashData.latestAppointments.length > 0 ? (
+                dashData.latestAppointments.map((item: any, idx: number) => (
+                  <div key={item._id || idx} className="p-3.5 bg-slate-50/80 rounded-2xl border border-slate-100 space-y-1">
+                    <div className="flex items-center justify-between text-indigo-900 font-bold">
+                      <span>[CONSULTATION] {item.docData?.name || 'Practitioner'}</span>
+                      <span className="text-[11px] font-mono text-indigo-600">${item.amount || 50}</span>
+                    </div>
+                    <p className="text-gray-700 font-medium">Patient: {item.userData?.name || 'Walk-in'} • Slot: {item.slotDate?.replace(/_/g, ' / ')} at {item.slotTime}</p>
+                    <p className="text-gray-500 text-[11px]">Status: {item.isCompleted ? 'Completed' : item.cancelled ? 'Cancelled' : 'Scheduled'}</p>
+                  </div>
+                ))
+              ) : (
+                <div className="py-10 text-center text-gray-400 bg-slate-50/50 rounded-2xl border border-dashed border-gray-200 space-y-1">
+                  <p className="text-xs font-semibold text-gray-500">No live booking events logged yet.</p>
+                  <p className="text-[11px] text-gray-400">Activity will display here in real time as consultations occur.</p>
                 </div>
-                <p className="text-gray-700 font-medium">Assigned: Unit MH-01-EQ-1108 • Driver Rajesh Kumar</p>
-                <p className="text-gray-500 text-[11px]">Lat: 19.0760, Lng: 72.8777 • ETA Lilavati Trauma Bay: 3 mins</p>
-              </div>
-
-              <div className="p-3.5 bg-emerald-50/50 rounded-2xl border border-emerald-100 space-y-1">
-                <div className="flex items-center justify-between text-emerald-800 font-bold">
-                  <span>[CONSULTATION] Dr. Richard James</span>
-                  <span className="text-[11px] font-mono text-emerald-600">5 mins ago</span>
-                </div>
-                <p className="text-gray-700 font-medium">Appointment #apt_101 completed with Edward Vincent ($50.00)</p>
-                <p className="text-gray-500 text-[11px]">Status: Completed • High-Performance Synchronized</p>
-              </div>
-
-              <div className="p-3.5 bg-blue-50/50 rounded-2xl border border-blue-100 space-y-1">
-                <div className="flex items-center justify-between text-blue-800 font-bold">
-                  <span>[DISPATCH COMPLETE] Unit MH-02-AB-2024</span>
-                  <span className="text-[11px] font-mono text-blue-600">12 mins ago</span>
-                </div>
-                <p className="text-gray-700 font-medium">Patient safely admitted to Hinduja Hospital Emergency Ward</p>
-                <p className="text-gray-500 text-[11px]">Duration: 14 mins • Distance: 6.2 km</p>
-              </div>
+              )}
             </div>
           </div>
 

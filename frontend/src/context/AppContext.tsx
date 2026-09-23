@@ -30,7 +30,7 @@ export const AppContextProvider: React.FC<{ children: ReactNode }> = ({ children
   const currencySymbol = '$';
   const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
-  const [doctors, setDoctors] = useState<DoctorItem[]>(fallbackDoctors);
+  const [doctors, setDoctors] = useState<DoctorItem[]>([]);
   const [token, setTokenState] = useState<string>(sessionStorage.getItem('token') || '');
   const [userData, setUserData] = useState<any>(null);
 
@@ -115,15 +115,17 @@ export const AppContextProvider: React.FC<{ children: ReactNode }> = ({ children
   };
 
 
-  // Fetch doctors list from API
+  // Fetch doctors list from API (strictly synced with database)
   const getDoctorsData = async () => {
     try {
       const { data } = await axios.get(`${backendUrl}/api/doctor/list`);
-      if (data.success && data.doctors && data.doctors.length > 0) {
+      if (data.success && Array.isArray(data.doctors)) {
         setDoctors(data.doctors);
+      } else {
+        setDoctors([]);
       }
     } catch {
-      // Fallback to local catalog silently
+      setDoctors([]);
     }
   };
 

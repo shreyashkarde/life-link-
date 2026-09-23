@@ -1,10 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import DashboardNavbar from '../../components/DashboardNavbar';
 
 export const HospitalAdminDashboard: React.FC = () => {
-  const { showToast } = useApp();
+  const { showToast, backendUrl, token } = useApp();
   const [icuBeds, setIcuBeds] = useState(14);
+  const [inboundRides, setInboundRides] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchInbound = async () => {
+      try {
+        const authToken = token || localStorage.getItem('token') || '';
+        const res = await fetch(`${backendUrl || 'http://localhost:5000'}/api/hospital/ambulance-bookings`, {
+          headers: { Authorization: `Bearer ${authToken}` },
+        });
+        const data = await res.json();
+        if (data.success && data.bookings) {
+          setInboundRides(data.bookings);
+        }
+      } catch (e) {}
+    };
+    fetchInbound();
+  }, [backendUrl, token]);
 
   return (
     <div className="min-h-screen bg-[#f8f9fd] text-slate-800 pb-16 font-sans">
@@ -71,8 +88,10 @@ export const HospitalAdminDashboard: React.FC = () => {
 
           <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-1">
             <p className="text-xs font-semibold text-gray-400">Inbound Ambulances</p>
-            <p className="text-2xl font-black text-red-600">2 Units</p>
-            <span className="text-[10px] text-red-600 font-bold">Code-Red Inbound</span>
+            <p className="text-2xl font-black text-red-600">{inboundRides.length} Units</p>
+            <span className="text-[10px] text-red-600 font-bold">
+              {inboundRides.length > 0 ? 'Code-Red Inbound' : 'Standby Mode'}
+            </span>
           </div>
         </div>
 
@@ -89,23 +108,25 @@ export const HospitalAdminDashboard: React.FC = () => {
             </div>
 
             <div className="space-y-3">
-              <div className="p-3.5 bg-red-50/50 border border-red-200 rounded-2xl space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-red-800">Unit MH-01-EQ-1108 (ALS Unit 108)</span>
-                  <span className="text-[10px] bg-red-600 text-white font-bold px-2 py-0.5 rounded-full">ETA: 3 MINS</span>
+              {inboundRides && inboundRides.length > 0 ? (
+                inboundRides.map((ride: any, idx: number) => (
+                  <div key={ride._id || idx} className="p-3.5 bg-red-50/50 border border-red-200 rounded-2xl space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-red-800">Unit {ride.vehicleNumber || 'MH-01-EQ-1108'}</span>
+                      <span className="text-[10px] bg-red-600 text-white font-bold px-2 py-0.5 rounded-full">
+                        {ride.status || 'INBOUND'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-700">Patient: {ride.patientName} • {ride.patientCondition || 'Emergency Intake'}</p>
+                    <p className="text-[11px] text-gray-500">Paramedic {ride.driverName || 'Rajesh Kumar'} • {ride.emergencySeverity}</p>
+                  </div>
+                ))
+              ) : (
+                <div className="py-8 text-center text-gray-400 bg-slate-50/50 rounded-2xl border border-dashed border-gray-200 space-y-1">
+                  <p className="text-xs font-semibold text-gray-500">No active emergency ambulance inbound.</p>
+                  <p className="text-[11px] text-gray-400">Trauma emergency desk on 24/7 standby.</p>
                 </div>
-                <p className="text-xs text-gray-700">Patient: Edward Vincent (45 yrs) • Acute Cardiac Distress</p>
-                <p className="text-[11px] text-gray-500">Paramedic Rajesh Kumar onboard with oxygen support</p>
-              </div>
-
-              <div className="p-3.5 bg-amber-50/50 border border-amber-200 rounded-2xl space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-amber-800">Unit MH-02-BD-1102 (Unit 102)</span>
-                  <span className="text-[10px] bg-amber-600 text-white font-bold px-2 py-0.5 rounded-full">ETA: 8 MINS</span>
-                </div>
-                <p className="text-xs text-gray-700">Patient: Priya Sharma (32 yrs) • Multiple Fracture Trauma</p>
-                <p className="text-[11px] text-gray-500">Paramedic Sunil Sharma</p>
-              </div>
+              )}
             </div>
           </div>
 

@@ -1,64 +1,84 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import { useApp } from '../../context/AppContext';
 import DashboardNavbar from '../../components/DashboardNavbar';
 
 export const DoctorDashboard: React.FC = () => {
-  const { showToast } = useApp();
+  const { showToast, backendUrl, dToken, doctorData } = useApp();
   const [isAvailable, setIsAvailable] = useState(true);
-  const [consultations, setConsultations] = useState([
-    {
-      id: 'apt_101',
-      patientName: 'Edward Vincent',
-      patientPhone: '+1 123 456 7890',
-      age: 28,
-      slotTime: '10:30 am',
-      fees: 50,
-      status: 'SCHEDULED',
-      condition: 'Routine health checkup & blood panel review',
-    },
-    {
-      id: 'apt_102',
-      patientName: 'Sarah Jenkins',
-      patientPhone: '+1 234 567 8901',
-      age: 34,
-      slotTime: '11:15 am',
-      fees: 50,
-      status: 'SCHEDULED',
-      condition: 'Seasonal flu and respiratory consultation',
-    },
-    {
-      id: 'apt_103',
-      patientName: 'Robert Vance',
-      patientPhone: '+1 345 678 9012',
-      age: 52,
-      slotTime: '02:00 pm',
-      fees: 50,
-      status: 'SCHEDULED',
-      condition: 'Blood pressure medication renewal',
-    },
-  ]);
+  const [dashData, setDashData] = useState<any>(null);
+  const [consultations, setConsultations] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const handleComplete = (id: string) => {
-    setConsultations((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, status: 'COMPLETED' } : c))
-    );
-    showToast('Consultation marked as Completed.', 'success');
+  const fetchDoctorDashboardData = async () => {
+    try {
+      setLoading(true);
+      const token = dToken || sessionStorage.getItem('dToken') || localStorage.getItem('token') || '';
+      const { data } = await axios.get(`${backendUrl}/api/doctor/dashboard`, {
+        headers: { dtoken: token, token },
+      });
+      if (data.success && data.dashData) {
+        setDashData(data.dashData);
+        if (Array.isArray(data.dashData.latestAppointments)) {
+          setConsultations(data.dashData.latestAppointments);
+        }
+      }
+    } catch (error: any) {
+      console.error('Doctor Dashboard Fetch Error:', error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleCancel = (id: string) => {
-    setConsultations((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, status: 'CANCELLED' } : c))
-    );
-    showToast('Consultation cancelled.', 'info');
+  useEffect(() => {
+    fetchDoctorDashboardData();
+  }, [dToken, backendUrl]);
+
+  const handleComplete = async (id: string) => {
+    try {
+      const token = dToken || sessionStorage.getItem('dToken') || localStorage.getItem('token') || '';
+      const { data } = await axios.post(
+        `${backendUrl}/api/doctor/complete-appointment`,
+        { appointmentId: id },
+        { headers: { dtoken: token, token } }
+      );
+      if (data.success) {
+        showToast('Consultation marked as Completed.', 'success');
+        fetchDoctorDashboardData();
+      } else {
+        showToast(data.message || 'Action failed', 'error');
+      }
+    } catch (e: any) {
+      showToast(e.response?.data?.message || 'Error completing consultation', 'error');
+    }
+  };
+
+  const handleCancel = async (id: string) => {
+    try {
+      const token = dToken || sessionStorage.getItem('dToken') || localStorage.getItem('token') || '';
+      const { data } = await axios.post(
+        `${backendUrl}/api/doctor/cancel-appointment`,
+        { appointmentId: id },
+        { headers: { dtoken: token, token } }
+      );
+      if (data.success) {
+        showToast('Consultation cancelled.', 'info');
+        fetchDoctorDashboardData();
+      } else {
+        showToast(data.message || 'Action failed', 'error');
+      }
+    } catch (e: any) {
+      showToast(e.response?.data?.message || 'Error cancelling consultation', 'error');
+    }
   };
 
   return (
     <div className="min-h-screen bg-[#f8f9fd] text-slate-800 pb-16 font-sans">
       <DashboardNavbar
         currentRole="DOCTOR"
-        userName="Dr. Richard James"
-        userSubtitle="MBBS, MD • General Physician"
-        avatarUrl="https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=300"
+        userName={doctorData?.name || 'Dr. Richard James'}
+        userSubtitle={`${doctorData?.speciality || 'General Physician'} • Prescripto Certified`}
+        avatarUrl={doctorData?.image || 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=300'}
       />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 space-y-6">
@@ -66,19 +86,19 @@ export const DoctorDashboard: React.FC = () => {
         <div className="bg-white rounded-3xl p-6 sm:p-8 border border-gray-100 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-6">
           <div className="flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left">
             <img
-              src="https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=300"
-              alt="Dr. Richard James"
+              src={doctorData?.image || 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=300'}
+              alt={doctorData?.name || 'Doctor'}
               className="w-16 h-16 rounded-2xl object-cover border-2 border-indigo-200"
             />
             <div>
               <div className="flex items-center justify-center sm:justify-start gap-2">
-                <h1 className="text-xl sm:text-2xl font-extrabold text-gray-900">Dr. Richard James</h1>
+                <h1 className="text-xl sm:text-2xl font-extrabold text-gray-900">{doctorData?.name || 'Dr. Richard James'}</h1>
                 <span className="text-blue-600 text-sm font-bold">✓</span>
               </div>
               <p className="text-xs sm:text-sm text-gray-500 font-medium">
-                General Physician • 4 Years Experience • Richmond Circle Clinic
+                {doctorData?.speciality || 'General Physician'} • Verified Practitioner
               </p>
-              <p className="text-xs text-gray-400 mt-0.5">Consultation Fee: <strong className="text-gray-800">$50 / session</strong></p>
+              <p className="text-xs text-gray-400 mt-0.5">Consultation Fee: <strong className="text-gray-800">${doctorData?.fees || 50} / session</strong></p>
             </div>
           </div>
 
@@ -104,26 +124,26 @@ export const DoctorDashboard: React.FC = () => {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-1">
             <p className="text-xs font-semibold text-gray-400">Total Consultations</p>
-            <p className="text-2xl font-black text-gray-900">38</p>
-            <span className="text-[10px] text-emerald-600 font-bold">+4 Scheduled Today</span>
+            <p className="text-2xl font-black text-gray-900">{dashData?.appointments ?? consultations.length}</p>
+            <span className="text-[10px] text-emerald-600 font-bold">Live Synced</span>
           </div>
 
           <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-1">
             <p className="text-xs font-semibold text-gray-400">Total Earnings</p>
-            <p className="text-2xl font-black text-[#1e2e6e]">$1,450</p>
-            <span className="text-[10px] text-emerald-600 font-bold">100% Disbursed</span>
+            <p className="text-2xl font-black text-[#1e2e6e]">${dashData?.earnings ?? 0}</p>
+            <span className="text-[10px] text-emerald-600 font-bold">Realtime Balance</span>
           </div>
 
           <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-1">
             <p className="text-xs font-semibold text-gray-400">Active Patients</p>
-            <p className="text-2xl font-black text-gray-900">32</p>
-            <span className="text-[10px] text-blue-600 font-bold">Regular Consults</span>
+            <p className="text-2xl font-black text-gray-900">{dashData?.patients ?? 0}</p>
+            <span className="text-[10px] text-blue-600 font-bold">Unique Patients</span>
           </div>
 
           <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-1">
-            <p className="text-xs font-semibold text-gray-400">Patient Rating</p>
-            <p className="text-2xl font-black text-amber-500">4.9 ★</p>
-            <span className="text-[10px] text-gray-400">42 Verified Reviews</span>
+            <p className="text-xs font-semibold text-gray-400">Practitioner Rating</p>
+            <p className="text-2xl font-black text-amber-500">5.0 ★</p>
+            <span className="text-[10px] text-gray-400">Verified System Profile</span>
           </div>
         </div>
 
@@ -134,55 +154,61 @@ export const DoctorDashboard: React.FC = () => {
               <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
                 <span>📋</span> Patient Consultations Queue
               </h2>
-              <p className="text-xs text-gray-500">Today's clinical schedule and patient intakes</p>
+              <p className="text-xs text-gray-500">Clinical schedule and patient bookings from database</p>
             </div>
             <span className="text-xs text-gray-400">{consultations.length} Active Patients</span>
           </div>
 
           <div className="divide-y divide-gray-100">
-            {consultations.map((item) => (
-              <div key={item.id} className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-mono font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-lg border border-blue-100">
-                      {item.slotTime}
-                    </span>
-                    <h3 className="text-sm font-bold text-gray-900">{item.patientName}</h3>
-                    <span className="text-xs text-gray-400">({item.age} yrs)</span>
-                    <span
-                      className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
-                        item.status === 'COMPLETED'
-                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                          : item.status === 'CANCELLED'
-                          ? 'bg-red-50 text-red-800 border border-red-200'
-                          : 'bg-blue-50 text-blue-800 border border-blue-200'
-                      }`}
-                    >
-                      {item.status}
-                    </span>
+            {consultations && consultations.length > 0 ? (
+              consultations.map((item: any) => (
+                <div key={item._id || item.id} className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-lg border border-blue-100">
+                        {item.slotTime}
+                      </span>
+                      <h3 className="text-sm font-bold text-gray-900">{item.userData?.name || item.patientName || 'Patient'}</h3>
+                      <span
+                        className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
+                          item.isCompleted || item.status === 'COMPLETED'
+                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                            : item.cancelled || item.status === 'CANCELLED'
+                            ? 'bg-red-50 text-red-800 border border-red-200'
+                            : 'bg-blue-50 text-blue-800 border border-blue-200'
+                        }`}
+                      >
+                        {item.isCompleted ? 'COMPLETED' : item.cancelled ? 'CANCELLED' : 'SCHEDULED'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-600">Date: {item.slotDate?.replace(/_/g, ' / ')}</p>
+                    <p className="text-[11px] text-gray-400">Phone: {item.userData?.phone || 'N/A'} • Fee: ${item.amount || item.fees || 50}</p>
                   </div>
-                  <p className="text-xs text-gray-600">{item.condition}</p>
-                  <p className="text-[11px] text-gray-400">Phone: {item.patientPhone} • Fee: ${item.fees}</p>
-                </div>
 
-                {item.status === 'SCHEDULED' && (
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleComplete(item.id)}
-                      className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
-                    >
-                      ✓ Complete
-                    </button>
-                    <button
-                      onClick={() => handleCancel(item.id)}
-                      className="px-3 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-600 rounded-xl text-xs font-semibold transition-all"
-                    >
-                      ✕ Cancel
-                    </button>
-                  </div>
-                )}
+                  {!item.isCompleted && !item.cancelled && item.status !== 'COMPLETED' && item.status !== 'CANCELLED' && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleComplete(item._id || item.id)}
+                        className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+                      >
+                        ✓ Complete
+                      </button>
+                      <button
+                        onClick={() => handleCancel(item._id || item.id)}
+                        className="px-3 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-600 rounded-xl text-xs font-semibold transition-all cursor-pointer"
+                      >
+                        ✕ Cancel
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))
+            ) : (
+              <div className="py-12 text-center text-gray-400 bg-slate-50/50 rounded-2xl border border-dashed border-gray-200 space-y-1">
+                <p className="text-xs font-semibold text-gray-500">No scheduled consultations right now.</p>
+                <p className="text-[11px] text-gray-400">New patient bookings will appear here automatically.</p>
               </div>
-            ))}
+            )}
           </div>
         </div>
       </main>
