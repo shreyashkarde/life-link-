@@ -15,6 +15,12 @@ import {
   getHospitalAmbulanceBookings,
   getHospitalDashboard,
 } from '../controllers/hospitalController';
+import {
+  uploadDoctorsExcel,
+  uploadDriversExcel,
+  uploadHospitalsExcel,
+} from '../controllers/bulkUploadController';
+import { excelUpload, handleUploadError } from '../middleware/uploadMiddleware';
 import { authenticateJWT } from '../middleware/auth';
 
 const router = express.Router();
@@ -27,6 +33,20 @@ router.put('/hospitals/:id', updateHospital);
 router.delete('/hospitals/:id', deleteHospital);
 router.get('/superadmin/overview', getSuperAdminOverview);
 
+// 📁 SuperAdmin Bulk Upload Hospitals
+router.post(
+  '/superadmin/upload/hospitals',
+  excelUpload.single('file'),
+  handleUploadError,
+  uploadHospitalsExcel
+);
+router.post(
+  '/hospitals/upload',
+  excelUpload.single('file'),
+  handleUploadError,
+  uploadHospitalsExcel
+);
+
 // 🏥 Hospital Admin Routes
 router.get('/hospital/profile', authenticateJWT, getHospitalProfile);
 router.get('/hospital/doctors', authenticateJWT, getHospitalDoctors);
@@ -36,6 +56,36 @@ router.post('/hospital/drivers', authenticateJWT, addHospitalDriver);
 router.get('/hospital/appointments', authenticateJWT, getHospitalAppointments);
 router.get('/hospital/ambulance-bookings', authenticateJWT, getHospitalAmbulanceBookings);
 router.get('/hospital/dashboard', authenticateJWT, getHospitalDashboard);
+
+// 📁 Hospital Admin Bulk Upload Routes
+router.post(
+  '/hospital/upload/doctors',
+  authenticateJWT,
+  excelUpload.single('file'),
+  handleUploadError,
+  uploadDoctorsExcel
+);
+router.post(
+  '/hospital/upload/drivers',
+  authenticateJWT,
+  excelUpload.single('file'),
+  handleUploadError,
+  uploadDriversExcel
+);
+router.post(
+  '/upload/doctors',
+  authenticateJWT,
+  excelUpload.single('file'),
+  handleUploadError,
+  uploadDoctorsExcel
+);
+router.post(
+  '/upload/drivers',
+  authenticateJWT,
+  excelUpload.single('file'),
+  handleUploadError,
+  uploadDriversExcel
+);
 
 // Support both path prefixes
 router.get('/profile', authenticateJWT, getHospitalProfile);
