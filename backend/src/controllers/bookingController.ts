@@ -271,7 +271,15 @@ export const acceptBooking = async (req: AuthRequest, res: Response) => {
 
         const io = getIO();
         if (io) {
-          io.to(`ride_${bookingId}`).emit('bookingAccepted', { bookingId, status: 'ACCEPTED' });
+          io.to(`ride_${bookingId}`).emit('rideAccepted', { bookingId, status: 'ACCEPTED', booking });
+          io.to(`ride_${bookingId}`).emit('bookingAccepted', { bookingId, status: 'ACCEPTED', booking });
+          io.to(`ride_${bookingId}`).emit('rideStatusUpdate', { bookingId, status: 'ACCEPTED', booking });
+          if (booking.hospitalId) {
+            io.to(`hospital_${booking.hospitalId}`).emit('rideAccepted', { bookingId, status: 'ACCEPTED', booking });
+          }
+          if (booking.patientId) {
+            io.to(`patient_${booking.patientId}`).emit('rideAccepted', { bookingId, status: 'ACCEPTED', booking });
+          }
         }
         return res.json({ success: true, message: 'Booking accepted', booking });
       }
@@ -285,7 +293,15 @@ export const acceptBooking = async (req: AuthRequest, res: Response) => {
 
       const io = getIO();
       if (io) {
-        io.to(`ride_${bookingId}`).emit('bookingAccepted', { bookingId, status: 'ACCEPTED' });
+        io.to(`ride_${bookingId}`).emit('rideAccepted', { bookingId, status: 'ACCEPTED', booking });
+        io.to(`ride_${bookingId}`).emit('bookingAccepted', { bookingId, status: 'ACCEPTED', booking });
+        io.to(`ride_${bookingId}`).emit('rideStatusUpdate', { bookingId, status: 'ACCEPTED', booking });
+        if (booking.hospitalId) {
+          io.to(`hospital_${booking.hospitalId}`).emit('rideAccepted', { bookingId, status: 'ACCEPTED', booking });
+        }
+        if (booking.patientId) {
+          io.to(`patient_${booking.patientId}`).emit('rideAccepted', { bookingId, status: 'ACCEPTED', booking });
+        }
       }
       return res.json({ success: true, message: 'Booking accepted', booking });
     }
@@ -316,6 +332,11 @@ export const rejectBooking = async (req: AuthRequest, res: Response) => {
             status: 'REJECTED',
             reason: reason || 'Driver unavailable',
           });
+          io.to(`ride_${bookingId}`).emit('rideStatusUpdate', {
+            bookingId,
+            status: 'REJECTED',
+            reason: reason || 'Driver unavailable',
+          });
         }
         return res.json({ success: true, message: 'Booking rejected', booking });
       }
@@ -330,6 +351,11 @@ export const rejectBooking = async (req: AuthRequest, res: Response) => {
       const io = getIO();
       if (io) {
         io.to(`ride_${bookingId}`).emit('bookingRejected', {
+          bookingId,
+          status: 'REJECTED',
+          reason: reason || 'Driver unavailable',
+        });
+        io.to(`ride_${bookingId}`).emit('rideStatusUpdate', {
           bookingId,
           status: 'REJECTED',
           reason: reason || 'Driver unavailable',
@@ -360,7 +386,14 @@ export const updateBookingStatus = async (req: AuthRequest, res: Response) => {
 
         const io = getIO();
         if (io) {
-          io.to(`ride_${bookingId}`).emit('rideCompleted', { bookingId, status });
+          io.to(`ride_${bookingId}`).emit('rideStatusUpdate', { bookingId, status, booking });
+          io.to(`ride_${bookingId}`).emit('rideCompleted', { bookingId, status, booking });
+          if (booking.hospitalId) {
+            io.to(`hospital_${booking.hospitalId}`).emit('rideStatusUpdate', { bookingId, status, booking });
+          }
+          if (booking.patientId) {
+            io.to(`patient_${booking.patientId}`).emit('rideStatusUpdate', { bookingId, status, booking });
+          }
         }
         return res.json({ success: true, message: `Status updated to ${status}`, booking });
       }
@@ -375,7 +408,14 @@ export const updateBookingStatus = async (req: AuthRequest, res: Response) => {
 
       const io = getIO();
       if (io) {
-        io.to(`ride_${bookingId}`).emit('rideCompleted', { bookingId, status });
+        io.to(`ride_${bookingId}`).emit('rideStatusUpdate', { bookingId, status, booking });
+        io.to(`ride_${bookingId}`).emit('rideCompleted', { bookingId, status, booking });
+        if (booking.hospitalId) {
+          io.to(`hospital_${booking.hospitalId}`).emit('rideStatusUpdate', { bookingId, status, booking });
+        }
+        if (booking.patientId) {
+          io.to(`patient_${booking.patientId}`).emit('rideStatusUpdate', { bookingId, status, booking });
+        }
       }
       return res.json({ success: true, message: `Status updated to ${status}`, booking });
     }

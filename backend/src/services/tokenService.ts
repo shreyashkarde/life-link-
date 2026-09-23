@@ -6,6 +6,8 @@ export interface UserTokenPayload {
   id: string;
   role: 'admin' | 'doctor' | 'patient' | 'driver' | string;
   email: string;
+  hospitalId?: string;
+  hospitalName?: string;
 }
 
 export interface RefreshTokenPayload {
