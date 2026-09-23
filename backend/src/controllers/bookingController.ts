@@ -1,330 +1,306 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { AmbulanceBooking } from '../models/AmbulanceBooking';
 import { Ambulance } from '../models/Ambulance';
-import { AuthRequest } from '../middleware/auth';
-import { calculateDistanceKm } from './ambulanceController';
+import { prescriptoStore } from '../config/prescriptoStore';
 import { isMongoConnected } from '../config/db';
-import { memoryStore } from '../config/mockStore';
+import { AuthRequest } from '../middleware/auth';
+import { emitNewBookingToDriver, emitEmergencyAlert, getIO } from '../socket/socketHandler';
 
-// Create a new Ambulance Booking
-export const createBooking = async (req: AuthRequest, res: Response): Promise<void> => {
+// Haversine distance in km
+const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+};
+
+// POST /api/bookings/create
+export const createAmbulanceBooking = async (req: AuthRequest, res: Response) => {
   try {
-    const { pickupLocation, destinationLocation, ambulanceType = 'BASIC', patientCondition } = req.body;
-    const u = req.user;
+    const { pickupLocation, destinationHospital, patientName, patientPhone, patientCondition, ambulanceId } = req.body;
+    const patientId = req.user?.id || 'guest_patient';
 
-    if (!isMongoConnected()) {
-      const amb = memoryStore.ambulances.find((a) => a.isOnline && a.ambulanceType === ambulanceType) || memoryStore.ambulances[0];
-      const distanceKm = 3.5;
-      const fare = 499;
-
-      const newBooking: any = {
-        _id: `book_${Date.now()}`,
-        id: `book_${Date.now()}`,
-        patientId: u,
-        driverId: amb.driverId,
-        ambulanceId: amb,
-        pickupLocation,
-        destinationLocation: destinationLocation || {
-          lat: 19.0668,
-          lng: 72.8682,
-          address: 'LifeLink Central Trauma Hospital',
-        },
-        ambulanceType,
-        tripType: 'STANDARD',
-        status: 'PENDING',
-        fare,
-        distanceKm,
-        etaMinutes: 6,
-        patientCondition: patientCondition || 'Stable',
-        createdAt: new Date().toISOString(),
-      };
-
-      memoryStore.bookings.unshift(newBooking);
-      res.status(201).json({ success: true, message: 'Ambulance booking request created', booking: newBooking });
-      return;
+    if (!pickupLocation?.address || !pickupLocation?.lat || !pickupLocation?.lng) {
+      return res.status(400).json({ success: false, message: 'Valid pickup address and coordinates required' });
     }
 
-    let assignedDriverId = null;
-    let assignedAmbulanceId = null;
-
-    const nearestAmbulance = await Ambulance.findOne({
-      isOnline: true,
-      status: 'AVAILABLE',
-      ambulanceType: ambulanceType || 'BASIC',
-    });
-
-    if (nearestAmbulance) {
-      assignedDriverId = nearestAmbulance.driverId;
-      assignedAmbulanceId = nearestAmbulance._id;
-    }
-
-    const booking = await AmbulanceBooking.create({
-      patientId: req.user._id,
-      driverId: assignedDriverId || undefined,
-      ambulanceId: assignedAmbulanceId || undefined,
+    const bookingData = {
+      patientId,
+      patientName: patientName || 'Patient',
+      patientPhone: patientPhone || '+91 98200 00000',
+      ambulanceId: ambulanceId || 'amb_108',
+      driverName: 'Rajesh Kumar',
+      driverPhone: '+91 98201 10800',
+      vehicleNumber: 'MH-01-EQ-1108',
       pickupLocation,
-      destinationLocation: destinationLocation || {
-        lat: 19.076,
+      destinationHospital: destinationHospital || {
+        name: 'City Care Central Hospital',
+        address: 'Trauma Bay, Sector 4',
+        lat: 19.0760,
         lng: 72.8777,
-        address: 'Lifelink Central Trauma Hospital',
       },
-      ambulanceType,
-      tripType: 'STANDARD',
-      status: 'PENDING',
-      fare: 499,
-      distanceKm: 3.5,
-      etaMinutes: 7,
-      patientCondition: patientCondition || 'Stable',
-      isSOS: false,
-    });
+      bookingType: 'NORMAL' as const,
+      status: 'PENDING' as const,
+      emergencySeverity: 'MEDIUM' as const,
+      patientCondition: patientCondition || 'General Medical Transit',
+      fare: 120,
+      paymentStatus: 'PENDING' as const,
+      timeline: { bookedAt: new Date() },
+    };
 
-    const populatedBooking = await AmbulanceBooking.findById(booking._id)
-      .populate('patientId', 'name email phone avatar')
-      .populate('driverId', 'name email phone avatar')
-      .populate('ambulanceId');
+    if (isMongoConnected()) {
+      const booking = await AmbulanceBooking.create(bookingData);
+      emitNewBookingToDriver(bookingData.ambulanceId, booking);
+      return res.status(201).json({ success: true, booking });
+    }
 
-    res.status(201).json({
-      success: true,
-      message: 'Ambulance booking request created',
-      booking: populatedBooking,
-    });
+    const createdBooking = {
+      _id: 'book_' + Date.now(),
+      ...bookingData,
+      createdAt: new Date().toISOString(),
+    };
+    prescriptoStore.ambulanceBookings.unshift(createdBooking);
+
+    emitNewBookingToDriver(bookingData.ambulanceId, createdBooking);
+    return res.status(201).json({ success: true, booking: createdBooking });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to create booking' });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// 1-Click Instant Emergency SOS Booking
-export const createSOSBooking = async (req: AuthRequest, res: Response): Promise<void> => {
+// POST /api/bookings/emergency-sos
+export const triggerEmergencySOS = async (req: AuthRequest, res: Response) => {
   try {
-    const { pickupLocation, emergencyNotes } = req.body;
-    const lat = pickupLocation?.lat || 19.076;
-    const lng = pickupLocation?.lng || 72.8777;
-    const address = pickupLocation?.address || 'Current Patient GPS Location (Emergency)';
-    const u = req.user;
+    const { pickupLocation, patientName, patientPhone, condition = 'Critical Emergency SOS' } = req.body;
+    const patientId = req.user?.id || 'emergency_patient';
 
-    if (!isMongoConnected()) {
-      const amb = memoryStore.ambulances.find((a) => a.ambulanceType === 'ADVANCED_ALS') || memoryStore.ambulances[0];
-      const newBooking: any = {
-        _id: `sos_${Date.now()}`,
-        id: `sos_${Date.now()}`,
-        patientId: u,
-        driverId: amb.driverId,
-        ambulanceId: amb,
-        pickupLocation: { lat, lng, address },
-        destinationLocation: {
-          lat: 19.0668,
-          lng: 72.8682,
-          address: 'LifeLink Emergency Trauma & Resuscitation Center',
-        },
-        ambulanceType: amb.ambulanceType || 'ADVANCED_ALS',
-        tripType: 'SOS_EMERGENCY',
-        status: 'ACCEPTED',
-        fare: 599,
-        distanceKm: 2.1,
-        etaMinutes: 4,
-        isSOS: true,
-        emergencyNotes: emergencyNotes || 'CRITICAL EMERGENCY: 1-Click SOS Dispatch Triggered',
+    const pLat = pickupLocation?.lat || 19.0760;
+    const pLng = pickupLocation?.lng || 72.8777;
+    const pAddress = pickupLocation?.address || 'GPS Emergency Ping Location';
+
+    // Auto-detect nearest available driver
+    let fleet: any[] = [];
+    if (isMongoConnected()) {
+      fleet = await Ambulance.find({ isAvailable: true });
+    }
+    if (!fleet || fleet.length === 0) {
+      fleet = prescriptoStore.ambulances.filter((a) => a.isAvailable !== false);
+    }
+
+    let nearestAmbulance = fleet[0] || {
+      _id: 'amb_108',
+      driverName: 'Rajesh Kumar',
+      driverPhone: '+91 98201 10800',
+      vehicleNumber: 'MH-01-EQ-1108',
+    };
+
+    let minDistance = Infinity;
+    fleet.forEach((amb) => {
+      const dist = getDistance(pLat, pLng, amb.currentLocation?.lat || 19.076, amb.currentLocation?.lng || 72.877);
+      if (dist < minDistance) {
+        minDistance = dist;
+        nearestAmbulance = amb;
+      }
+    });
+
+    const bookingData = {
+      patientId,
+      patientName: patientName || 'Emergency Patient',
+      patientPhone: patientPhone || '+91 98200 99999',
+      ambulanceId: nearestAmbulance._id,
+      driverName: nearestAmbulance.driverName,
+      driverPhone: nearestAmbulance.driverPhone,
+      vehicleNumber: nearestAmbulance.vehicleNumber,
+      pickupLocation: { address: pAddress, lat: pLat, lng: pLng },
+      destinationHospital: {
+        name: nearestAmbulance.assignedHospital || 'City Care Central Hospital',
+        address: 'Trauma Resuscitation Center',
+        lat: 19.0760,
+        lng: 72.8777,
+      },
+      bookingType: 'EMERGENCY_SOS' as const,
+      status: 'ACCEPTED' as const, // Auto-accept / priority dispatch
+      emergencySeverity: 'CRITICAL_CODE_RED' as const,
+      patientCondition: condition,
+      fare: 150,
+      paymentStatus: 'PENDING' as const,
+      timeline: {
+        bookedAt: new Date(),
+        acceptedAt: new Date(),
+      },
+    };
+
+    let savedBooking: any;
+    if (isMongoConnected()) {
+      savedBooking = await AmbulanceBooking.create(bookingData);
+    } else {
+      savedBooking = {
+        _id: 'sos_' + Date.now(),
+        ...bookingData,
         createdAt: new Date().toISOString(),
       };
-
-      memoryStore.bookings.unshift(newBooking);
-      res.status(201).json({
-        success: true,
-        message: '🚨 Emergency SOS Ambulance Dispatched Successfully!',
-        booking: newBooking,
-      });
-      return;
+      prescriptoStore.ambulanceBookings.unshift(savedBooking);
     }
 
-    let selectedAmbulance = await Ambulance.findOne({
-      isOnline: true,
-      status: 'AVAILABLE',
-      ambulanceType: 'ADVANCED_ALS',
+    // High Priority Real-time Socket Dispatch
+    emitEmergencyAlert({
+      bookingId: savedBooking._id,
+      assignedDriverId: nearestAmbulance._id,
+      driverName: nearestAmbulance.driverName,
+      vehicleNumber: nearestAmbulance.vehicleNumber,
+      pickupLocation: savedBooking.pickupLocation,
+      severity: 'CRITICAL_CODE_RED',
+      patientName: savedBooking.patientName,
+      etaMinutes: Math.max(3, Math.round(minDistance * 2.5 + 1)),
+      timestamp: new Date().toISOString(),
     });
 
-    if (!selectedAmbulance) {
-      selectedAmbulance = await Ambulance.findOne({ isOnline: true, status: 'AVAILABLE' });
-    }
-    if (!selectedAmbulance) {
-      selectedAmbulance = await Ambulance.findOne();
-    }
-
-    const booking = await AmbulanceBooking.create({
-      patientId: req.user._id,
-      driverId: selectedAmbulance?.driverId,
-      ambulanceId: selectedAmbulance?._id,
-      pickupLocation: { lat, lng, address },
-      destinationLocation: {
-        lat: 19.082,
-        lng: 72.889,
-        address: 'Lifelink Emergency Trauma & Resuscitation Center',
-      },
-      ambulanceType: selectedAmbulance?.ambulanceType || 'ADVANCED_ALS',
-      tripType: 'SOS_EMERGENCY',
-      status: 'ACCEPTED',
-      fare: 599,
-      distanceKm: 2.5,
-      etaMinutes: 5,
-      isSOS: true,
-      emergencyNotes: emergencyNotes || 'CRITICAL EMERGENCY: 1-Click SOS Dispatch Triggered',
-      acceptedAt: new Date(),
-    });
-
-    const populatedBooking = await AmbulanceBooking.findById(booking._id)
-      .populate('patientId', 'name email phone avatar')
-      .populate('driverId', 'name email phone avatar')
-      .populate('ambulanceId');
-
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
-      message: '🚨 Emergency SOS Ambulance Dispatched Successfully!',
-      booking: populatedBooking,
+      message: '🚨 Code Red Emergency SOS Dispatch Initiated!',
+      booking: savedBooking,
+      assignedAmbulance: nearestAmbulance,
+      etaMinutes: Math.max(3, Math.round(minDistance * 2.5 + 1)),
     });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to dispatch SOS ambulance' });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// Driver: Accept / Reject Booking
-export const driverResponseBooking = async (req: AuthRequest, res: Response): Promise<void> => {
+// POST /api/bookings/accept
+export const acceptBooking = async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
-    const { action } = req.body;
+    const { bookingId, ambulanceId } = req.body;
 
-    if (!isMongoConnected()) {
-      const b = memoryStore.bookings.find((item) => item._id === id || item.id === id);
-      if (b) {
-        b.status = action === 'ACCEPT' ? 'ACCEPTED' : 'CANCELLED';
+    if (isMongoConnected()) {
+      const booking = await AmbulanceBooking.findById(bookingId);
+      if (booking) {
+        booking.status = 'ACCEPTED';
+        booking.ambulanceId = ambulanceId || booking.ambulanceId;
+        booking.timeline.acceptedAt = new Date();
+        await booking.save();
+
+        const io = getIO();
+        if (io) {
+          io.to(`ride_${bookingId}`).emit('bookingAccepted', { bookingId, status: 'ACCEPTED' });
+        }
+        return res.json({ success: true, message: 'Booking accepted', booking });
       }
-      res.json({ success: true, message: `Booking ${action === 'ACCEPT' ? 'Accepted' : 'Rejected'}`, booking: b });
-      return;
     }
 
-    const booking = await AmbulanceBooking.findById(id);
-    if (!booking) {
-      res.status(404).json({ success: false, message: 'Booking not found' });
-      return;
-    }
+    const booking = prescriptoStore.ambulanceBookings.find((b) => b._id === bookingId);
+    if (booking) {
+      booking.status = 'ACCEPTED';
+      booking.timeline.acceptedAt = new Date();
 
-    booking.status = action === 'ACCEPT' ? 'ACCEPTED' : 'CANCELLED';
-    if (action === 'ACCEPT') {
-      booking.driverId = req.user._id;
-      booking.acceptedAt = new Date();
-    }
-
-    await booking.save();
-    const updated = await AmbulanceBooking.findById(id)
-      .populate('patientId', 'name email phone avatar')
-      .populate('driverId', 'name email phone avatar')
-      .populate('ambulanceId');
-
-    res.json({ success: true, message: `Booking updated`, booking: updated });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to update booking' });
-  }
-};
-
-// Update Booking Status
-export const updateBookingStatus = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const { id } = req.params;
-    const { status, driverLiveLocation } = req.body;
-
-    if (!isMongoConnected()) {
-      const b = memoryStore.bookings.find((item) => item._id === id || item.id === id);
-      if (b) {
-        if (status) b.status = status;
-        if (driverLiveLocation) b.driverLiveLocation = driverLiveLocation;
+      const io = getIO();
+      if (io) {
+        io.to(`ride_${bookingId}`).emit('bookingAccepted', { bookingId, status: 'ACCEPTED' });
       }
-      res.json({ success: true, message: `Booking status updated to ${status}`, booking: b });
-      return;
+      return res.json({ success: true, message: 'Booking accepted', booking });
     }
 
-    const booking = await AmbulanceBooking.findById(id);
-    if (!booking) {
-      res.status(404).json({ success: false, message: 'Booking not found' });
-      return;
-    }
-
-    if (status) booking.status = status;
-    if (driverLiveLocation) booking.driverLiveLocation = driverLiveLocation;
-
-    await booking.save();
-    const updated = await AmbulanceBooking.findById(id)
-      .populate('patientId', 'name email phone avatar')
-      .populate('driverId', 'name email phone avatar')
-      .populate('ambulanceId');
-
-    res.json({ success: true, message: `Booking status updated to ${status}`, booking: updated });
+    return res.status(404).json({ success: false, message: 'Booking not found' });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to update ride status' });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// Get Live Booking Tracking info
-export const getBookingById = async (req: AuthRequest, res: Response): Promise<void> => {
+// POST /api/bookings/status
+export const updateBookingStatus = async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const { bookingId, status } = req.body;
 
-    if (!isMongoConnected()) {
-      const b = memoryStore.bookings.find((item) => item._id === id || item.id === id) || memoryStore.bookings[0];
-      res.json({ success: true, booking: b });
-      return;
+    if (isMongoConnected()) {
+      const booking = await AmbulanceBooking.findById(bookingId);
+      if (booking) {
+        booking.status = status;
+        if (status === 'COMPLETED') booking.timeline.completedAt = new Date();
+        if (status === 'CANCELLED') booking.timeline.cancelledAt = new Date();
+        await booking.save();
+
+        const io = getIO();
+        if (io) {
+          io.to(`ride_${bookingId}`).emit('rideCompleted', { bookingId, status });
+        }
+        return res.json({ success: true, message: `Status updated to ${status}`, booking });
+      }
     }
 
-    const booking = await AmbulanceBooking.findById(id)
-      .populate('patientId', 'name email phone avatar')
-      .populate('driverId', 'name email phone avatar')
-      .populate('ambulanceId')
-      .populate('hospitalId', 'name address contactNumber emergencyNumber');
+    const booking = prescriptoStore.ambulanceBookings.find((b) => b._id === bookingId);
+    if (booking) {
+      booking.status = status;
+      if (status === 'COMPLETED') booking.timeline.completedAt = new Date();
+      if (status === 'CANCELLED') booking.timeline.cancelledAt = new Date();
 
-    if (!booking) {
-      res.status(404).json({ success: false, message: 'Booking not found' });
-      return;
+      const io = getIO();
+      if (io) {
+        io.to(`ride_${bookingId}`).emit('rideCompleted', { bookingId, status });
+      }
+      return res.json({ success: true, message: `Status updated to ${status}`, booking });
     }
 
-    res.json({ success: true, booking });
+    return res.status(404).json({ success: false, message: 'Booking not found' });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to fetch booking' });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// Patient Bookings history
-export const getPatientBookings = async (req: AuthRequest, res: Response): Promise<void> => {
+// GET /api/bookings/my-bookings
+export const getPatientBookings = async (req: AuthRequest, res: Response) => {
   try {
-    const uId = req.user?._id || req.user?.id;
+    const patientId = req.user?.id;
 
-    if (!isMongoConnected()) {
-      res.json({ success: true, count: memoryStore.bookings.length, bookings: memoryStore.bookings });
-      return;
+    if (isMongoConnected()) {
+      const bookings = await AmbulanceBooking.find({ patientId }).sort({ createdAt: -1 });
+      return res.json({ success: true, bookings });
     }
 
-    const bookings = await AmbulanceBooking.find({ patientId: req.user._id })
-      .populate('driverId', 'name email phone avatar')
-      .populate('ambulanceId')
-      .sort({ createdAt: -1 });
-
-    res.json({ success: true, count: bookings.length, bookings });
+    const bookings = prescriptoStore.ambulanceBookings.filter(
+      (b) => !patientId || b.patientId === patientId || b.patientId === 'user_1'
+    );
+    return res.json({ success: true, bookings });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to fetch bookings' });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// Driver Trips
-export const getDriverBookings = async (req: AuthRequest, res: Response): Promise<void> => {
+// GET /api/bookings/driver-trips
+export const getDriverTrips = async (req: AuthRequest, res: Response) => {
   try {
-    if (!isMongoConnected()) {
-      res.json({ success: true, count: memoryStore.bookings.length, bookings: memoryStore.bookings });
-      return;
+    const driverId = req.user?.id;
+
+    if (isMongoConnected()) {
+      const bookings = await AmbulanceBooking.find({
+        $or: [{ ambulanceId: driverId }, { driverName: 'Rajesh Kumar' }],
+      }).sort({ createdAt: -1 });
+      return res.json({ success: true, bookings });
     }
 
-    const bookings = await AmbulanceBooking.find({ driverId: req.user._id })
-      .populate('patientId', 'name email phone avatar')
-      .populate('ambulanceId')
-      .sort({ createdAt: -1 });
-
-    res.json({ success: true, count: bookings.length, bookings });
+    return res.json({ success: true, bookings: prescriptoStore.ambulanceBookings });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to fetch driver bookings' });
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// GET /api/bookings/:bookingId
+export const getBookingById = async (req: Request, res: Response) => {
+  try {
+    const { bookingId } = req.params;
+
+    if (isMongoConnected()) {
+      const booking = await AmbulanceBooking.findById(bookingId);
+      if (booking) return res.json({ success: true, booking });
+    }
+
+    const booking = prescriptoStore.ambulanceBookings.find((b) => b._id === bookingId);
+    if (booking) return res.json({ success: true, booking });
+
+    return res.status(404).json({ success: false, message: 'Booking not found' });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message });
   }
 };

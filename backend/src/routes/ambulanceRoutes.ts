@@ -1,21 +1,17 @@
-import { Router } from 'express';
+import express from 'express';
 import {
+  getAllAmbulances,
   getNearbyAmbulances,
-  getDriverProfile,
-  toggleDriverStatus,
-  updateLiveLocation,
+  toggleDriverDuty,
+  updateAmbulanceLocation,
 } from '../controllers/ambulanceController';
-import { authenticateJWT } from '../middleware/auth';
-import { authorizeRoles } from '../middleware/roleAuth';
+import { authenticate } from '../middleware/auth';
 
-const router = Router();
+const ambulanceRouter = express.Router();
 
-// Public search for nearest ambulances
-router.get('/nearby', getNearbyAmbulances);
+ambulanceRouter.get('/all', getAllAmbulances);
+ambulanceRouter.get('/nearby', getNearbyAmbulances);
+ambulanceRouter.post('/duty-toggle', authenticate, toggleDriverDuty);
+ambulanceRouter.put('/location', authenticate, updateAmbulanceLocation);
 
-// Driver Protected Routes
-router.get('/driver/profile', authenticateJWT, authorizeRoles('DRIVER'), getDriverProfile);
-router.put('/driver/status', authenticateJWT, authorizeRoles('DRIVER'), toggleDriverStatus);
-router.put('/driver/location', authenticateJWT, authorizeRoles('DRIVER'), updateLiveLocation);
-
-export default router;
+export default ambulanceRouter;

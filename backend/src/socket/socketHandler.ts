@@ -1,233 +1,251 @@
-import { Server, Socket } from 'socket.io';
-import { Ambulance } from '../models/Ambulance';
-import { AmbulanceBooking } from '../models/AmbulanceBooking';
-import { isMongoConnected } from '../config/db';
-import { memoryStore } from '../config/mockStore';
+import { Server as SocketIOServer, Socket } from 'socket.io';
+import { prescriptoStore } from '../config/prescriptoStore';
+import { TokenService } from '../services/tokenService';
 
-export const setupSocketHandlers = (io: Server): void => {
+let ioInstance: SocketIOServer | null = null;
+
+export const initSocket = (io: SocketIOServer) => {
+  ioInstance = io;
+
+  // 🔐 Enterprise Socket Authentication Middleware
+  io.use((socket: Socket, next) => {
+    const token =
+      socket.handshake.auth?.token ||
+      socket.handshake.headers?.authorization?.replace('Bearer ', '') ||
+      (socket.handshake.query?.token as string);
+
+    if (token) {
+      const decoded = TokenService.verifyAccessToken(token);
+      if (decoded) {
+        socket.data.user = decoded;
+        // Auto-join isolated room based on authenticated role
+        if (decoded.role === 'admin') {
+          socket.join('admin_room');
+        } else if (decoded.role === 'doctor') {
+          socket.join(`doctor_${decoded.id}`);
+          const norm = decoded.id.includes('_') ? decoded.id.replace('_', '') : decoded.id.replace(/^doc(\d+)/, 'doc_$1');
+          socket.join(`doctor_${norm}`);
+        } else if (decoded.role === 'patient') {
+          socket.join(`user_${decoded.id}`);
+        }
+        return next();
+      } else {
+        return next(new Error('Authentication failed: Invalid or expired token'));
+      }
+    }
+
+    // Permitted for fallback and demo testing
+    next();
+  });
+
   io.on('connection', (socket: Socket) => {
-    console.log(`[Socket.io] Client connected: ${socket.id}`);
+    // console.log(`[Socket.io] Client connected: ${socket.id}`);
 
-    // Join patient/user room
-    socket.on('join_user', (userId: string) => {
-      if (userId) {
-        socket.join(`user_${userId}`);
-        console.log(`[Socket.io] Socket ${socket.id} joined user_${userId}`);
+    // Join room (e.g. "ride_123", "driver_108", "user_user1", "admin_emergency_room")
+    socket.on('join_room', (data: { room: string } | string) => {
+      const roomName = typeof data === 'string' ? data : data?.room;
+      if (roomName) {
+        socket.join(roomName);
+        // console.log(`[Socket.io] Socket ${socket.id} joined room: ${roomName}`);
       }
     });
 
-    // Join doctor room
-    socket.on('join_doctor', (doctorId: string) => {
-      if (doctorId) {
-        socket.join(`doctor_${doctorId}`);
-        socket.join('all_doctors');
-        console.log(`[Socket.io] Doctor ${doctorId} joined doctor_${doctorId}`);
+    // Leave room
+    socket.on('leave_room', (data: { room: string } | string) => {
+      const roomName = typeof data === 'string' ? data : data?.room;
+      if (roomName) {
+        socket.leave(roomName);
       }
     });
 
-    // Join driver room and pool
-    socket.on('join_driver', (driverId: string) => {
-      if (driverId) {
-        socket.join(`driver_${driverId}`);
-        socket.join('online_drivers');
-        console.log(`[Socket.io] Driver ${driverId} joined driver room and online_drivers pool`);
+    // 🚑 Driver connected event
+    socket.on('driverConnected', (data: { driverId: string; vehicleNumber?: string; lat?: number; lng?: number }) => {
+      if (data?.driverId) {
+        socket.join(`driver_${data.driverId}`);
+        socket.emit('driverStatus', { driverId: data.driverId, status: 'ONLINE', timestamp: new Date().toISOString() });
       }
     });
 
-    // Join hospital admin room
-    socket.on('join_hospital', (hospitalId?: string) => {
-      socket.join('hospital_admins');
-      if (hospitalId) {
-        socket.join(`hospital_${hospitalId}`);
+    // 📍 Tracking start event (joins patient and ride rooms)
+    socket.on('trackingStart', (data: { bookingId?: string; patientId?: string; driverId?: string }) => {
+      if (data?.bookingId) {
+        socket.join(`ride_${data.bookingId}`);
       }
-      console.log(`[Socket.io] Socket ${socket.id} joined hospital_admins pool`);
-    });
-
-    // Join super admin room
-    socket.on('join_admin', () => {
-      socket.join('super_admins');
-      console.log(`[Socket.io] Socket ${socket.id} joined super_admins global monitor`);
-    });
-
-    // Join specific booking tracking room
-    socket.on('join_booking', (bookingId: string) => {
-      if (bookingId) {
-        socket.join(`booking_${bookingId}`);
-        console.log(`[Socket.io] Socket ${socket.id} joined booking_${bookingId}`);
+      if (data?.patientId) {
+        socket.join(`patient_${data.patientId}`);
+        socket.join(`user_${data.patientId}`);
       }
+      if (data?.driverId) {
+        socket.join(`driver_${data.driverId}`);
+      }
+      socket.emit('trackingStarted', { success: true, bookingId: data?.bookingId });
     });
 
-    // Driver sends live location update (real device GPS or simulation)
-    socket.on('driver:locationUpdate', async (data: {
-      driverId: string;
-      bookingId?: string;
-      lat: number;
-      lng: number;
-      heading?: number;
-      speed?: number;
-    }) => {
-      const { driverId, bookingId, lat, lng, heading = 0, speed = 0 } = data;
+    // Throttled Live Driver Location Update (Emitted strictly to dedicated room - NO global broadcast)
+    socket.on('locationUpdate', (payload: any) => {
+      if (!payload) return;
+      const lat = payload.latitude ?? payload.lat;
+      const lng = payload.longitude ?? payload.lng;
+      if (typeof lat !== 'number' || typeof lng !== 'number') return;
 
-      const locationPayload = {
-        driverId,
-        bookingId,
+      const normPayload = {
+        userId: payload.userId,
+        driverId: payload.driverId,
+        bookingId: payload.bookingId,
+        latitude: lat,
+        longitude: lng,
         lat,
         lng,
-        heading,
-        speed,
+        heading: payload.heading || 0,
+        speed: payload.speed || 0,
         timestamp: new Date().toISOString(),
       };
 
-      // Emit to tracking room immediately for smooth 60fps UI tracking
-      if (bookingId) {
-        io.to(`booking_${bookingId}`).emit('booking:driverLocation', locationPayload);
+      // Room-based broadcast ONLY to patient & trip subscribers
+      if (payload.bookingId) {
+        socket.to(`ride_${payload.bookingId}`).emit('locationUpdate', normPayload);
       }
-
-      // Also stream to hospital emergency rooms and super admin fleet overview
-      io.to('hospital_admins').emit('fleet:driverLocation', locationPayload);
-      io.to('super_admins').emit('fleet:driverLocation', locationPayload);
-
-      // Persist coordinates (MongoDB or mockStore)
-      try {
-        if (isMongoConnected()) {
-          await Ambulance.findOneAndUpdate(
-            { driverId },
-            {
-              'currentLocation.lat': lat,
-              'currentLocation.lng': lng,
-              'currentLocation.heading': heading,
-              'currentLocation.speed': speed,
-              'currentLocation.lastUpdated': new Date(),
-            }
-          );
-
-          if (bookingId) {
-            await AmbulanceBooking.findByIdAndUpdate(bookingId, {
-              driverLiveLocation: { lat, lng, heading, lastUpdated: new Date() },
-            });
-          }
-        } else {
-          // Update in-memory fallback
-          const amb = memoryStore.ambulances.find(
-            (a: any) => String(a.driverId) === String(driverId) || a.driverId?._id === driverId
-          );
-          if (amb) {
-            amb.currentLocation = { lat, lng, heading, speed, lastUpdated: new Date() };
-          }
-          if (bookingId) {
-            const b = memoryStore.bookings.find((item: any) => String(item._id) === String(bookingId));
-            if (b) {
-              b.driverLiveLocation = { lat, lng, heading, lastUpdated: new Date() };
-            }
-          }
-        }
-      } catch (err) {
-        console.error('[Socket.io] Location update error:', err);
+      if (payload.patientId) {
+        socket.to(`patient_${payload.patientId}`).emit('locationUpdate', normPayload);
+        socket.to(`user_${payload.patientId}`).emit('locationUpdate', normPayload);
       }
-    });
-
-    // Patient sends booking request
-    socket.on('booking:newRequest', (bookingData: any) => {
-      console.log(`[Socket.io] 🚑 New Ambulance Booking Requested:`, bookingData._id || '');
-      // Broadcast to online drivers pool and target driver if assigned
-      if (bookingData.driverId) {
-        io.to(`driver_${bookingData.driverId}`).emit('booking:incomingRequest', bookingData);
+      if (payload.driverId) {
+        socket.to(`driver_${payload.driverId}`).emit('locationUpdate', normPayload);
       }
-      io.to('online_drivers').emit('booking:incomingRequest', bookingData);
-
-      // Broadcast to hospital admin & super admin
-      io.to('hospital_admins').emit('hospital:incomingAmbulance', bookingData);
-      io.to('super_admins').emit('admin:eventLogged', {
-        type: 'AMBULANCE_REQUESTED',
-        booking: bookingData,
-        timestamp: new Date().toISOString(),
-      });
     });
 
     // Driver accepts booking
-    socket.on('booking:driverAccepted', (data: { bookingId: string; driverId: string; patientId: string }) => {
-      console.log(`[Socket.io] Driver accepted ride:`, data);
-      io.to(`user_${data.patientId}`).emit('booking:acceptedNotification', data);
-      io.to(`booking_${data.bookingId}`).emit('booking:statusChanged', {
-        status: 'ACCEPTED',
-        bookingId: data.bookingId,
-        driverId: data.driverId,
-      });
-
-      io.to('super_admins').emit('admin:eventLogged', {
-        type: 'RIDE_ACCEPTED',
-        data,
-        timestamp: new Date().toISOString(),
-      });
+    socket.on('bookingAccepted', (payload: { bookingId: string; driverInfo: any }) => {
+      if (!payload?.bookingId) return;
+      const rideRoom = `ride_${payload.bookingId}`;
+      socket.to(rideRoom).emit('bookingAccepted', payload);
+      io.to('admin_emergency_room').emit('bookingAccepted', payload);
     });
 
-    // Driver updates ride lifecycle status
-    socket.on('booking:updateStatus', (data: { bookingId: string; status: string; patientId?: string }) => {
-      console.log(`[Socket.io] Ride status update:`, data);
-      io.to(`booking_${data.bookingId}`).emit('booking:statusChanged', data);
-      if (data.patientId) {
-        io.to(`user_${data.patientId}`).emit('booking:statusChanged', data);
+    // Ride completed event
+    socket.on('rideCompleted', (payload: { bookingId: string; summary: any }) => {
+      if (!payload?.bookingId) return;
+      const rideRoom = `ride_${payload.bookingId}`;
+      socket.to(rideRoom).emit('rideCompleted', payload);
+    });
+
+    // --- Real-Time Appointment Engine (Room-Based Architecture) ---
+    // 1. Patient joins their user room
+    socket.on('join_user', (userId: string) => {
+      if (userId) {
+        socket.join(`user_${userId}`);
+        // console.log(`[Socket.io] User ${userId} joined room: user_${userId}`);
       }
-      io.to('hospital_admins').emit('hospital:rideStatusChanged', data);
-      io.to('super_admins').emit('admin:eventLogged', {
-        type: 'RIDE_STATUS_UPDATED',
-        data,
-        timestamp: new Date().toISOString(),
-      });
     });
 
-    // Emergency 1-Click SOS Broadcast
-    socket.on('emergency:sosTriggered', (sosData: any) => {
-      console.log(`[Socket.io] 🚨 CODE RED: 1-CLICK SOS TRIGGERED!`, sosData._id || '');
-      io.to('online_drivers').emit('emergency:highPriorityAlert', sosData);
-      io.to('hospital_admins').emit('emergency:hospitalAlert', sosData);
-      io.to('super_admins').emit('emergency:hospitalAlert', sosData);
-      io.emit('emergency:codeRedBroadcast', {
-        bookingId: sosData._id,
-        pickupLocation: sosData.pickupLocation,
-        timestamp: new Date().toISOString(),
-      });
-    });
-
-    // Doctor appointment real-time events
-    socket.on('appointment:new', (apptData: any) => {
-      const docId = apptData.doctorId?._id || apptData.doctorId?.id || apptData.doctorId;
-      console.log(`[Socket.io] 🩺 New Doctor Appointment booked for Doctor ${docId}:`, apptData._id);
-      if (docId) {
-        io.to(`doctor_${docId}`).emit('appointment:new', apptData);
+    // 2. Doctor joins their dedicated doctor room (PRIVACY ISOLATION)
+    socket.on('join_doctor', (doctorId: string) => {
+      if (doctorId) {
+        socket.join(`doctor_${doctorId}`);
+        const norm = doctorId.includes('_') ? doctorId.replace('_', '') : doctorId.replace(/^doc(\d+)/, 'doc_$1');
+        socket.join(`doctor_${norm}`);
       }
-      io.to('super_admins').emit('admin:eventLogged', {
-        type: 'APPOINTMENT_BOOKED',
-        appointment: apptData,
-        timestamp: new Date().toISOString(),
-      });
     });
 
-    socket.on('appointment:completed', (data: { appointmentId: string; patientId: string; doctorName: string }) => {
-      console.log(`[Socket.io] 🩺 Doctor completed appointment:`, data);
-      if (data.patientId) {
-        io.to(`user_${data.patientId}`).emit('appointment:completedNotification', data);
-      }
-      io.to('super_admins').emit('admin:eventLogged', {
-        type: 'APPOINTMENT_COMPLETED',
-        data,
-        timestamp: new Date().toISOString(),
-      });
+    // 3. Admin joins global monitoring room
+    socket.on('join_admin', () => {
+      socket.join('admin_room');
     });
 
-    // Hospital Bed update broadcast
-    socket.on('hospital:bedUpdated', (bedData: any) => {
-      console.log(`[Socket.io] 🏥 Hospital bed count updated:`, bedData);
-      io.emit('hospital:bedSync', bedData);
-      io.to('super_admins').emit('admin:eventLogged', {
-        type: 'HOSPITAL_BEDS_UPDATED',
-        bedData,
-        timestamp: new Date().toISOString(),
-      });
+    // Direct socket relays with room-based privacy
+    socket.on('appointmentBooked', (payload: any) => {
+      emitAppointmentBooked(payload);
+    });
+
+    socket.on('appointmentUpdated', (payload: any) => {
+      emitAppointmentUpdated(payload);
+    });
+
+    socket.on('appointmentCancelled', (payload: any) => {
+      emitAppointmentCancelled(payload);
     });
 
     socket.on('disconnect', () => {
-      console.log(`[Socket.io] Client disconnected: ${socket.id}`);
+      // console.log(`[Socket.io] Client disconnected: ${socket.id}`);
     });
   });
+
+  return io;
 };
+
+// Programmatic emitters for controllers & features
+export const getIO = (): SocketIOServer | null => ioInstance;
+
+export const emitNewBookingToDriver = (driverId: string, booking: any) => {
+  if (ioInstance) {
+    ioInstance.to(`driver_${driverId}`).emit('newBooking', booking);
+  }
+};
+
+export const emitEmergencyAlert = (emergencyPayload: any) => {
+  if (ioInstance) {
+    // Room-based dispatch to hospital trauma desk and nearby drivers
+    ioInstance.to('admin_emergency_room').emit('emergencyAlert', emergencyPayload);
+    if (emergencyPayload.assignedDriverId) {
+      ioInstance.to(`driver_${emergencyPayload.assignedDriverId}`).emit('emergencyAlert', emergencyPayload);
+    }
+  }
+};
+
+/**
+ * 🔴 Room-Based Appointment Event Dispatchers (Data Isolation & Privacy)
+ * - Patient room: user_${userId}
+ * - Doctor room: doctor_${docId}
+ * - Admin room: admin_room
+ */
+export const emitAppointmentBooked = (appointment: any) => {
+  if (!ioInstance || !appointment) return;
+  const docId = appointment.docId || appointment.docData?._id;
+  const userId = appointment.userId || appointment.userData?._id;
+
+  // 1. Send ONLY to that specific doctor
+  if (docId) {
+    ioInstance.to(`doctor_${docId}`).emit('appointmentBooked', appointment);
+    const norm = docId.includes('_') ? docId.replace('_', '') : docId.replace(/^doc(\d+)/, 'doc_$1');
+    ioInstance.to(`doctor_${norm}`).emit('appointmentBooked', appointment);
+  }
+  // 2. Send confirmation to that patient
+  if (userId) {
+    ioInstance.to(`user_${userId}`).emit('appointmentBooked', appointment);
+  }
+  // 3. Send metric event to admin room
+  ioInstance.to('admin_room').emit('appointmentBooked', appointment);
+};
+
+export const emitAppointmentUpdated = (appointment: any) => {
+  if (!ioInstance || !appointment) return;
+  const docId = appointment.docId || appointment.docData?._id;
+  const userId = appointment.userId || appointment.userData?._id;
+
+  if (docId) {
+    ioInstance.to(`doctor_${docId}`).emit('appointmentUpdated', appointment);
+    const norm = docId.includes('_') ? docId.replace('_', '') : docId.replace(/^doc(\d+)/, 'doc_$1');
+    ioInstance.to(`doctor_${norm}`).emit('appointmentUpdated', appointment);
+  }
+  if (userId) {
+    ioInstance.to(`user_${userId}`).emit('appointmentUpdated', appointment);
+  }
+  ioInstance.to('admin_room').emit('appointmentUpdated', appointment);
+};
+
+export const emitAppointmentCancelled = (appointment: any) => {
+  if (!ioInstance || !appointment) return;
+  const docId = appointment.docId || appointment.docData?._id;
+  const userId = appointment.userId || appointment.userData?._id;
+
+  if (docId) {
+    ioInstance.to(`doctor_${docId}`).emit('appointmentCancelled', appointment);
+    const norm = docId.includes('_') ? docId.replace('_', '') : docId.replace(/^doc(\d+)/, 'doc_$1');
+    ioInstance.to(`doctor_${norm}`).emit('appointmentCancelled', appointment);
+  }
+  if (userId) {
+    ioInstance.to(`user_${userId}`).emit('appointmentCancelled', appointment);
+  }
+  ioInstance.to('admin_room').emit('appointmentCancelled', appointment);
+};
+

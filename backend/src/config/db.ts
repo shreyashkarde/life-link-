@@ -6,7 +6,7 @@ let mongoConnected = false;
 export const connectDB = async (): Promise<boolean> => {
   try {
     const conn = await mongoose.connect(ENV.MONGODB_URI, {
-      serverSelectionTimeoutMS: 2000, // Quick failover to mock store if local Mongo is not running
+      serverSelectionTimeoutMS: 3000,
     });
     console.log(`[MongoDB] Connected successfully to host: ${conn.connection.host}, database: ${conn.connection.name}`);
     mongoConnected = true;
@@ -14,9 +14,9 @@ export const connectDB = async (): Promise<boolean> => {
   } catch (error: any) {
     mongoConnected = false;
     console.warn('--------------------------------------------------');
-    console.warn('[MongoDB] No local MongoDB service detected on ' + ENV.MONGODB_URI);
-    console.warn('[LifeLink] Seamless In-Memory Data Store Activated!');
-    console.warn('[LifeLink] All 5 Demo Roles, Slots, and Ambulances are ONLINE and ready.');
+    console.warn('[MongoDB] External MongoDB offline or IP not whitelisted.');
+    console.warn('[Prescripto] Seamless High-Performance Store Activated!');
+    console.warn('[Prescripto] All 15 Doctors & Demo Accounts are ONLINE and fully functional.');
     console.warn('--------------------------------------------------');
     return false;
   }

@@ -1,263 +1,286 @@
-import { Response } from 'express';
-import { User } from '../models/User';
+import { Request, Response } from 'express';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import { Doctor } from '../models/Doctor';
-import { Ambulance } from '../models/Ambulance';
-import { Hospital } from '../models/Hospital';
+import { User } from '../models/User';
 import { Appointment } from '../models/Appointment';
-import { AmbulanceBooking } from '../models/AmbulanceBooking';
-import { AuthRequest } from '../middleware/auth';
+import { ENV } from '../config/env';
 import { isMongoConnected } from '../config/db';
-import { memoryStore } from '../config/mockStore';
+import { prescriptoStore } from '../config/prescriptoStore';
 
-// Hospital Admin Dashboard Overview
-export const getHospitalAdminStats = async (req: AuthRequest, res: Response): Promise<void> => {
+// API for admin login
+export const loginAdmin = async (req: Request, res: Response): Promise<void> => {
   try {
-    if (!isMongoConnected()) {
-      const hospital = memoryStore.hospitals[0];
-      res.json({
-        success: true,
-        hospital,
-        stats: {
-          totalDoctors: memoryStore.doctors.length,
-          totalAmbulances: memoryStore.ambulances.length,
-          onlineAmbulances: memoryStore.ambulances.filter((a) => a.isOnline).length,
-          availableBeds: hospital.availableBeds,
-          totalBeds: hospital.totalBeds,
-          icuBedsAvailable: hospital.icuBedsAvailable,
-          recentAppointmentsCount: memoryStore.appointments.length,
-          activeEmergenciesCount: memoryStore.bookings.filter((b) => b.isSOS).length,
-        },
-        doctors: memoryStore.doctors,
-        ambulances: memoryStore.ambulances,
-        recentAppointments: memoryStore.appointments,
-        activeEmergencies: memoryStore.bookings,
-      });
-      return;
-    }
+    const { email, password } = req.body;
 
-    const hospitalId = req.user?.hospitalId;
-    let hospital = null;
-    if (hospitalId) {
-      hospital = await Hospital.findById(hospitalId);
+    if (email === ENV.ADMIN_EMAIL && password === ENV.ADMIN_PASSWORD) {
+      const token = jwt.sign(
+        { email, role: 'admin' },
+        ENV.JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+      res.json({ success: true, token });
     } else {
-      hospital = await Hospital.findOne();
+      res.status(400).json({ success: false, message: 'Invalid Admin credentials' });
     }
-
-    const doctors = await Doctor.find(hospital ? { hospitalId: hospital._id } : {})
-      .populate('userId', 'name email phone avatar isActive');
-
-    const ambulances = await Ambulance.find(hospital ? { hospitalId: hospital._id } : {})
-      .populate('driverId', 'name email phone avatar');
-
-    const recentAppointments = await Appointment.find(hospital ? { hospitalId: hospital._id } : {})
-      .populate('patientId', 'name email phone')
-      .populate({
-        path: 'doctorId',
-        populate: { path: 'userId', select: 'name' },
-      })
-      .sort({ createdAt: -1 })
-      .limit(10);
-
-    const activeEmergencies = await AmbulanceBooking.find({
-      status: { $in: ['PENDING', 'ACCEPTED', 'ONGOING', 'ARRIVED_AT_PATIENT'] },
-    })
-      .populate('patientId', 'name email phone')
-      .populate('driverId', 'name phone')
-      .sort({ createdAt: -1 });
-
-    res.json({
-      success: true,
-      hospital,
-      stats: {
-        totalDoctors: doctors.length,
-        totalAmbulances: ambulances.length,
-        onlineAmbulances: ambulances.filter((a) => a.isOnline).length,
-        availableBeds: hospital?.availableBeds || 18,
-        totalBeds: hospital?.totalBeds || 120,
-        icuBedsAvailable: hospital?.icuBedsAvailable || 4,
-        recentAppointmentsCount: recentAppointments.length,
-        activeEmergenciesCount: activeEmergencies.length,
-      },
-      doctors,
-      ambulances,
-      recentAppointments,
-      activeEmergencies,
-    });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to fetch hospital stats' });
+    console.error('Admin Login Error:', error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// Super Admin Global Overview
-export const getSuperAdminStats = async (_req: AuthRequest, res: Response): Promise<void> => {
+// API for adding a doctor
+export const addDoctor = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const {
+      name,
+      email,
+      password,
+      speciality,
+      degree,
+      experience,
+      about,
+      fees,
+      address,
+      image,
+    } = req.body;
+
+    if (!name || !email || !password || !speciality || !degree || !experience || !about || !fees) {
+      res.status(400).json({ success: false, message: 'Missing required doctor details' });
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      res.status(400).json({ success: false, message: 'Please enter a valid email address' });
+      return;
+    }
+
+    if (password.length < 6) {
+      res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
+      return;
+    }
+
+    let parsedAddress = address;
+    if (typeof address === 'string') {
+      try {
+        parsedAddress = JSON.parse(address);
+      } catch {
+        parsedAddress = { line1: address, line2: '' };
+      }
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    const doctorData = {
+      name,
+      email,
+      password: hashedPassword,
+      image:
+        image ||
+        'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=300',
+      speciality,
+      degree,
+      experience,
+      about,
+      fees: Number(fees),
+      address: parsedAddress || { line1: 'Healthcare Plaza', line2: 'Medical Wing' },
+      date: Date.now(),
+      available: true,
+      slots_booked: {},
+    };
+
+    if (!isMongoConnected()) {
+      const existing = prescriptoStore.doctors.find((d) => d.email === email);
+      if (existing) {
+        res.status(400).json({ success: false, message: 'Doctor with this email already exists' });
+        return;
+      }
+      const newDoc = {
+        _id: `doc_${Date.now()}`,
+        ...doctorData,
+      };
+      prescriptoStore.doctors.unshift(newDoc);
+      res.json({ success: true, message: 'Doctor Added Successfully' });
+      return;
+    }
+
+    const existingDoctor = await Doctor.findOne({ email });
+    if (existingDoctor) {
+      res.status(400).json({ success: false, message: 'Doctor with this email already exists' });
+      return;
+    }
+
+    const newDoctor = new Doctor(doctorData);
+    await newDoctor.save();
+
+    res.json({ success: true, message: 'Doctor Added Successfully' });
+  } catch (error: any) {
+    console.error('Add Doctor Error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// API for getting all doctors for admin panel
+export const allDoctors = async (_req: Request, res: Response): Promise<void> => {
   try {
     if (!isMongoConnected()) {
+      const doctors = prescriptoStore.doctors.map(({ password, ...rest }) => rest);
+      res.json({ success: true, doctors });
+      return;
+    }
+    const doctors = await Doctor.find({}).select('-password').sort({ createdAt: -1 });
+    res.json({ success: true, doctors });
+  } catch (error: any) {
+    console.error('All Doctors Error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// API to change doctor availability (toggle)
+export const changeAvailability = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { docId } = req.body;
+
+    if (!isMongoConnected()) {
+      const doc = prescriptoStore.doctors.find((d) => d._id === docId || d.id === docId);
+      if (!doc) {
+        res.status(404).json({ success: false, message: 'Doctor not found' });
+        return;
+      }
+      doc.available = !doc.available;
       res.json({
         success: true,
-        stats: {
-          totalUsers: memoryStore.users.length,
-          patientsCount: memoryStore.users.filter((u) => u.role === 'PATIENT').length,
-          doctorsCount: memoryStore.users.filter((u) => u.role === 'DOCTOR').length,
-          driversCount: memoryStore.users.filter((u) => u.role === 'DRIVER').length,
-          hospitalsCount: memoryStore.hospitals.length,
-          totalAppointments: memoryStore.appointments.length,
-          totalRides: memoryStore.bookings.length,
-          activeEmergencies: memoryStore.bookings.filter((b) => b.isSOS).length,
-          avgResponseMinutes: 4.8,
-          patientSatisfaction: 98.4,
-        },
-        recentUsers: memoryStore.users,
-        hospitals: memoryStore.hospitals,
+        message: `Availability updated to ${doc.available ? 'Available' : 'Unavailable'}`,
+        available: doc.available,
       });
       return;
     }
 
-    const totalUsers = await User.countDocuments();
-    const patientsCount = await User.countDocuments({ role: 'PATIENT' });
-    const doctorsCount = await User.countDocuments({ role: 'DOCTOR' });
-    const driversCount = await User.countDocuments({ role: 'DRIVER' });
-    const hospitalsCount = await Hospital.countDocuments();
-    const totalAppointments = await Appointment.countDocuments();
-    const totalRides = await AmbulanceBooking.countDocuments();
-    const activeEmergencies = await AmbulanceBooking.countDocuments({
-      status: { $in: ['PENDING', 'ACCEPTED', 'ONGOING'] },
-    });
+    const docData = await Doctor.findById(docId);
+    if (!docData) {
+      res.status(404).json({ success: false, message: 'Doctor not found' });
+      return;
+    }
 
-    const recentUsers = await User.find().select('-password').sort({ createdAt: -1 }).limit(10);
-    const hospitals = await Hospital.find().sort({ createdAt: -1 });
+    docData.available = !docData.available;
+    await docData.save();
 
     res.json({
       success: true,
-      stats: {
-        totalUsers,
-        patientsCount,
-        doctorsCount,
-        driversCount,
-        hospitalsCount,
-        totalAppointments,
-        totalRides,
-        activeEmergencies,
-        avgResponseMinutes: 4.8,
-        patientSatisfaction: 98.4,
-      },
-      recentUsers,
-      hospitals,
+      message: `Availability updated to ${docData.available ? 'Available' : 'Unavailable'}`,
+      available: docData.available,
     });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to fetch super admin stats' });
+    console.error('Change Availability Error:', error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// Super Admin: Get all users
-export const getAllUsers = async (req: AuthRequest, res: Response): Promise<void> => {
+// API to get all appointments list for admin
+export const appointmentsAdmin = async (_req: Request, res: Response): Promise<void> => {
   try {
-    const { role, search } = req.query;
+    if (!isMongoConnected()) {
+      res.json({ success: true, appointments: prescriptoStore.appointments });
+      return;
+    }
+    const appointments = await Appointment.find({}).sort({ createdAt: -1 });
+    res.json({ success: true, appointments });
+  } catch (error: any) {
+    console.error('Appointments Admin Error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// API for appointment cancellation by admin
+export const appointmentCancel = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { appointmentId } = req.body;
 
     if (!isMongoConnected()) {
-      let filtered = [...memoryStore.users];
-      if (role && role !== 'ALL') {
-        filtered = filtered.filter((u) => u.role === role);
+      const appt = prescriptoStore.appointments.find((a) => a._id === appointmentId);
+      if (!appt) {
+        res.status(404).json({ success: false, message: 'Appointment not found' });
+        return;
       }
-      if (search) {
-        const q = (search as string).toLowerCase();
-        filtered = filtered.filter(
-          (u) =>
-            u.name.toLowerCase().includes(q) ||
-            u.email.toLowerCase().includes(q)
+      appt.cancelled = true;
+      const doc = prescriptoStore.doctors.find((d) => d._id === appt.docId);
+      if (doc && doc.slots_booked && doc.slots_booked[appt.slotDate]) {
+        doc.slots_booked[appt.slotDate] = doc.slots_booked[appt.slotDate].filter(
+          (t: string) => t !== appt.slotTime
         );
       }
+      res.json({ success: true, message: 'Appointment Cancelled Successfully' });
+      return;
+    }
+
+    const appointmentData = await Appointment.findById(appointmentId);
+    if (!appointmentData) {
+      res.status(404).json({ success: false, message: 'Appointment not found' });
+      return;
+    }
+
+    appointmentData.cancelled = true;
+    await appointmentData.save();
+
+    const { docId, slotDate, slotTime } = appointmentData;
+    const docData = await Doctor.findById(docId);
+
+    if (docData && docData.slots_booked && docData.slots_booked[slotDate]) {
+      docData.slots_booked[slotDate] = docData.slots_booked[slotDate].filter(
+        (time: string) => time !== slotTime
+      );
+      docData.markModified('slots_booked');
+      await docData.save();
+    }
+
+    res.json({ success: true, message: 'Appointment Cancelled Successfully' });
+  } catch (error: any) {
+    console.error('Admin Cancel Appointment Error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// API to get dashboard data for admin panel
+export const adminDashboard = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    if (!isMongoConnected()) {
+      const doctorsCount = prescriptoStore.doctors.length;
+      const appointmentsCount = prescriptoStore.appointments.length;
+      const patientsCount = prescriptoStore.users.length;
+      const latestAppointments = prescriptoStore.appointments.slice(0, 5);
 
       res.json({
         success: true,
-        total: filtered.length,
-        currentPage: 1,
-        totalPages: 1,
-        users: filtered,
+        dashData: {
+          doctors: doctorsCount,
+          appointments: appointmentsCount,
+          patients: patientsCount,
+          latestAppointments,
+        },
       });
       return;
     }
 
-    const filter: any = {};
-    if (role && role !== 'ALL') {
-      filter.role = role;
-    }
-    if (search) {
-      filter.$or = [
-        { name: { $regex: search as string, $options: 'i' } },
-        { email: { $regex: search as string, $options: 'i' } },
-        { phone: { $regex: search as string, $options: 'i' } },
-      ];
-    }
+    const doctorsCount = await Doctor.countDocuments({});
+    const appointmentsCount = await Appointment.countDocuments({});
+    const patientsCount = await User.countDocuments({});
 
-    const users = await User.find(filter)
-      .select('-password')
-      .sort({ createdAt: -1 });
+    const latestAppointments = await Appointment.find({})
+      .sort({ createdAt: -1 })
+      .limit(5);
 
-    res.json({
-      success: true,
-      total: users.length,
-      currentPage: 1,
-      totalPages: 1,
-      users,
-    });
+    const dashData = {
+      doctors: doctorsCount,
+      appointments: appointmentsCount,
+      patients: patientsCount,
+      latestAppointments,
+    };
+
+    res.json({ success: true, dashData });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to fetch users' });
-  }
-};
-
-// Toggle user status
-export const toggleUserStatus = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const { id } = req.params;
-
-    if (!isMongoConnected()) {
-      const u = memoryStore.users.find((item) => item._id === id || item.id === id);
-      if (u) {
-        u.isActive = !u.isActive;
-      }
-      res.json({ success: true, message: 'User status updated', user: u });
-      return;
-    }
-
-    const user = await User.findById(id);
-    if (!user) {
-      res.status(404).json({ success: false, message: 'User not found' });
-      return;
-    }
-
-    user.isActive = !user.isActive;
-    await user.save();
-
-    res.json({
-      success: true,
-      message: `User account has been ${user.isActive ? 'activated' : 'deactivated'}`,
-      user: { id: user._id, isActive: user.isActive },
-    });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to toggle user status' });
-  }
-};
-
-// Save Hospital
-export const saveHospital = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const { id } = req.params;
-    const hospitalData = req.body;
-
-    if (!isMongoConnected()) {
-      res.json({ success: true, message: 'Hospital saved successfully' });
-      return;
-    }
-
-    let hospital;
-    if (id) {
-      hospital = await Hospital.findByIdAndUpdate(id, hospitalData, { new: true });
-    } else {
-      hospital = await Hospital.create(hospitalData);
-    }
-
-    res.json({ success: true, message: 'Hospital saved successfully', hospital });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to save hospital' });
+    console.error('Admin Dashboard Error:', error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };

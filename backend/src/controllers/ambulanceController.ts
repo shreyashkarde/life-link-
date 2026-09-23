@@ -1,184 +1,148 @@
 import { Request, Response } from 'express';
 import { Ambulance } from '../models/Ambulance';
-import { AuthRequest } from '../middleware/auth';
+import { prescriptoStore } from '../config/prescriptoStore';
 import { isMongoConnected } from '../config/db';
-import { memoryStore } from '../config/mockStore';
+import { AuthRequest } from '../middleware/auth';
 
-// Helper to calculate approximate distance in KM using Haversine formula
-export const calculateDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+// Haversine distance in kilometers
+const calculateDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
   const R = 6371; // Earth's radius in km
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLon = ((lon2 - lon1) * Math.PI) / 180;
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return Math.round(R * c * 10) / 10;
 };
 
-// Get available nearby ambulances
-export const getNearbyAmbulances = async (req: Request, res: Response): Promise<void> => {
+// GET /api/ambulance/all
+export const getAllAmbulances = async (_req: Request, res: Response) => {
   try {
-    const { lat, lng, type } = req.query;
-    const userLat = lat ? parseFloat(lat as string) : 19.076;
-    const userLng = lng ? parseFloat(lng as string) : 72.8777;
-
-    if (!isMongoConnected()) {
-      let list = memoryStore.ambulances.filter((a) => a.isOnline);
-      if (type && type !== 'ALL') {
-        list = list.filter((a) => a.ambulanceType === type);
+    if (isMongoConnected()) {
+      const ambulances = await Ambulance.find({});
+      if (ambulances.length > 0) {
+        return res.json({ success: true, ambulances });
       }
+    }
+    return res.json({ success: true, ambulances: prescriptoStore.ambulances || [] });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
 
-      const results = list.map((amb) => {
-        const distance = calculateDistanceKm(userLat, userLng, amb.currentLocation.lat, amb.currentLocation.lng);
-        return {
-          ...amb,
-          distanceKm: distance,
-          etaMinutes: Math.max(3, Math.round(distance * 3)),
-          estimatedFare: Math.round(amb.baseFare + distance * amb.perKmRate),
-        };
-      });
+// GET /api/ambulance/nearby?lat=19.0760&lng=72.8777&radius=15
+export const getNearbyAmbulances = async (req: Request, res: Response) => {
+  try {
+    const lat = parseFloat(req.query.lat as string) || 19.0760;
+    const lng = parseFloat(req.query.lng as string) || 72.8777;
+    const maxRadiusKm = parseFloat(req.query.radius as string) || 25;
 
-      res.json({ success: true, count: results.length, ambulances: results });
-      return;
+    let fleet: any[] = [];
+    if (isMongoConnected()) {
+      fleet = await Ambulance.find({ isAvailable: true });
+    }
+    if (!fleet || fleet.length === 0) {
+      fleet = (prescriptoStore.ambulances || []).filter((a) => a.isAvailable !== false);
     }
 
-    const filter: any = { isOnline: true, status: 'AVAILABLE' };
-    if (type && type !== 'ALL') {
-      filter.ambulanceType = type;
-    }
-
-    const ambulances = await Ambulance.find(filter)
-      .populate('driverId', 'name email phone avatar')
-      .populate('hospitalId', 'name address contactNumber');
-
-    const results = ambulances.map((amb: any) => {
-      const distance = calculateDistanceKm(
-        userLat,
-        userLng,
-        amb.currentLocation.lat,
-        amb.currentLocation.lng
-      );
-      const etaMinutes = Math.max(3, Math.round(distance * 3));
-      const estimatedFare = Math.round(amb.baseFare + distance * amb.perKmRate);
+    const calculated = fleet.map((amb) => {
+      const ambLat = amb.currentLocation?.lat || 19.0760;
+      const ambLng = amb.currentLocation?.lng || 72.8777;
+      const distance = calculateDistanceKm(lat, lng, ambLat, ambLng);
+      // Rough ETA estimate: 2.5 mins per km in metropolitan conditions + 2 mins prep
+      const etaMinutes = Math.max(3, Math.round(distance * 2.5 + 2));
 
       return {
-        ...amb.toObject(),
+        ...amb,
         distanceKm: distance,
         etaMinutes,
-        estimatedFare,
       };
     });
 
-    results.sort((a, b) => a.distanceKm - b.distanceKm);
-    res.json({ success: true, count: results.length, ambulances: results });
+    // Filter by max radius & sort by closest
+    const nearby = calculated
+      .filter((a) => a.distanceKm <= maxRadiusKm)
+      .sort((a, b) => a.distanceKm - b.distanceKm);
+
+    return res.json({
+      success: true,
+      userLocation: { lat, lng },
+      count: nearby.length,
+      ambulances: nearby,
+    });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to fetch ambulances' });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// Driver: Get current driver ambulance profile & status
-export const getDriverProfile = async (req: AuthRequest, res: Response): Promise<void> => {
+// POST /api/ambulance/duty-toggle
+export const toggleDriverDuty = async (req: AuthRequest, res: Response) => {
   try {
-    const uId = req.user?._id || req.user?.id;
+    const { ambulanceId, isAvailable } = req.body;
+    const targetId = ambulanceId || req.user?.id;
 
-    if (!isMongoConnected()) {
-      const amb = memoryStore.ambulances.find((a) => a.driverId?._id === uId || a.driverId?.id === uId) || memoryStore.ambulances[0];
-      res.json({ success: true, ambulance: amb });
-      return;
-    }
-
-    const ambulance = await Ambulance.findOne({ driverId: req.user._id })
-      .populate('driverId', 'name email phone avatar')
-      .populate('hospitalId', 'name address emergencyNumber');
-
-    if (!ambulance) {
-      res.status(404).json({ success: false, message: 'No registered vehicle for this driver' });
-      return;
-    }
-
-    res.json({ success: true, ambulance });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to fetch driver profile' });
-  }
-};
-
-// Driver: Toggle Online / Offline Status
-export const toggleDriverStatus = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const { isOnline, status } = req.body;
-    const uId = req.user?._id || req.user?.id;
-
-    if (!isMongoConnected()) {
-      const amb = memoryStore.ambulances.find((a) => a.driverId?._id === uId || a.driverId?.id === uId) || memoryStore.ambulances[0];
+    if (isMongoConnected()) {
+      const amb = await Ambulance.findById(targetId);
       if (amb) {
-        if (isOnline !== undefined) amb.isOnline = isOnline;
-        if (status) amb.status = status;
+        amb.isAvailable = typeof isAvailable === 'boolean' ? isAvailable : !amb.isAvailable;
+        await amb.save();
+        return res.json({ success: true, message: 'Driver duty status updated', isAvailable: amb.isAvailable });
       }
-      res.json({ success: true, message: 'Driver status updated', ambulance: amb });
-      return;
     }
 
-    const ambulance = await Ambulance.findOne({ driverId: req.user._id });
-    if (!ambulance) {
-      res.status(404).json({ success: false, message: 'Ambulance profile not found' });
-      return;
+    // In-memory fallback
+    const amb = prescriptoStore.ambulances?.find((a) => a._id === targetId || a.driverId === targetId || a._id === 'amb_108');
+    if (amb) {
+      amb.isAvailable = typeof isAvailable === 'boolean' ? isAvailable : !amb.isAvailable;
+      return res.json({ success: true, message: 'Driver duty status updated', isAvailable: amb.isAvailable });
     }
 
-    if (isOnline !== undefined) {
-      ambulance.isOnline = isOnline;
-      ambulance.status = isOnline ? (status || 'AVAILABLE') : 'OFFLINE';
-    } else if (status) {
-      ambulance.status = status;
-    }
-
-    await ambulance.save();
-    res.json({ success: true, message: 'Driver status updated', ambulance });
+    return res.status(404).json({ success: false, message: 'Ambulance record not found' });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to toggle status' });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// Driver: Update Live Location coordinates
-export const updateLiveLocation = async (req: AuthRequest, res: Response): Promise<void> => {
+// PUT /api/ambulance/location
+export const updateAmbulanceLocation = async (req: AuthRequest, res: Response) => {
   try {
-    const { lat, lng, address, heading, speed } = req.body;
-    const uId = req.user?._id || req.user?.id;
+    const { ambulanceId, lat, lng, address, heading } = req.body;
+    const targetId = ambulanceId || req.user?.id;
 
-    if (!isMongoConnected()) {
-      const amb = memoryStore.ambulances.find((a) => a.driverId?._id === uId || a.driverId?.id === uId) || memoryStore.ambulances[0];
+    if (!lat || !lng) {
+      return res.status(400).json({ success: false, message: 'Valid lat & lng coordinates required' });
+    }
+
+    if (isMongoConnected()) {
+      const amb = await Ambulance.findById(targetId);
       if (amb) {
         amb.currentLocation = {
           lat,
           lng,
-          address: address || amb.currentLocation.address,
+          address: address || amb.currentLocation?.address,
           heading: heading || 0,
-          speed: speed || 0,
-          lastUpdated: new Date().toISOString(),
+          lastUpdated: new Date(),
         };
+        await amb.save();
+        return res.json({ success: true, message: 'Location updated', currentLocation: amb.currentLocation });
       }
-      res.json({ success: true, currentLocation: amb?.currentLocation });
-      return;
     }
 
-    const ambulance = await Ambulance.findOneAndUpdate(
-      { driverId: req.user._id },
-      {
-        'currentLocation.lat': lat,
-        'currentLocation.lng': lng,
-        ...(address && { 'currentLocation.address': address }),
-        ...(heading !== undefined && { 'currentLocation.heading': heading }),
-        ...(speed !== undefined && { 'currentLocation.speed': speed }),
-        'currentLocation.lastUpdated': new Date(),
-      },
-      { new: true }
-    );
+    const amb = prescriptoStore.ambulances?.find((a) => a._id === targetId || a._id === 'amb_108');
+    if (amb) {
+      amb.currentLocation = {
+        lat,
+        lng,
+        address: address || amb.currentLocation?.address,
+        heading: heading || 0,
+        lastUpdated: new Date(),
+      };
+      return res.json({ success: true, message: 'Location updated', currentLocation: amb.currentLocation });
+    }
 
-    res.json({ success: true, currentLocation: ambulance?.currentLocation });
+    return res.status(404).json({ success: false, message: 'Ambulance record not found' });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to update location' });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };

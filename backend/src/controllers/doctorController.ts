@@ -1,216 +1,338 @@
 import { Request, Response } from 'express';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import { Doctor } from '../models/Doctor';
-import { AuthRequest } from '../middleware/auth';
 import { Appointment } from '../models/Appointment';
+import { ENV } from '../config/env';
 import { isMongoConnected } from '../config/db';
-import { memoryStore } from '../config/mockStore';
+import { prescriptoStore } from '../config/prescriptoStore';
 
-// Get all doctors with filters
-export const getAllDoctors = async (req: Request, res: Response): Promise<void> => {
+// Public API to get doctor list for frontend display
+export const doctorList = async (_req: Request, res: Response): Promise<void> => {
   try {
-    const { specialization, search, minRating } = req.query;
-
     if (!isMongoConnected()) {
-      let filtered = [...memoryStore.doctors];
-
-      if (specialization && specialization !== 'All') {
-        filtered = filtered.filter(
-          (d) => d.specialization.toLowerCase() === (specialization as string).toLowerCase()
-        );
-      }
-
-      if (minRating) {
-        filtered = filtered.filter((d) => d.averageRating >= Number(minRating));
-      }
-
-      if (search) {
-        const q = (search as string).toLowerCase();
-        filtered = filtered.filter(
-          (d) =>
-            d.userId?.name?.toLowerCase().includes(q) ||
-            d.specialization?.toLowerCase().includes(q)
-        );
-      }
-
-      res.json({
-        success: true,
-        count: filtered.length,
-        total: filtered.length,
-        currentPage: 1,
-        totalPages: 1,
-        doctors: filtered,
-      });
+      const doctors = prescriptoStore.doctors.map(({ password, email, ...rest }) => rest);
+      res.json({ success: true, doctors });
       return;
     }
+    const doctors = await Doctor.find({}).select(['-password', '-email']);
+    res.json({ success: true, doctors });
+  } catch (error: any) {
+    console.error('Doctor List Error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
 
-    const filter: any = {};
-    if (specialization && specialization !== 'All') {
-      filter.specialization = new RegExp(`^${specialization}$`, 'i');
-    }
+// API for Doctor Login
+export const loginDoctor = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email, password } = req.body;
 
-    if (minRating) {
-      filter.averageRating = { $gte: Number(minRating) };
-    }
-
-    let doctors = await Doctor.find(filter)
-      .populate('userId', 'name email phone avatar')
-      .populate('hospitalId', 'name address city emergencyNumber')
-      .sort({ averageRating: -1 })
-      .exec();
-
-    if (search) {
-      const searchRegex = new RegExp(search as string, 'i');
-      doctors = doctors.filter((doc: any) =>
-        doc.userId && searchRegex.test(doc.userId.name)
+    if (!isMongoConnected()) {
+      const doctor = prescriptoStore.doctors.find((d) => d.email === email);
+      if (!doctor) {
+        res.status(400).json({ success: false, message: 'Invalid credentials. Doctor not found.' });
+        return;
+      }
+      const isMatch = await bcrypt.compare(password, doctor.password || '');
+      if (!isMatch) {
+        res.status(400).json({ success: false, message: 'Invalid password' });
+        return;
+      }
+      const token = jwt.sign(
+        { id: doctor._id, role: 'doctor' },
+        ENV.JWT_SECRET,
+        { expiresIn: '7d' }
       );
-    }
-
-    res.json({
-      success: true,
-      count: doctors.length,
-      total: doctors.length,
-      currentPage: 1,
-      totalPages: 1,
-      doctors,
-    });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to fetch doctors' });
-  }
-};
-
-// Get single doctor details
-export const getDoctorById = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { id } = req.params;
-
-    if (!isMongoConnected()) {
-      const doc = memoryStore.doctors[0];
-      res.json({ success: true, doctor: doc });
-      return;
-    }
-
-    const doctor = await Doctor.findById(id)
-      .populate('userId', 'name email phone avatar')
-      .populate('hospitalId', 'name address city contactNumber emergencyNumber');
-
-    if (!doctor) {
-      res.status(404).json({ success: false, message: 'Doctor not found' });
-      return;
-    }
-
-    res.json({ success: true, doctor });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to fetch doctor' });
-  }
-};
-
-// Update Doctor profile
-export const updateDoctorProfile = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    if (!req.user || req.user.role !== 'DOCTOR') {
-      res.status(403).json({ success: false, message: 'Access denied: Doctor role required' });
-      return;
-    }
-
-    if (!isMongoConnected()) {
-      res.json({ success: true, message: 'Doctor profile updated' });
-      return;
-    }
-
-    const { specialization, qualifications, experienceYears, consultationFee, bio, isAvailableToday } = req.body;
-    const doctor = await Doctor.findOneAndUpdate(
-      { userId: req.user._id },
-      {
-        ...(specialization && { specialization }),
-        ...(qualifications && { qualifications }),
-        ...(experienceYears !== undefined && { experienceYears }),
-        ...(consultationFee !== undefined && { consultationFee }),
-        ...(bio !== undefined && { bio }),
-        ...(isAvailableToday !== undefined && { isAvailableToday }),
-      },
-      { new: true }
-    ).populate('userId', 'name email phone avatar');
-
-    res.json({ success: true, message: 'Doctor profile updated', doctor });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to update profile' });
-  }
-};
-
-// Update Doctor slots
-export const updateDoctorSlots = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const { slots } = req.body;
-
-    if (!isMongoConnected()) {
-      const uId = req.user?._id || req.user?.id;
-      const doc = memoryStore.doctors.find((d) => d.userId?._id === uId || d.userId?.id === uId) || memoryStore.doctors[0];
-      if (doc) {
-        doc.availableSlots = slots;
-      }
-      res.json({ success: true, message: 'Slots updated successfully', slots });
-      return;
-    }
-
-    const doctor = await Doctor.findOne({ userId: req.user._id });
-    if (!doctor) {
-      res.status(404).json({ success: false, message: 'Doctor profile not found' });
-      return;
-    }
-
-    doctor.availableSlots = slots;
-    await doctor.save();
-
-    res.json({ success: true, message: 'Slots updated successfully', slots: doctor.availableSlots });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to update slots' });
-  }
-};
-
-// Doctor Dashboard Stats
-export const getDoctorDashboardStats = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    if (!isMongoConnected()) {
-      const uId = req.user?._id || req.user?.id;
-      const doc = memoryStore.doctors.find((d) => d.userId?._id === uId || d.userId?.id === uId) || memoryStore.doctors[0];
       res.json({
         success: true,
-        stats: {
-          totalAppointments: memoryStore.appointments.length,
-          pendingAppointments: memoryStore.appointments.filter((a) => a.status === 'BOOKED').length,
-          completedAppointments: memoryStore.appointments.filter((a) => a.status === 'COMPLETED').length,
-          averageRating: doc?.averageRating || 4.9,
-          reviewCount: doc?.reviewCount || 48,
-          consultationFee: doc?.consultationFee || 800,
-          availableSlotsCount: doc?.availableSlots?.filter((s: any) => !s.isBooked).length || 4,
+        token,
+        doctor: {
+          _id: doctor._id,
+          name: doctor.name,
+          email: doctor.email,
+          image: doctor.image,
+          speciality: doctor.speciality,
         },
       });
       return;
     }
 
-    const doctor = await Doctor.findOne({ userId: req.user._id });
+    const doctor = await Doctor.findOne({ email });
     if (!doctor) {
-      res.status(404).json({ success: false, message: 'Doctor not found' });
+      res.status(400).json({ success: false, message: 'Invalid credentials. Doctor not found.' });
       return;
     }
 
-    const totalAppointments = await Appointment.countDocuments({ doctorId: doctor._id });
-    const pendingAppointments = await Appointment.countDocuments({ doctorId: doctor._id, status: 'BOOKED' });
-    const completedAppointments = await Appointment.countDocuments({ doctorId: doctor._id, status: 'COMPLETED' });
+    const isMatch = await bcrypt.compare(password, doctor.password || '');
+    if (!isMatch) {
+      res.status(400).json({ success: false, message: 'Invalid password' });
+      return;
+    }
+
+    const token = jwt.sign(
+      { id: doctor._id, role: 'doctor' },
+      ENV.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
 
     res.json({
       success: true,
-      stats: {
-        totalAppointments,
-        pendingAppointments,
-        completedAppointments,
-        averageRating: doctor.averageRating,
-        reviewCount: doctor.reviewCount,
-        consultationFee: doctor.consultationFee,
-        availableSlotsCount: doctor.availableSlots.filter((s) => !s.isBooked).length,
+      token,
+      doctor: {
+        _id: doctor._id,
+        name: doctor.name,
+        email: doctor.email,
+        image: doctor.image,
+        speciality: doctor.speciality,
       },
     });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to fetch doctor stats' });
+    console.error('Doctor Login Error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// API to get doctor appointments for doctor panel
+export const appointmentsDoctor = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const docId = req.body.docId || res.locals.docId;
+
+    if (!isMongoConnected()) {
+      const appointments = prescriptoStore.appointments.filter(
+        (a) => a.docId === docId || a.docData?._id === docId
+      );
+      res.json({ success: true, appointments });
+      return;
+    }
+
+    const appointments = await Appointment.find({ docId }).sort({ createdAt: -1 });
+    res.json({ success: true, appointments });
+  } catch (error: any) {
+    console.error('Doctor Appointments Error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// API to mark appointment completed by doctor
+export const appointmentComplete = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { appointmentId } = req.body;
+    const docId = req.body.docId || res.locals.docId;
+
+    if (!isMongoConnected()) {
+      const appt = prescriptoStore.appointments.find((a) => a._id === appointmentId);
+      if (!appt) {
+        res.status(404).json({ success: false, message: 'Appointment not found' });
+        return;
+      }
+      appt.isCompleted = true;
+      res.json({ success: true, message: 'Appointment Completed Successfully' });
+      return;
+    }
+
+    const appointmentData = await Appointment.findById(appointmentId);
+    if (!appointmentData) {
+      res.status(404).json({ success: false, message: 'Appointment not found' });
+      return;
+    }
+
+    if (appointmentData.docId.toString() !== docId.toString()) {
+      res.status(403).json({ success: false, message: 'Unauthorized action on this appointment' });
+      return;
+    }
+
+    appointmentData.isCompleted = true;
+    await appointmentData.save();
+
+    res.json({ success: true, message: 'Appointment Completed Successfully' });
+  } catch (error: any) {
+    console.error('Complete Appointment Error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// API to cancel appointment by doctor
+export const appointmentCancel = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { appointmentId } = req.body;
+    const docId = req.body.docId || res.locals.docId;
+
+    if (!isMongoConnected()) {
+      const appt = prescriptoStore.appointments.find((a) => a._id === appointmentId);
+      if (!appt) {
+        res.status(404).json({ success: false, message: 'Appointment not found' });
+        return;
+      }
+      appt.cancelled = true;
+      const doc = prescriptoStore.doctors.find((d) => d._id === docId);
+      if (doc && doc.slots_booked && doc.slots_booked[appt.slotDate]) {
+        doc.slots_booked[appt.slotDate] = doc.slots_booked[appt.slotDate].filter(
+          (t: string) => t !== appt.slotTime
+        );
+      }
+      res.json({ success: true, message: 'Appointment Cancelled' });
+      return;
+    }
+
+    const appointmentData = await Appointment.findById(appointmentId);
+    if (!appointmentData) {
+      res.status(404).json({ success: false, message: 'Appointment not found' });
+      return;
+    }
+
+    if (appointmentData.docId.toString() !== docId.toString()) {
+      res.status(403).json({ success: false, message: 'Unauthorized action on this appointment' });
+      return;
+    }
+
+    appointmentData.cancelled = true;
+    await appointmentData.save();
+
+    const { slotDate, slotTime } = appointmentData;
+    const doctor = await Doctor.findById(docId);
+    if (doctor && doctor.slots_booked && doctor.slots_booked[slotDate]) {
+      doctor.slots_booked[slotDate] = doctor.slots_booked[slotDate].filter(
+        (time: string) => time !== slotTime
+      );
+      doctor.markModified('slots_booked');
+      await doctor.save();
+    }
+
+    res.json({ success: true, message: 'Appointment Cancelled' });
+  } catch (error: any) {
+    console.error('Doctor Cancel Appointment Error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// API to get doctor dashboard data
+export const doctorDashboard = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const docId = req.body.docId || res.locals.docId;
+
+    if (!isMongoConnected()) {
+      const docAppointments = prescriptoStore.appointments.filter(
+        (a) => a.docId === docId || a.docData?._id === docId
+      );
+      let earnings = 0;
+      const patientIds = new Set<string>();
+
+      docAppointments.forEach((item) => {
+        if (item.isCompleted || item.payment) {
+          earnings += item.amount;
+        }
+        if (item.userId) {
+          patientIds.add(item.userId.toString());
+        }
+      });
+
+      res.json({
+        success: true,
+        dashData: {
+          earnings,
+          appointments: docAppointments.length,
+          patients: patientIds.size,
+          latestAppointments: docAppointments.slice(0, 5),
+        },
+      });
+      return;
+    }
+
+    const appointments = await Appointment.find({ docId });
+    let earnings = 0;
+    const patientIds = new Set<string>();
+
+    appointments.forEach((item) => {
+      if (item.isCompleted || item.payment) {
+        earnings += item.amount;
+      }
+      if (item.userId) {
+        patientIds.add(item.userId.toString());
+      }
+    });
+
+    const latestAppointments = await Appointment.find({ docId })
+      .sort({ createdAt: -1 })
+      .limit(5);
+
+    const dashData = {
+      earnings,
+      appointments: appointments.length,
+      patients: patientIds.size,
+      latestAppointments,
+    };
+
+    res.json({ success: true, dashData });
+  } catch (error: any) {
+    console.error('Doctor Dashboard Error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// API to get doctor profile for doctor panel
+export const doctorProfile = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const docId = req.body.docId || res.locals.docId;
+
+    if (!isMongoConnected()) {
+      const doc = prescriptoStore.doctors.find((d) => d._id === docId || d.id === docId);
+      if (!doc) {
+        res.status(404).json({ success: false, message: 'Doctor profile not found' });
+        return;
+      }
+      const { password, ...profileData } = doc;
+      res.json({ success: true, profileData });
+      return;
+    }
+
+    const profileData = await Doctor.findById(docId).select('-password');
+    if (!profileData) {
+      res.status(404).json({ success: false, message: 'Doctor profile not found' });
+      return;
+    }
+    res.json({ success: true, profileData });
+  } catch (error: any) {
+    console.error('Doctor Profile Error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// API to update doctor profile data from doctor panel
+export const updateDoctorProfile = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const docId = req.body.docId || res.locals.docId;
+    const { fees, address, available } = req.body;
+
+    let parsedAddress = address;
+    if (typeof address === 'string') {
+      try {
+        parsedAddress = JSON.parse(address);
+      } catch {
+        parsedAddress = { line1: address, line2: '' };
+      }
+    }
+
+    if (!isMongoConnected()) {
+      const doc = prescriptoStore.doctors.find((d) => d._id === docId);
+      if (doc) {
+        if (fees !== undefined) doc.fees = Number(fees);
+        if (parsedAddress !== undefined) doc.address = parsedAddress;
+        if (available !== undefined) doc.available = Boolean(available);
+      }
+      res.json({ success: true, message: 'Profile Updated Successfully' });
+      return;
+    }
+
+    await Doctor.findByIdAndUpdate(docId, {
+      fees: Number(fees),
+      address: parsedAddress,
+      available: Boolean(available),
+    });
+
+    res.json({ success: true, message: 'Profile Updated Successfully' });
+  } catch (error: any) {
+    console.error('Update Doctor Profile Error:', error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };

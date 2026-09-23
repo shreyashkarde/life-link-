@@ -1,26 +1,23 @@
-import { Router } from 'express';
+import express from 'express';
 import {
-  createBooking,
-  createSOSBooking,
-  driverResponseBooking,
+  createAmbulanceBooking,
+  triggerEmergencySOS,
+  acceptBooking,
   updateBookingStatus,
-  getBookingById,
   getPatientBookings,
-  getDriverBookings,
+  getDriverTrips,
+  getBookingById,
 } from '../controllers/bookingController';
-import { authenticateJWT } from '../middleware/auth';
-import { authorizeRoles } from '../middleware/roleAuth';
+import { authenticate } from '../middleware/auth';
 
-const router = Router();
+const bookingRouter = express.Router();
 
-router.use(authenticateJWT);
+bookingRouter.post('/create', authenticate, createAmbulanceBooking);
+bookingRouter.post('/emergency-sos', authenticate, triggerEmergencySOS);
+bookingRouter.post('/accept', authenticate, acceptBooking);
+bookingRouter.post('/status', authenticate, updateBookingStatus);
+bookingRouter.get('/my-bookings', authenticate, getPatientBookings);
+bookingRouter.get('/driver-trips', authenticate, getDriverTrips);
+bookingRouter.get('/:bookingId', authenticate, getBookingById);
 
-router.post('/create', createBooking);
-router.post('/emergency-sos', createSOSBooking);
-router.get('/patient/history', getPatientBookings);
-router.get('/driver/history', authorizeRoles('DRIVER'), getDriverBookings);
-router.get('/:id', getBookingById);
-router.put('/:id/driver-response', authorizeRoles('DRIVER'), driverResponseBooking);
-router.put('/:id/status', updateBookingStatus);
-
-export default router;
+export default bookingRouter;

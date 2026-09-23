@@ -1,10 +1,10 @@
-import { Router } from 'express';
-import { createRating, getTargetRatings } from '../controllers/ratingController';
-import { authenticateJWT } from '../middleware/auth';
+import express from 'express';
+import { submitRating, getRatingsForTarget } from '../controllers/ratingController';
+import { authenticate } from '../middleware/auth';
 
-const router = Router();
+const ratingRouter = express.Router();
 
-router.post('/create', authenticateJWT, createRating);
-router.get('/:targetType/:targetId', getTargetRatings);
+ratingRouter.post('/submit', authenticate, submitRating);
+ratingRouter.get('/:targetType/:targetId', getRatingsForTarget);
 
-export default router;
+export default ratingRouter;

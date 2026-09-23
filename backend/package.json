@@ -1,7 +1,7 @@
 {
-  "name": "lifelink-backend",
+  "name": "prescripto-backend",
   "version": "1.0.0",
-  "description": "Smart Healthcare & Ambulance Booking Platform Backend",
+  "description": "Prescripto Full Stack Doctor Appointment Booking System Backend (MERN)",
   "main": "dist/server.js",
   "scripts": {
     "dev": "ts-node src/server.ts",

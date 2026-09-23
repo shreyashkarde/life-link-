@@ -1,47 +1,56 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
-import { ENV } from '../config/env';
-import { User, IUser } from '../models/User';
-import { isMongoConnected } from '../config/db';
-import { memoryStore } from '../config/mockStore';
+import { TokenService, UserTokenPayload } from '../services/tokenService';
 
 export interface AuthRequest extends Request {
   user?: any;
 }
 
-export const authenticateJWT = async (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
+/**
+ * 🔐 auth.ts (Authentication Middleware)
+ * Validates JWT access token from Authorization header or cookie.
+ * Attaches decoded user { id, role, email } to req.user.
+ */
+export const authenticateJWT = (req: Request, res: Response, next: NextFunction): void => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      res.status(401).json({ success: false, message: 'Authentication token missing or invalid.' });
+    const authHeader = req.headers.authorization || (req.headers.token as string);
+
+    if (!authHeader) {
+      res.status(401).json({
+        success: false,
+        message: 'Access Denied: Missing Authorization token',
+      });
       return;
     }
 
-    const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, ENV.JWT_SECRET) as { id: string; role: string };
+    const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : authHeader;
 
-    let user: any = null;
-
-    if (isMongoConnected()) {
-      user = await User.findById(decoded.id).select('-password');
-    } else {
-      user = memoryStore.users.find(
-        (u) => (u._id && u._id.toString() === decoded.id) || (u.id && u.id.toString() === decoded.id)
-      );
-    }
-
-    if (!user || (user.isActive !== undefined && !user.isActive)) {
-      res.status(401).json({ success: false, message: 'User not found or account deactivated.' });
+    if (!token) {
+      res.status(401).json({
+        success: false,
+        message: 'Access Denied: Invalid Bearer token format',
+      });
       return;
     }
 
-    req.user = user;
+    const decoded = TokenService.verifyAccessToken(token);
+
+    if (!decoded) {
+      res.status(401).json({
+        success: false,
+        message: 'Access Denied: Token is invalid or has expired',
+      });
+      return;
+    }
+
+    req.user = decoded;
     next();
-  } catch (error) {
-    res.status(401).json({ success: false, message: 'Invalid or expired authentication token.' });
+  } catch (error: any) {
+    res.status(401).json({
+      success: false,
+      message: 'Authentication failed',
+    });
   }
 };
+
+export const authenticate = authenticateJWT;
+export default authenticateJWT;

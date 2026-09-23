@@ -1,51 +1,46 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
-export interface IDoctorSlot {
-  _id?: mongoose.Types.ObjectId;
-  date: string; // YYYY-MM-DD
-  startTime: string; // HH:mm (e.g. "09:00")
-  endTime: string; // HH:mm (e.g. "09:30")
-  isBooked: boolean;
+export interface IDoctorAddress {
+  line1: string;
+  line2: string;
 }
 
 export interface IDoctor extends Document {
-  userId: mongoose.Types.ObjectId;
-  hospitalId?: mongoose.Types.ObjectId;
-  specialization: string;
-  qualifications: string;
-  experienceYears: number;
-  consultationFee: number;
-  bio?: string;
-  availableSlots: IDoctorSlot[];
-  averageRating: number;
-  reviewCount: number;
-  isAvailableToday: boolean;
+  name: string;
+  email: string;
+  password?: string;
+  image: string;
+  speciality: string;
+  degree: string;
+  experience: string;
+  about: string;
+  available: boolean;
+  fees: number;
+  address: IDoctorAddress;
+  date: number;
+  slots_booked: Record<string, string[]>;
   createdAt: Date;
   updatedAt: Date;
 }
 
-const DoctorSlotSchema = new Schema<IDoctorSlot>({
-  date: { type: String, required: true },
-  startTime: { type: String, required: true },
-  endTime: { type: String, required: true },
-  isBooked: { type: Boolean, default: false },
-});
-
-const DoctorSchema = new Schema<IDoctor>(
+const doctorSchema = new Schema<IDoctor>(
   {
-    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
-    hospitalId: { type: Schema.Types.ObjectId, ref: 'Hospital' },
-    specialization: { type: String, required: true, trim: true },
-    qualifications: { type: String, required: true },
-    experienceYears: { type: Number, default: 5 },
-    consultationFee: { type: Number, default: 500 },
-    bio: { type: String, default: '' },
-    availableSlots: [DoctorSlotSchema],
-    averageRating: { type: Number, default: 4.8 },
-    reviewCount: { type: Number, default: 0 },
-    isAvailableToday: { type: Boolean, default: true },
+    name: { type: String, required: true },
+    email: { type: String, required: true, unique: true },
+    password: { type: String, required: true },
+    image: { type: String, required: true },
+    speciality: { type: String, required: true },
+    degree: { type: String, required: true },
+    experience: { type: String, required: true },
+    about: { type: String, required: true },
+    available: { type: Boolean, default: true },
+    fees: { type: Number, required: true },
+    address: { type: Object, required: true },
+    date: { type: Number, required: true },
+    slots_booked: { type: Object, default: {} },
   },
-  { timestamps: true }
+  { timestamps: true, minimize: false }
 );
 
-export const Doctor = mongoose.model<IDoctor>('Doctor', DoctorSchema);
+export const Doctor = mongoose.models.Doctor || mongoose.model<IDoctor>('Doctor', doctorSchema);
+export default Doctor;

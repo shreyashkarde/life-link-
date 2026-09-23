@@ -1,68 +1,69 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
-export type AmbulanceType = 'BASIC' | 'ADVANCED_ALS' | 'OXYGEN_BLS';
-export type AmbulanceStatus = 'AVAILABLE' | 'ON_TRIP' | 'OFFLINE';
+export type AmbulanceType = 'BASIC' | 'ADVANCED' | 'ICU' | 'NEONATAL';
+export type AmbulanceStatus = 'IDLE' | 'ASSIGNED' | 'EN_ROUTE_PICKUP' | 'PATIENT_ONBOARD' | 'COMPLETED';
+
+export interface IAmbulanceLocation {
+  lat: number;
+  lng: number;
+  address?: string;
+  heading?: number;
+  lastUpdated: Date;
+}
 
 export interface IAmbulance extends Document {
-  driverId: mongoose.Types.ObjectId;
-  hospitalId?: mongoose.Types.ObjectId;
+  driverName: string;
+  driverPhone: string;
+  driverEmail: string;
+  driverId?: string;
   vehicleNumber: string;
-  vehicleModel: string;
   ambulanceType: AmbulanceType;
-  isOnline: boolean;
-  status: AmbulanceStatus;
-  currentLocation: {
-    lat: number;
-    lng: number;
-    address?: string;
-    heading?: number;
-    speed?: number;
-    lastUpdated: Date;
-  };
-  baseFare: number;
-  perKmRate: number;
-  averageRating: number;
-  totalRides: number;
-  equipmentList: string[];
+  currentLocation: IAmbulanceLocation;
+  isAvailable: boolean; // Online / Offline toggle
+  currentStatus: AmbulanceStatus;
+  assignedHospital: string;
+  rating: number;
+  reviewCount: number;
+  equipmentList?: string[];
   createdAt: Date;
   updatedAt: Date;
 }
 
-const AmbulanceSchema = new Schema<IAmbulance>(
+const ambulanceSchema = new Schema<IAmbulance>(
   {
-    driverId: { type: Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
-    hospitalId: { type: Schema.Types.ObjectId, ref: 'Hospital' },
-    vehicleNumber: { type: String, required: true, uppercase: true, trim: true },
-    vehicleModel: { type: String, default: 'Force Traveller Medical Van' },
+    driverName: { type: String, required: true },
+    driverPhone: { type: String, required: true },
+    driverEmail: { type: String, required: true },
+    driverId: { type: String, required: false },
+    vehicleNumber: { type: String, required: true, unique: true },
     ambulanceType: {
       type: String,
-      enum: ['BASIC', 'ADVANCED_ALS', 'OXYGEN_BLS'],
-      default: 'BASIC',
-    },
-    isOnline: { type: Boolean, default: false },
-    status: {
-      type: String,
-      enum: ['AVAILABLE', 'ON_TRIP', 'OFFLINE'],
-      default: 'OFFLINE',
+      enum: ['BASIC', 'ADVANCED', 'ICU', 'NEONATAL'],
+      default: 'ADVANCED',
     },
     currentLocation: {
-      lat: { type: Number, required: true, default: 19.076 },
-      lng: { type: Number, required: true, default: 72.8777 },
-      address: { type: String, default: 'Central Hub Station' },
+      lat: { type: Number, default: 19.0760 },
+      lng: { type: Number, default: 72.8777 },
+      address: { type: String, default: 'Central Emergency Station' },
       heading: { type: Number, default: 0 },
-      speed: { type: Number, default: 0 },
       lastUpdated: { type: Date, default: Date.now },
     },
-    baseFare: { type: Number, default: 499 },
-    perKmRate: { type: Number, default: 25 },
-    averageRating: { type: Number, default: 4.9 },
-    totalRides: { type: Number, default: 0 },
+    isAvailable: { type: Boolean, default: true },
+    currentStatus: {
+      type: String,
+      enum: ['IDLE', 'ASSIGNED', 'EN_ROUTE_PICKUP', 'PATIENT_ONBOARD', 'COMPLETED'],
+      default: 'IDLE',
+    },
+    assignedHospital: { type: String, default: 'City Care Central Hospital' },
+    rating: { type: Number, default: 4.9 },
+    reviewCount: { type: Number, default: 35 },
     equipmentList: {
       type: [String],
-      default: ['ECG Monitor', 'Oxygen Cylinder', 'First Aid Trauma Kit', 'Stretcher Bed', 'Suction Machine'],
+      default: ['Oxygen Tank', 'Defibrillator (AED)', 'ECG Monitor', 'Emergency Stretcher', 'First-Aid Trauma Kit'],
     },
   },
   { timestamps: true }
 );
 
-export const Ambulance = mongoose.model<IAmbulance>('Ambulance', AmbulanceSchema);
+export const Ambulance = mongoose.models.Ambulance || mongoose.model<IAmbulance>('Ambulance', ambulanceSchema);
+export default Ambulance;

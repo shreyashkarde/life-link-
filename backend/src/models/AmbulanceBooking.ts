@@ -1,110 +1,104 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
-export type BookingStatus =
-  | 'PENDING'
-  | 'ACCEPTED'
-  | 'ONGOING'
-  | 'ARRIVED_AT_PATIENT'
-  | 'ARRIVED_AT_HOSPITAL'
-  | 'COMPLETED'
-  | 'CANCELLED';
+export type BookingType = 'NORMAL' | 'EMERGENCY_SOS';
+export type BookingStatus = 'PENDING' | 'ACCEPTED' | 'ONGOING' | 'COMPLETED' | 'CANCELLED';
+export type EmergencySeverity = 'LOW' | 'MEDIUM' | 'CRITICAL_CODE_RED';
+export type PaymentStatus = 'PENDING' | 'PAID_ONLINE' | 'CASH';
 
-export type TripType = 'STANDARD' | 'SOS_EMERGENCY';
+export interface ILocationPoint {
+  address: string;
+  lat: number;
+  lng: number;
+}
+
+export interface IBookingTimeline {
+  bookedAt: Date;
+  acceptedAt?: Date;
+  arrivedAt?: Date;
+  completedAt?: Date;
+  cancelledAt?: Date;
+}
 
 export interface IAmbulanceBooking extends Document {
-  patientId: mongoose.Types.ObjectId;
-  driverId?: mongoose.Types.ObjectId;
-  ambulanceId?: mongoose.Types.ObjectId;
-  hospitalId?: mongoose.Types.ObjectId;
-  pickupLocation: {
+  patientId: string;
+  patientName: string;
+  patientPhone: string;
+  ambulanceId?: string;
+  driverName?: string;
+  driverPhone?: string;
+  vehicleNumber?: string;
+  pickupLocation: ILocationPoint;
+  destinationHospital: {
+    name: string;
+    address: string;
     lat: number;
     lng: number;
-    address: string;
   };
-  destinationLocation?: {
-    lat: number;
-    lng: number;
-    address: string;
-  };
-  ambulanceType: 'BASIC' | 'ADVANCED_ALS' | 'OXYGEN_BLS';
-  tripType: TripType;
+  bookingType: BookingType;
   status: BookingStatus;
-  fare: number;
-  distanceKm: number;
-  etaMinutes: number;
-  driverLiveLocation?: {
-    lat: number;
-    lng: number;
-    heading?: number;
-    lastUpdated?: Date;
-  };
+  emergencySeverity: EmergencySeverity;
   patientCondition?: string;
-  emergencyNotes?: string;
-  isSOS: boolean;
-  acceptedAt?: Date;
-  completedAt?: Date;
+  fare: number;
+  paymentStatus: PaymentStatus;
+  timeline: IBookingTimeline;
   createdAt: Date;
   updatedAt: Date;
 }
 
-const AmbulanceBookingSchema = new Schema<IAmbulanceBooking>(
+const ambulanceBookingSchema = new Schema<IAmbulanceBooking>(
   {
-    patientId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    driverId: { type: Schema.Types.ObjectId, ref: 'User' },
-    ambulanceId: { type: Schema.Types.ObjectId, ref: 'Ambulance' },
-    hospitalId: { type: Schema.Types.ObjectId, ref: 'Hospital' },
+    patientId: { type: String, required: true },
+    patientName: { type: String, required: true },
+    patientPhone: { type: String, required: true },
+    ambulanceId: { type: String, required: false },
+    driverName: { type: String, required: false },
+    driverPhone: { type: String, required: false },
+    vehicleNumber: { type: String, required: false },
     pickupLocation: {
+      address: { type: String, required: true },
       lat: { type: Number, required: true },
       lng: { type: Number, required: true },
-      address: { type: String, required: true },
     },
-    destinationLocation: {
-      lat: { type: Number },
-      lng: { type: Number },
-      address: { type: String, default: 'Nearest Emergency Care Center' },
+    destinationHospital: {
+      name: { type: String, default: 'City Care Central Hospital' },
+      address: { type: String, default: 'Trauma Bay & Emergency Ward, Sector 4' },
+      lat: { type: Number, default: 19.0760 },
+      lng: { type: Number, default: 72.8777 },
     },
-    ambulanceType: {
+    bookingType: {
       type: String,
-      enum: ['BASIC', 'ADVANCED_ALS', 'OXYGEN_BLS'],
-      default: 'BASIC',
-    },
-    tripType: {
-      type: String,
-      enum: ['STANDARD', 'SOS_EMERGENCY'],
-      default: 'STANDARD',
+      enum: ['NORMAL', 'EMERGENCY_SOS'],
+      default: 'NORMAL',
     },
     status: {
       type: String,
-      enum: [
-        'PENDING',
-        'ACCEPTED',
-        'ONGOING',
-        'ARRIVED_AT_PATIENT',
-        'ARRIVED_AT_HOSPITAL',
-        'COMPLETED',
-        'CANCELLED',
-      ],
+      enum: ['PENDING', 'ACCEPTED', 'ONGOING', 'COMPLETED', 'CANCELLED'],
       default: 'PENDING',
     },
-    fare: { type: Number, default: 499 },
-    distanceKm: { type: Number, default: 3.5 },
-    etaMinutes: { type: Number, default: 8 },
-    driverLiveLocation: {
-      lat: { type: Number },
-      lng: { type: Number },
-      heading: { type: Number, default: 0 },
-      lastUpdated: { type: Date },
+    emergencySeverity: {
+      type: String,
+      enum: ['LOW', 'MEDIUM', 'CRITICAL_CODE_RED'],
+      default: 'MEDIUM',
     },
-    patientCondition: { type: String, default: 'Stable / Standard Transfer' },
-    emergencyNotes: { type: String, default: '' },
-    isSOS: { type: Boolean, default: false },
-    acceptedAt: { type: Date },
-    completedAt: { type: Date },
+    patientCondition: { type: String, default: 'Urgent Care Request' },
+    fare: { type: Number, default: 120 },
+    paymentStatus: {
+      type: String,
+      enum: ['PENDING', 'PAID_ONLINE', 'CASH'],
+      default: 'PENDING',
+    },
+    timeline: {
+      bookedAt: { type: Date, default: Date.now },
+      acceptedAt: { type: Date },
+      arrivedAt: { type: Date },
+      completedAt: { type: Date },
+      cancelledAt: { type: Date },
+    },
   },
   { timestamps: true }
 );
 
-export const AmbulanceBooking = mongoose.model<IAmbulanceBooking>(
-  'AmbulanceBooking',
-  AmbulanceBookingSchema
-);
+export const AmbulanceBooking =
+  mongoose.models.AmbulanceBooking ||
+  mongoose.model<IAmbulanceBooking>('AmbulanceBooking', ambulanceBookingSchema);
+export default AmbulanceBooking;

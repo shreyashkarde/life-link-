@@ -1,23 +1,31 @@
-import { Router } from 'express';
+import express from 'express';
 import {
-  getAllDoctors,
-  getDoctorById,
+  doctorList,
+  loginDoctor,
+  appointmentsDoctor,
+  appointmentComplete,
+  appointmentCancel,
+  doctorDashboard,
+  doctorProfile,
   updateDoctorProfile,
-  updateDoctorSlots,
-  getDoctorDashboardStats,
 } from '../controllers/doctorController';
-import { authenticateJWT } from '../middleware/auth';
-import { authorizeRoles } from '../middleware/roleAuth';
+import { authDoctor } from '../middleware/authDoctor';
 
-const router = Router();
+const doctorRouter = express.Router();
 
-// Public doctor discovery
-router.get('/', getAllDoctors);
-router.get('/:id', getDoctorById);
+// Public doctor directory
+doctorRouter.get('/list', doctorList);
 
-// Doctor Dashboard protected actions
-router.put('/profile/update', authenticateJWT, authorizeRoles('DOCTOR'), updateDoctorProfile);
-router.put('/slots/update', authenticateJWT, authorizeRoles('DOCTOR'), updateDoctorSlots);
-router.get('/dashboard/stats', authenticateJWT, authorizeRoles('DOCTOR'), getDoctorDashboardStats);
+// Doctor auth & panel routes
+doctorRouter.post('/login', loginDoctor);
+doctorRouter.get('/appointments', authDoctor, appointmentsDoctor);
+doctorRouter.post('/appointments', authDoctor, appointmentsDoctor);
+doctorRouter.post('/complete-appointment', authDoctor, appointmentComplete);
+doctorRouter.post('/cancel-appointment', authDoctor, appointmentCancel);
+doctorRouter.get('/dashboard', authDoctor, doctorDashboard);
+doctorRouter.post('/dashboard', authDoctor, doctorDashboard);
+doctorRouter.get('/profile', authDoctor, doctorProfile);
+doctorRouter.post('/profile', authDoctor, doctorProfile);
+doctorRouter.post('/update-profile', authDoctor, updateDoctorProfile);
 
-export default router;
+export default doctorRouter;

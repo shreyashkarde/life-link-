@@ -1,12 +1,12 @@
-import { Router } from 'express';
-import { register, login, googleLogin, getProfile } from '../controllers/authController';
-import { authenticateJWT } from '../middleware/auth';
+import express from 'express';
+import { registerUser, loginUser, googleAuth, getProfile } from '../controllers/authController';
+import { authenticate } from '../middleware/auth';
 
-const router = Router();
+const authRouter = express.Router();
 
-router.post('/register', register);
-router.post('/login', login);
-router.post('/google', googleLogin);
-router.get('/profile', authenticateJWT, getProfile);
+authRouter.post('/register', registerUser);
+authRouter.post('/login', loginUser);
+authRouter.post('/google', googleAuth);
+authRouter.get('/profile', authenticate, getProfile);
 
-export default router;
+export default authRouter;

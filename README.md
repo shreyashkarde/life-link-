@@ -1,42 +1,56 @@
-# 🚑 LifeLink - Smart Healthcare & Live Ambulance Dispatch System
+# 👨‍⚕️ Prescripto - Full Stack Doctor Appointment Booking System (MERN Stack)
 
-A production-grade, full-stack **MERN** (MongoDB, Express, React+Vite, Node.js) healthcare and ambulance dispatch platform featuring **5 dedicated role-based dashboards**, real-time **Socket.io** event dispatching, live **Leaflet GPS tracking** with animated markers, instant **1-Click SOS emergency escalation**, verified **doctor appointments**, and **rating & review systems**.
+A production-grade, full-stack **MERN** (MongoDB, Express.js, React + Vite, Node.js) doctor appointment scheduling and healthcare management platform based on the **GreatStack** architecture.
 
----
-
-## 🌟 Key System Features
-
-1. **Uber-Like Ambulance Dispatch**:
-   - Search nearest available ambulances (ALS, BLS, and Oxygen tiers).
-   - Real-time GPS location updates emitted every 3–5 seconds from the driver.
-   - Smooth animated vehicle marker on interactive Leaflet maps with dynamic route lines and live ETA.
-   - Full ride lifecycle: `PENDING` ➔ `ACCEPTED` ➔ `ONGOING` ➔ `ARRIVED_AT_PATIENT` ➔ `ARRIVED_AT_HOSPITAL` ➔ `COMPLETED`.
-
-2. **🚨 1-Click Instant SOS Dispatch**:
-   - Emergency button with auto-geocoded GPS pickup coordinates.
-   - Immediate high-priority broadcast to all nearest drivers and trauma centers.
-   - Auto-assigned fastest ALS response unit.
-
-3. **👨‍⚕️ Verified Doctor Consultations & Slot Manager**:
-   - Filter specialists by Cardiology, Neurology, Orthopedics, Pediatrics, General Medicine, and Emergency Trauma.
-   - Interactive calendar with dynamic slot selection.
-   - Complete consultation workflow with digital prescriptions and clinical notes.
-
-4. **⭐ Rating & Review System**:
-   - Patients can rate doctors and drivers on a 1–5 star scale with written feedback.
-   - Dynamic recalculation of average ratings and total review counters.
+Featuring **3-Level Authentication (Patient, Doctor, and Admin)**, dynamic **7-day slot booking calendar**, comprehensive **specialty discovery**, integrated **online payment processing simulation**, doctor **earnings analytics**, and a real-time **doctor availability manager**.
 
 ---
 
-## 👥 5 Role-Based Dashboards
+## 🌟 Key Features
 
-| Role | Demo Credentials | Key Capabilities |
-| :--- | :--- | :--- |
-| **Patient** | `patient@lifelink.com` / `password123` | Search doctors, book appointments, book ambulance, 1-click SOS, live GPS tracking, ride history, star ratings. |
-| **Doctor** | `doctor1@lifelink.com` / `password123` | Manage daily consultation queue, slot manager (add/delete times), write digital prescriptions, patient history, view ratings. |
-| **Ambulance Driver** | `driver1@lifelink.com` / `password123` | Online/Offline toggle, live GPS transmitter & driving simulator, audio-visual incoming ride request popup, ride stage stepper. |
-| **Hospital Admin** | `admin@hospital.com` / `password123` | Bed & ICU occupancy monitoring, doctor staff & ambulance fleet oversight, incoming trauma emergency triage feed. |
-| **Super Admin** | `superadmin@lifelink.com` / `password123` | Global platform analytics, user directory management, account activation/deactivation, hospital network facilities. |
+### 1. 🏥 Patient Portal
+- **Speciality Discovery**: Browse doctors across 6 core specialties:
+  1. *General physician*
+  2. *Gynecologist*
+  3. *Dermatologist*
+  4. *Pediatricians*
+  5. *Neurologist*
+  6. *Gastroenterologist*
+- **Dynamic 7-Day Slot Booking**: Real-time date selector and time slot chips with automatic double-booking prevention.
+- **Related Doctors**: Instant discovery of other specialists in the same field.
+- **My Profile Manager**: Edit contact info, phone, address (Line 1 & Line 2), gender, and birthday.
+- **My Appointments**:
+  - View upcoming and past appointments with doctor photo, specialty, and formatted date/time.
+  - **Pay Online**: Simulated payment gateway (Razorpay / Stripe / Pay at Clinic).
+  - **Cancel Appointment**: Instant cancellation with automatic slot release.
+
+### 2. 👨‍⚕️ Doctor Dashboard & Portal
+- **Secure Doctor Login**: Dedicated portal for registered physicians.
+- **Earnings & Practice Analytics**: Real-time earnings counter ($), total appointments, and unique patient counts.
+- **Appointment Queue**:
+  - Full list of scheduled consultations with patient details and payment status.
+  - One-click **Complete Appointment** (✓) to credit doctor earnings.
+  - One-click **Cancel Appointment** (✕) with slot restoration.
+- **Doctor Profile Management**:
+  - Edit consultation fee ($) and clinic address.
+  - Interactive **Availability Toggle** to turn patient booking on/off.
+
+### 3. 🎯 Admin Management Panel
+- **Secure Admin Authentication**: Centralized system administration portal.
+- **Global Platform Dashboard**: Metrics on total doctors, total appointments, total patients, and latest bookings.
+- **All Appointments Directory**: Complete master table across all physicians with administrative cancellation control.
+- **Add Doctor Form**: Onboard new verified doctors with specialty, experience, degree, fees, photo, and clinic address.
+- **Doctors List**: Real-time card view with interactive **Available toggle checkbox** for instant availability updates.
+
+---
+
+## 👥 Demo Credentials
+
+| Role | Email | Password | Access Capabilities |
+| :--- | :--- | :--- | :--- |
+| **Admin** | `admin@prescripto.com` | `admin123` | Dashboard metrics, All appointments oversight, Add doctors, Doctors availability toggle |
+| **Doctor** | `doc1@prescripto.com` | `doc123` | Dr. Richard James (General physician) - Earnings dashboard, Appointments queue, Profile |
+| **Patient** | `patient@prescripto.com` | `password123` | Edward Vincent - Book appointments, Profile editor, Online payment, Cancellation |
 
 ---
 
@@ -44,68 +58,41 @@ A production-grade, full-stack **MERN** (MongoDB, Express, React+Vite, Node.js) 
 
 - **Frontend**:
   - React 18 / Vite
-  - Tailwind CSS with White + Blue theme (`#2563EB`, `#3B82F6`, `#F8FAFC`)
-  - Lucide React Icons
-  - Leaflet & React-Leaflet for interactive live mapping
-  - Axios with JWT Interceptor
-  - Socket.io-client
+  - Tailwind CSS (`primary: #5f6fff`)
+  - Google Fonts (`Outfit`)
+  - Axios with JWT Interceptors
   - React Router DOM v6
 - **Backend**:
   - Node.js & Express (TypeScript)
   - MongoDB & Mongoose ORM
-  - Socket.io (Room-based event dispatching)
   - JSON Web Tokens (JWT) & bcryptjs
+  - High-performance dual store with zero-downtime offline support
   - CORS, Dotenv
 
 ---
 
-## 🚀 How to Run the Project
+## 🚀 How to Run Locally
 
-### 1. Prerequisites
-- **Node.js** (v18 or higher)
-- **MongoDB** (Local `mongodb://127.0.0.1:27017` or cloud MongoDB Atlas connection string)
-
-### 2. Install Dependencies
+### 1. Install Dependencies
 From the root workspace folder:
 ```powershell
 npm run install:all
 ```
-*(Or run `npm install` inside `backend` and `frontend` separately).*
 
-### 3. Seed Demo Data
-Populate the database with hospitals, 5 role demo accounts, doctors, ambulances, and slots:
-```powershell
-npm run seed
-```
-
-### 4. Start the Application
-Run both backend (Port 5000) and frontend (Port 5173) simultaneously:
+### 2. Start Both Backend & Frontend
+Run both the API server (Port 5000) and Frontend (Port 5173):
 ```powershell
 npm run dev
 ```
 
-Or run individually in separate terminals:
-- **Backend API**: `cd backend && npm run dev`
-- **Frontend App**: `cd frontend && npm run dev`
+Or run individually:
+- **Backend**: `cd backend && npm run dev`
+- **Frontend**: `cd frontend && npm run dev`
 
-Open your browser at **`http://localhost:5173`**.
-
----
-
-## 📡 Socket.io Real-Time Events Reference
-
-| Event Name | Direction | Payload Description |
-| :--- | :--- | :--- |
-| `join_user` | Client ➔ Server | Joins user private room `user_{id}` |
-| `join_driver` | Client ➔ Server | Joins driver room `driver_{id}` and `online_drivers` pool |
-| `join_booking` | Client ➔ Server | Joins ride tracking room `booking_{id}` |
-| `booking:newRequest` | Client ➔ Server | Emits new ambulance booking to target driver or pool |
-| `booking:driverAccepted` | Client ➔ Server | Emits acceptance notification to patient |
-| `booking:updateStatus` | Client ➔ Server | Updates ride stage (`ONGOING`, `ARRIVED_AT_PATIENT`, `COMPLETED`) |
-| `driver:locationUpdate` | Client ➔ Server | Transmits live lat/lng every 3–5 seconds to tracking room |
-| `emergency:sosTriggered` | Client ➔ Server | Broadcasts critical SOS emergency to all drivers & trauma centers |
+Open your browser at: **`http://localhost:5173`**  
+Access Admin / Doctor Panel directly via the **"Admin Panel"** button in the header or at **`http://localhost:5173/admin`**.
 
 ---
 
 ## 📄 License
-MIT License. Built for Production-Grade Emergency Healthcare and Dispatch Systems.
+MIT License. Inspired by GreatStack Prescripto Full Stack MERN tutorial.

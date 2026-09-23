@@ -1,59 +1,59 @@
 import mongoose, { Document, Schema } from 'mongoose';
-import bcrypt from 'bcryptjs';
 
 export type UserRole = 'PATIENT' | 'DOCTOR' | 'DRIVER' | 'ADMIN_HOSPITAL' | 'SUPER_ADMIN';
+
+export interface IUserAddress {
+  line1: string;
+  line2: string;
+  city?: string;
+  coordinates?: {
+    lat: number;
+    lng: number;
+  };
+}
 
 export interface IUser extends Document {
   name: string;
   email: string;
   password?: string;
   role: UserRole;
-  phone?: string;
-  avatar?: string;
-  hospitalId?: mongoose.Types.ObjectId;
+  image: string;
+  address: IUserAddress;
+  gender: string;
+  dob: string;
+  phone: string;
   googleId?: string;
-  isActive: boolean;
+  isVerified?: boolean;
   createdAt: Date;
   updatedAt: Date;
-  comparePassword(candidatePassword: string): Promise<boolean>;
 }
 
-const UserSchema = new Schema<IUser>(
+const userSchema = new Schema<IUser>(
   {
-    name: { type: String, required: true, trim: true },
-    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    password: { type: String, minlength: 6 },
+    name: { type: String, required: true },
+    email: { type: String, required: true, unique: true },
+    password: { type: String, required: false },
     role: {
       type: String,
       enum: ['PATIENT', 'DOCTOR', 'DRIVER', 'ADMIN_HOSPITAL', 'SUPER_ADMIN'],
       default: 'PATIENT',
-      required: true,
     },
-    phone: { type: String, trim: true },
-    avatar: { type: String, default: '' },
-    hospitalId: { type: Schema.Types.ObjectId, ref: 'Hospital' },
-    googleId: { type: String },
-    isActive: { type: Boolean, default: true },
+    image: {
+      type: String,
+      default: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
+    },
+    address: {
+      type: Object,
+      default: { line1: '', line2: '', city: 'Mumbai', coordinates: { lat: 19.0760, lng: 72.8777 } },
+    },
+    gender: { type: String, default: 'Not Selected' },
+    dob: { type: String, default: 'Not Selected' },
+    phone: { type: String, default: '0000000000' },
+    googleId: { type: String, required: false },
+    isVerified: { type: Boolean, default: true },
   },
-  { timestamps: true }
+  { timestamps: true, minimize: false }
 );
 
-// Hash password before saving
-UserSchema.pre('save', async function (next) {
-  if (!this.isModified('password') || !this.password) return next();
-  try {
-    const salt = await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(this.password, salt);
-    next();
-  } catch (err: any) {
-    next(err);
-  }
-});
-
-// Compare password method
-UserSchema.methods.comparePassword = async function (candidatePassword: string): Promise<boolean> {
-  if (!this.password) return false;
-  return bcrypt.compare(candidatePassword, this.password);
-};
-
-export const User = mongoose.model<IUser>('User', UserSchema);
+export const User = mongoose.models.User || mongoose.model<IUser>('User', userSchema);
+export default User;

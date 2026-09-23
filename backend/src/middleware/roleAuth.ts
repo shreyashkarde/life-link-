@@ -1,22 +1,27 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from './auth';
-import { UserRole } from '../models/User';
 
-export const authorizeRoles = (...allowedRoles: UserRole[]) => {
-  return (req: AuthRequest, res: Response, next: NextFunction): void => {
+export const requireRole = (allowedRoles: string[]) => {
+  return (req: AuthRequest, res: Response, next: NextFunction) => {
     if (!req.user) {
-      res.status(401).json({ success: false, message: 'Unauthorized: User authentication required.' });
-      return;
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required for this operation',
+      });
     }
 
-    if (!allowedRoles.includes(req.user.role)) {
-      res.status(403).json({
+    const normalizedUserRole = req.user.role?.toUpperCase();
+    const isAllowed = allowedRoles.map((r) => r.toUpperCase()).includes(normalizedUserRole);
+
+    if (!isAllowed) {
+      return res.status(403).json({
         success: false,
-        message: `Forbidden: Access restricted. Requires one of [${allowedRoles.join(', ')}], current role is '${req.user.role}'`,
+        message: `Forbidden: Access restricted to roles [${allowedRoles.join(', ')}]`,
       });
-      return;
     }
 
     next();
   };
 };
+
+export default requireRole;

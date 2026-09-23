@@ -1,30 +1,24 @@
-import { Router } from 'express';
+import express from 'express';
 import {
-  getHospitalAdminStats,
-  getSuperAdminStats,
-  getAllUsers,
-  toggleUserStatus,
-  saveHospital,
+  addDoctor,
+  loginAdmin,
+  allDoctors,
+  changeAvailability,
+  appointmentsAdmin,
+  appointmentCancel,
+  adminDashboard,
 } from '../controllers/adminController';
-import { authenticateJWT } from '../middleware/auth';
-import { authorizeRoles } from '../middleware/roleAuth';
+import { authAdmin } from '../middleware/authAdmin';
 
-const router = Router();
+const adminRouter = express.Router();
 
-router.use(authenticateJWT);
+adminRouter.post('/login', loginAdmin);
+adminRouter.post('/add-doctor', authAdmin, addDoctor);
+adminRouter.post('/all-doctors', authAdmin, allDoctors);
+adminRouter.get('/all-doctors', authAdmin, allDoctors);
+adminRouter.post('/change-availability', authAdmin, changeAvailability);
+adminRouter.get('/appointments', authAdmin, appointmentsAdmin);
+adminRouter.post('/cancel-appointment', authAdmin, appointmentCancel);
+adminRouter.get('/dashboard', authAdmin, adminDashboard);
 
-// Hospital Admin
-router.get(
-  '/hospital/stats',
-  authorizeRoles('ADMIN_HOSPITAL', 'SUPER_ADMIN'),
-  getHospitalAdminStats
-);
-
-// Super Admin
-router.get('/super/stats', authorizeRoles('SUPER_ADMIN'), getSuperAdminStats);
-router.get('/users', authorizeRoles('SUPER_ADMIN'), getAllUsers);
-router.put('/users/:id/toggle-status', authorizeRoles('SUPER_ADMIN'), toggleUserStatus);
-router.post('/hospital', authorizeRoles('SUPER_ADMIN'), saveHospital);
-router.put('/hospital/:id', authorizeRoles('SUPER_ADMIN'), saveHospital);
-
-export default router;
+export default adminRouter;
