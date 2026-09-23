@@ -3,7 +3,7 @@ import { NavLink, Outlet, useNavigate, Link, Navigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 
 export const AdminLayout: React.FC = () => {
-  const { aToken, setAToken, dToken, setDToken, doctorData } = useApp();
+  const { aToken, dToken, doctorData, logoutAll } = useApp();
   const navigate = useNavigate();
 
   // If neither Admin nor Doctor is logged in, redirect to unified login page
@@ -12,13 +12,8 @@ export const AdminLayout: React.FC = () => {
   }
 
   const handleLogout = () => {
-    if (aToken) {
-      setAToken('');
-    }
-    if (dToken) {
-      setDToken('');
-    }
-    navigate('/admin');
+    logoutAll();
+    navigate('/login');
   };
 
   return (
@@ -26,7 +21,7 @@ export const AdminLayout: React.FC = () => {
       {/* Top Navbar */}
       <div className="flex items-center justify-between px-4 sm:px-10 py-3 border-b bg-white">
         <div className="flex items-center gap-3 text-xs">
-          <Link to="/" className="flex items-center gap-2">
+          <Link to="/admin/dashboard" className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-white font-bold text-lg">
               +
             </div>
@@ -39,7 +34,7 @@ export const AdminLayout: React.FC = () => {
 
         <div className="flex items-center gap-3">
           <Link
-            to="/"
+            to="/patient/dashboard"
             className="text-xs font-semibold text-gray-600 hover:text-primary transition-colors hidden sm:block"
           >
             ← Patient View

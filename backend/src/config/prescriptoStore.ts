@@ -315,37 +315,75 @@ const initialUsers = [
   },
 ];
 
-// Attach password to initial doctors
-initialDoctors.forEach((d) => {
+// Initialize doctors with clean empty slots and hospital linkage
+initialDoctors.forEach((d, idx) => {
   (d as any).password = demoDocPasswordHash;
+  d.slots_booked = {};
+  if (idx < 6) {
+    (d as any).hospitalId = 'hosp_lilavati';
+    (d as any).hospitalName = 'Lilavati Hospital & Research Centre';
+  } else if (idx < 11) {
+    (d as any).hospitalId = 'hosp_kokilaben';
+    (d as any).hospitalName = 'Kokilaben Dhirubhai Ambani Hospital';
+  } else {
+    (d as any).hospitalId = 'hosp_citycare';
+    (d as any).hospitalName = 'City Care Central Hospital';
+  }
 });
 
-const todayDate = new Date();
-const formattedToday = `${todayDate.getDate()}_${todayDate.getMonth() + 1}_${todayDate.getFullYear()}`;
-
-initialDoctors[0].slots_booked = {
-  [formattedToday]: ['10:30 am'],
-};
-
-const initialAppointments = [
+export const initialHospitals = [
   {
-    _id: 'appt_1',
-    userId: 'user_1',
-    docId: 'doc_1',
-    slotDate: formattedToday,
-    slotTime: '10:30 am',
-    userData: { ...initialUsers[0] },
-    docData: { ...initialDoctors[0] },
-    amount: 50,
-    date: Date.now() - 3600000,
-    cancelled: false,
-    payment: true,
-    isCompleted: false,
-    createdAt: new Date().toISOString(),
+    _id: 'hosp_lilavati',
+    id: 'hosp_lilavati',
+    name: 'Lilavati Hospital & Research Centre',
+    address: 'Bandra Reclamation, Bandra West, Mumbai',
+    city: 'Mumbai',
+    traumaLevel: 'Level 1 Apex Trauma Center',
+    totalBeds: 323,
+    icuBedsAvailable: 14,
+    adminEmail: 'hospital@prescripto.com',
+    adminId: 'hosp_admin_1',
+    contactPhone: '+91 22 2675 1000',
+    isActive: true,
+    doctorsCount: 6,
+    driversCount: 2,
+  },
+  {
+    _id: 'hosp_kokilaben',
+    id: 'hosp_kokilaben',
+    name: 'Kokilaben Dhirubhai Ambani Hospital',
+    address: 'Rao Saheb, Achutrao Patwardhan Marg, Four Bungalows, Andheri West, Mumbai',
+    city: 'Mumbai',
+    traumaLevel: 'Level 1 Trauma Center',
+    totalBeds: 750,
+    icuBedsAvailable: 22,
+    adminEmail: 'kokilaben.admin@prescripto.com',
+    adminId: 'hosp_admin_2',
+    contactPhone: '+91 22 4269 6969',
+    isActive: true,
+    doctorsCount: 5,
+    driversCount: 2,
+  },
+  {
+    _id: 'hosp_citycare',
+    id: 'hosp_citycare',
+    name: 'City Care Central Hospital',
+    address: 'Trauma Bay & Emergency Ward, Sector 4, Mumbai',
+    city: 'Mumbai',
+    traumaLevel: 'Level 2 Trauma Center',
+    totalBeds: 180,
+    icuBedsAvailable: 8,
+    adminEmail: 'citycare.admin@prescripto.com',
+    adminId: 'hosp_admin_3',
+    contactPhone: '+91 22 2845 2200',
+    isActive: true,
+    doctorsCount: 4,
+    driversCount: 1,
   },
 ];
 
 export interface PrescriptoStore {
+  hospitals: any[];
   doctors: any[];
   users: any[];
   appointments: any[];
@@ -372,166 +410,55 @@ const initialAmbulances = [
     },
     isAvailable: true,
     currentStatus: 'IDLE',
-    assignedHospital: 'City Care Central Hospital',
-    rating: 4.9,
-    reviewCount: 42,
+    assignedHospital: 'Lilavati Hospital & Research Centre',
+    hospitalId: 'hosp_lilavati',
+    hospitalName: 'Lilavati Hospital & Research Centre',
+    rating: 5.0,
+    reviewCount: 0,
     equipmentList: ['Oxygen Tank', 'Defibrillator (AED)', 'ECG Monitor', 'Emergency Stretcher', 'Trauma Kit'],
   },
   {
     _id: 'amb_102',
-    driverName: 'Vikas Sharma',
+    driverName: 'Suresh Patil',
     driverPhone: '+91 98202 10200',
     driverEmail: 'driver2@prescripto.com',
     driverId: 'driver_2',
-    vehicleNumber: 'MH-02-CP-1102',
-    ambulanceType: 'BASIC',
+    vehicleNumber: 'MH-02-AB-1020',
+    ambulanceType: 'ICU',
     currentLocation: {
-      lat: 19.0896,
-      lng: 72.8656,
-      address: 'Santacruz East Station, Mumbai',
+      lat: 19.1300,
+      lng: 72.8300,
+      address: 'Andheri West Link Road, Mumbai',
       heading: 90,
       lastUpdated: new Date(),
     },
     isAvailable: true,
     currentStatus: 'IDLE',
-    assignedHospital: 'Metro Trauma Center',
+    assignedHospital: 'Kokilaben Dhirubhai Ambani Hospital',
+    hospitalId: 'hosp_kokilaben',
+    hospitalName: 'Kokilaben Dhirubhai Ambani Hospital',
     rating: 4.8,
-    reviewCount: 29,
-    equipmentList: ['Oxygen Tank', 'First-Aid Kit', 'Stretcher'],
-  },
-  {
-    _id: 'amb_105',
-    driverName: 'Amit Patel',
-    driverPhone: '+91 98203 10500',
-    driverEmail: 'driver3@prescripto.com',
-    driverId: 'driver_3',
-    vehicleNumber: 'MH-03-TR-1105',
-    ambulanceType: 'ICU',
-    currentLocation: {
-      lat: 19.0600,
-      lng: 72.8360,
-      address: 'Worli Sea Face, Mumbai',
-      heading: 180,
-      lastUpdated: new Date(),
-    },
-    isAvailable: true,
-    currentStatus: 'IDLE',
-    assignedHospital: 'Apex Heart Institute',
-    rating: 5.0,
-    reviewCount: 38,
-    equipmentList: ['Ventilator', 'Defibrillator', 'Infusion Pump', 'Cardiac Monitor'],
-  },
-  {
-    _id: 'amb_112',
-    driverName: 'Sunil Jadhav',
-    driverPhone: '+91 98204 11200',
-    driverEmail: 'driver4@prescripto.com',
-    driverId: 'driver_4',
-    vehicleNumber: 'MH-04-AX-1112',
-    ambulanceType: 'BASIC',
-    currentLocation: {
-      lat: 19.1136,
-      lng: 72.8697,
-      address: 'Andheri East MIDC, Mumbai',
-      heading: 270,
-      lastUpdated: new Date(),
-    },
-    isAvailable: true,
-    currentStatus: 'IDLE',
-    assignedHospital: 'SevenHills Hospital',
-    rating: 4.7,
-    reviewCount: 21,
-    equipmentList: ['Oxygen Tank', 'First-Aid Kit', 'Stretcher'],
-  },
-  {
-    _id: 'amb_119',
-    driverName: 'Suresh Nair',
-    driverPhone: '+91 98205 11900',
-    driverEmail: 'driver5@prescripto.com',
-    driverId: 'driver_5',
-    vehicleNumber: 'MH-02-ZZ-1119',
-    ambulanceType: 'ADVANCED',
-    currentLocation: {
-      lat: 19.0176,
-      lng: 72.8561,
-      address: 'Dadar TT Circle, Mumbai',
-      heading: 15,
-      lastUpdated: new Date(),
-    },
-    isAvailable: true,
-    currentStatus: 'IDLE',
-    assignedHospital: 'KEM Emergency Wing',
-    rating: 4.9,
-    reviewCount: 50,
-    equipmentList: ['Oxygen Tank', 'Defibrillator (AED)', 'ECG Monitor', 'Emergency Stretcher', 'Trauma Kit'],
-  },
-];
-
-const initialAmbulanceBookings = [
-  {
-    _id: 'book_901',
-    patientId: 'user_1',
-    patientName: 'Edward Vincent',
-    patientPhone: '+91 98200 99999',
-    ambulanceId: 'amb_108',
-    driverName: 'Rajesh Kumar',
-    driverPhone: '+91 98201 10800',
-    vehicleNumber: 'MH-01-EQ-1108',
-    pickupLocation: {
-      address: '7th Cross, Richmond Road, Bandra',
-      lat: 19.0700,
-      lng: 72.8700,
-    },
-    destinationHospital: {
-      name: 'City Care Central Hospital',
-      address: 'Trauma Bay & Emergency Ward, Sector 4',
-      lat: 19.0760,
-      lng: 72.8777,
-    },
-    bookingType: 'EMERGENCY_SOS',
-    status: 'COMPLETED',
-    emergencySeverity: 'CRITICAL_CODE_RED',
-    patientCondition: 'Acute Cardiac Distress',
-    fare: 150,
-    paymentStatus: 'PAID_ONLINE',
-    timeline: {
-      bookedAt: new Date(Date.now() - 7200000),
-      acceptedAt: new Date(Date.now() - 7100000),
-      arrivedAt: new Date(Date.now() - 6900000),
-      completedAt: new Date(Date.now() - 6000000),
-    },
-    createdAt: new Date(Date.now() - 7200000).toISOString(),
-  },
-];
-
-const initialRatings = [
-  {
-    _id: 'rate_1',
-    userId: 'user_1',
-    userName: 'Edward Vincent',
-    targetType: 'DOCTOR',
-    targetId: 'doc_1',
-    rating: 5,
-    review: 'Dr. Richard James was extremely thorough and attentive to my symptoms.',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    _id: 'rate_2',
-    userId: 'user_1',
-    userName: 'Edward Vincent',
-    targetType: 'DRIVER',
-    targetId: 'amb_108',
-    rating: 5,
-    review: 'Ambulance arrived in 4 minutes flat! Oxygen and life-support on point.',
-    createdAt: new Date().toISOString(),
+    reviewCount: 0,
+    equipmentList: ['Oxygen Tank', 'Ventilator', 'Defibrillator', 'Suction Machine'],
   },
 ];
 
 export const prescriptoStore: PrescriptoStore = {
+  hospitals: [...initialHospitals],
   doctors: [...initialDoctors],
   users: [...initialUsers],
-  appointments: [...initialAppointments],
+  appointments: [],
   ambulances: [...initialAmbulances],
-  ambulanceBookings: [...initialAmbulanceBookings],
-  ratings: [...initialRatings],
+  ambulanceBookings: [],
+  ratings: [],
 };
+
+export const clearEntireStore = () => {
+  prescriptoStore.appointments = [];
+  prescriptoStore.ambulanceBookings = [];
+  prescriptoStore.ratings = [];
+  prescriptoStore.doctors.forEach((d) => {
+    d.slots_booked = {};
+  });
+};
+

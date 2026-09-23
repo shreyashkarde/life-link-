@@ -19,6 +19,8 @@ export interface IDoctor extends Document {
   address: IDoctorAddress;
   date: number;
   slots_booked: Record<string, string[]>;
+  hospitalId?: string;
+  hospitalName?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -36,6 +38,8 @@ const doctorSchema = new Schema<IDoctor>(
     available: { type: Boolean, default: true },
     fees: { type: Number, required: true },
     address: { type: Object, required: true },
+    hospitalId: { type: String, default: 'hosp_lilavati', ref: 'Hospital' },
+    hospitalName: { type: String, default: 'Lilavati Hospital & Research Centre' },
     date: { type: Number, required: true },
     slots_booked: { type: Object, default: {} },
   },

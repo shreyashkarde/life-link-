@@ -10,7 +10,8 @@ export const GoogleLoginButton = ({ onSuccess, onError }) => {
   const handleSimulatedGoogleLogin = async () => {
     try {
       setLoading(true);
-      const res = await fetch('http://localhost:5000/api/auth/google-login', {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const res = await fetch(`${backendUrl}/api/auth/google-login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -29,8 +29,9 @@ export const AdminDashboard = () => {
   const fetchAdminData = async () => {
     try {
       setLoading(true);
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
       // Fetch metrics
-      const metricRes = await fetch('http://localhost:5000/api/realtime-appointments/admin-metrics');
+      const metricRes = await fetch(`${backendUrl}/api/realtime-appointments/admin-metrics`);
       const metricData = await metricRes.json();
       if (metricData.success && metricData.metrics) {
         setMetrics(metricData.metrics);
@@ -38,7 +39,7 @@ export const AdminDashboard = () => {
       }
 
       // Fetch doctors roster
-      const docRes = await fetch('http://localhost:5000/api/doctor/list');
+      const docRes = await fetch(`${backendUrl}/api/doctor/list`);
       const docData = await docRes.json();
       if (docData.success && docData.doctors) {
         setDoctors(docData.doctors);
@@ -88,7 +89,8 @@ export const AdminDashboard = () => {
   // Toggle Doctor Availability
   const handleToggleDoctorAvailability = async (docId) => {
     try {
-      const res = await fetch('http://localhost:5000/api/admin/change-availablity', {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const res = await fetch(`${backendUrl}/api/admin/change-availability`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ docId }),
@@ -107,7 +109,8 @@ export const AdminDashboard = () => {
   // Admin Appointment Cancel / Complete Control
   const handleAppointmentAction = async (appointmentId, status) => {
     try {
-      const res = await fetch('http://localhost:5000/api/realtime-appointments/update-status', {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const res = await fetch(`${backendUrl}/api/realtime-appointments/update-status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ appointmentId, status }),

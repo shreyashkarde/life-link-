@@ -103,7 +103,7 @@ export const AllAppointments: React.FC = () => {
 
               <div>
                 <p className="font-bold text-xs text-gray-900">
-                  {item.slotDate?.replaceAll('_', ' / ')}
+                  {item.slotDate?.replace(/_/g, ' / ')}
                 </p>
                 <p className="text-xs text-primary font-semibold">{item.slotTime}</p>
               </div>

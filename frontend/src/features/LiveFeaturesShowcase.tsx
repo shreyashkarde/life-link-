@@ -16,7 +16,8 @@ export const LiveFeaturesShowcase: React.FC = () => {
 
   useEffect(() => {
     // Load nearby hospitals
-    fetch('http://localhost:5000/api/hospitals/nearby?lat=19.0760&lng=72.8777')
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+    fetch(`${backendUrl}/api/hospitals/nearby?lat=19.0760&lng=72.8777`)
       .then((res) => res.json())
       .then((data) => {
         if (data.success) setHospitals(data.hospitals);

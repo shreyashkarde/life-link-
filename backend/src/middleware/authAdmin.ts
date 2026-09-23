@@ -24,16 +24,25 @@ export const authAdmin = async (
       role?: string;
     };
 
-    if (tokenDecode.email !== ENV.ADMIN_EMAIL && tokenDecode.role !== 'admin') {
+    const roleUpper = (tokenDecode.role || '').toUpperCase();
+    const isSuperAdminRole = roleUpper === 'ADMIN' || roleUpper === 'SUPER_ADMIN' || roleUpper === 'SUPERADMIN';
+    if (tokenDecode.email !== ENV.ADMIN_EMAIL && !isSuperAdminRole) {
       res.status(403).json({ success: false, message: 'Not Authorized. Invalid Admin credentials.' });
       return;
     }
 
+    // Attach user to req.user for downstream role validation
+    (req as any).user = {
+      id: (tokenDecode as any).id || 'admin_root',
+      role: 'SUPER_ADMIN',
+      email: tokenDecode.email || ENV.ADMIN_EMAIL,
+    };
+
     next();
   } catch (error: any) {
-    console.error('Admin Auth Error:', error.message);
     res.status(401).json({ success: false, message: error.message || 'Authentication failed' });
   }
 };
 
 export default authAdmin;
+

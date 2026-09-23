@@ -66,12 +66,14 @@ export const useLiveLocation = ({
       });
       setLastUpdated(new Date());
 
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+
       // 1. Emit via WebSocket
       socketClient.emit('locationUpdate', payload);
 
       // 2. Persist via REST API
       try {
-        await fetch('http://localhost:5000/api/location/update', {
+        await fetch(`${backendUrl}/api/location/update`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -85,6 +87,7 @@ export const useLiveLocation = ({
 
   // Socket setup & room subscription
   useEffect(() => {
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
     const socket = socketClient.getSocket();
 
     // 1. Join room based on role & identifiers
@@ -101,7 +104,7 @@ export const useLiveLocation = ({
 
     // 2. Initial fetch from dynamic API
     const targetUser = role === 'patient' ? driverId || 'driver_108' : userId || driverId || 'driver_108';
-    fetch(`http://localhost:5000/api/location/${targetUser}`)
+    fetch(`${backendUrl}/api/location/${targetUser}`)
       .then((r) => r.json())
       .then((res) => {
         if (res.success && res.location) {
@@ -119,7 +122,7 @@ export const useLiveLocation = ({
 
     // Fetch trip pickup if bookingId provided
     if (bookingId) {
-      fetch(`http://localhost:5000/api/location/trip/${bookingId}`)
+      fetch(`${backendUrl}/api/location/trip/${bookingId}`)
         .then((r) => r.json())
         .then((res) => {
           if (res.success && res.pickup) {

@@ -17,7 +17,10 @@ userRouter.post('/register', registerUser);
 userRouter.post('/login', loginUser);
 userRouter.get('/get-profile', authUser, getProfile);
 userRouter.post('/get-profile', authUser, getProfile);
+userRouter.get('/profile', authUser, getProfile);
+userRouter.post('/profile', authUser, getProfile);
 userRouter.post('/update-profile', authUser, updateProfile);
+
 userRouter.post('/book-appointment', authUser, bookAppointment);
 userRouter.get('/appointments', authUser, listAppointment);
 userRouter.post('/appointments', authUser, listAppointment);

@@ -176,14 +176,14 @@ export const SuperAdminDashboard: React.FC = () => {
               </Link>
 
               <Link
-                to="/features"
+                to="/admin/all-appointments"
                 className="w-full p-3.5 rounded-2xl bg-[#f8f9fd] hover:bg-gray-100 text-gray-800 border border-gray-100 flex items-center justify-between transition-all group"
               >
                 <div className="flex items-center gap-3">
-                  <span className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">⚡</span>
+                  <span className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">📅</span>
                   <div>
-                    <p className="font-bold text-gray-900 group-hover:text-amber-600 transition-colors">Modular Features Hub</p>
-                    <p className="text-[11px] text-gray-500">Live GPS tracking, Google Maps route, and PDF Rx generator</p>
+                    <p className="font-bold text-gray-900 group-hover:text-amber-600 transition-colors">Global Appointments Feed</p>
+                    <p className="text-[11px] text-gray-500">Live booking logs, cancellations, and doctor assignments</p>
                   </div>
                 </div>
                 <span className="text-gray-400 group-hover:translate-x-1 transition-transform">→</span>

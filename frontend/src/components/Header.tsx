@@ -108,14 +108,15 @@ export const Header: React.FC = () => {
               </a>
 
               <button
+                type="button"
                 onClick={() => {
-                  navigate('/features');
+                  navigate('/doctors');
                   window.scrollTo(0, 0);
                 }}
-                className="px-5 py-3 bg-red-500/20 hover:bg-red-500/30 text-red-200 hover:text-white rounded-full font-bold text-xs sm:text-sm border border-red-400/40 backdrop-blur-md transition-all flex items-center gap-2 cursor-pointer shadow-sm"
+                className="px-5 py-3 bg-blue-500/20 hover:bg-blue-500/30 text-blue-100 hover:text-white rounded-full font-bold text-xs sm:text-sm border border-blue-400/40 backdrop-blur-md transition-all flex items-center gap-2 cursor-pointer shadow-sm"
               >
-                <span className="w-2 h-2 rounded-full bg-red-400 animate-ping"></span>
-                <span>🚨 Priority Ambulance Telemetry</span>
+                <span>🩺 Explore 15 Specialists</span>
+                <span className="text-xs">→</span>
               </button>
             </div>
           </div>

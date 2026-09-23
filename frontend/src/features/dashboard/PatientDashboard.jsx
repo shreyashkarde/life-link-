@@ -29,7 +29,8 @@ export const PatientDashboard = ({ initialUserId = 'user_edward_101' }) => {
   const fetchAppointments = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`http://localhost:5000/api/realtime-appointments/patient-appointments?userId=${userId}`);
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const res = await fetch(`${backendUrl}/api/realtime-appointments/patient-appointments?userId=${userId}`);
       const data = await res.json();
       if (data.success && data.appointments) {
         setAppointments(data.appointments);
@@ -100,7 +101,8 @@ export const PatientDashboard = ({ initialUserId = 'user_edward_101' }) => {
   const handleCancelAppointment = async (apptId) => {
     if (!window.confirm('Are you sure you want to cancel this consultation?')) return;
     try {
-      const res = await fetch('http://localhost:5000/api/realtime-appointments/update-status', {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const res = await fetch(`${backendUrl}/api/realtime-appointments/update-status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ appointmentId: apptId, status: 'CANCELLED', userId }),

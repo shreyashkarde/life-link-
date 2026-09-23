@@ -14,7 +14,53 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap"
     rel="stylesheet">
+  <script>
+    (function() {
+      const shouldSuppress = function(args) {
+        try {
+          let text = '';
+          for (let i = 0; i < args.length; i++) {
+            const a = args[i];
+            if (typeof a === 'string') text += ' ' + a;
+            else if (a && a.message) text += ' ' + a.message + ' ' + (a.stack || '');
+            else if (typeof a === 'object') {
+              try { text += ' ' + JSON.stringify(a); } catch(e) { text += ' ' + String(a); }
+            } else {
+              text += ' ' + String(a);
+            }
+          }
+          return (
+            text.indexOf('MaxListenersExceededWarning') !== -1 ||
+            text.indexOf('ObjectMultiplex') !== -1 ||
+            text.indexOf('app-init-liveness') !== -1 ||
+            text.indexOf('background-liveness') !== -1 ||
+            text.indexOf('orphaned data') !== -1 ||
+            text.indexOf('google.maps.Marker is deprecated') !== -1 ||
+            text.indexOf('Google Maps JavaScript API has been loaded directly') !== -1 ||
+            text.indexOf('contentscript.js') !== -1 ||
+            text.indexOf('chrome-extension://') !== -1
+          );
+        } catch(e) {
+          return false;
+        }
+      };
+
+      const wrapConsole = function(method) {
+        if (!window.console || !window.console[method]) return;
+        const orig = window.console[method];
+        window.console[method] = function() {
+          if (shouldSuppress(arguments)) return;
+          return orig.apply(window.console, arguments);
+        };
+      };
+
+      wrapConsole('warn');
+      wrapConsole('error');
+      wrapConsole('log');
+    })();
+  </script>
 </head>
+
 
 <body class="bg-white text-gray-800 antialiased selection:bg-[#5F6FFF] selection:text-white font-['Outfit',sans-serif]">
   <div id="root"></div>

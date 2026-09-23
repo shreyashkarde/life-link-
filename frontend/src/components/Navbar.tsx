@@ -5,18 +5,18 @@ import { assets } from '../assets/assets';
 
 export const Navbar: React.FC = () => {
   const navigate = useNavigate();
-  const { token, setToken, userData } = useApp();
+  const { token, setToken, userData, logoutAll } = useApp();
   const [showMenu, setShowMenu] = useState(false);
 
   const logout = () => {
-    setToken('');
+    logoutAll();
     navigate('/login');
   };
 
   return (
     <div className="flex items-center justify-between text-sm py-4 mb-5 border-b border-gray-200">
       {/* Brand Logo */}
-      <Link to="/" className="flex items-center gap-2.5 cursor-pointer group">
+      <Link to={token ? "/patient/dashboard" : "/login"} className="flex items-center gap-2.5 cursor-pointer group">
         <span className="text-2xl font-black tracking-tight text-gray-900 group-hover:opacity-90 transition-opacity">
           b<span className="inline-block w-2.5 h-2.5 bg-blue-600 rounded-full mx-0.5 align-baseline"></span>well
         </span>
@@ -27,20 +27,23 @@ export const Navbar: React.FC = () => {
 
       {/* Desktop Navigation Links */}
       <ul className="hidden md:flex items-center gap-7 font-semibold text-gray-700 text-xs tracking-wider">
-        <NavLink to="/" className="py-1 hover:text-primary transition-colors">
-          <li>HOME</li>
-        </NavLink>
-        <NavLink to="/doctors" className="py-1 hover:text-primary transition-colors">
+        {token && (
+          <NavLink to="/patient/dashboard" className={({ isActive }) => `py-1 transition-colors ${isActive ? 'text-primary font-bold' : 'hover:text-primary'}`}>
+            <li>DASHBOARD</li>
+          </NavLink>
+        )}
+        <NavLink to="/doctors" className={({ isActive }) => `py-1 transition-colors ${isActive ? 'text-primary font-bold' : 'hover:text-primary'}`}>
           <li>ALL DOCTORS</li>
         </NavLink>
-        <NavLink to="/patient/dashboard" className="py-1 hover:text-primary transition-colors flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-          <li>DASHBOARDS</li>
-        </NavLink>
-        <NavLink to="/about" className="py-1 hover:text-primary transition-colors">
+        {token && (
+          <NavLink to="/my-appointments" className={({ isActive }) => `py-1 transition-colors ${isActive ? 'text-primary font-bold' : 'hover:text-primary'}`}>
+            <li>MY APPOINTMENTS</li>
+          </NavLink>
+        )}
+        <NavLink to="/about" className={({ isActive }) => `py-1 transition-colors ${isActive ? 'text-primary font-bold' : 'hover:text-primary'}`}>
           <li>ABOUT</li>
         </NavLink>
-        <NavLink to="/contact" className="py-1 hover:text-primary transition-colors">
+        <NavLink to="/contact" className={({ isActive }) => `py-1 transition-colors ${isActive ? 'text-primary font-bold' : 'hover:text-primary'}`}>
           <li>CONTACT</li>
         </NavLink>
       </ul>
@@ -71,7 +74,7 @@ export const Navbar: React.FC = () => {
 
             {/* Dropdown Menu */}
             <div className="absolute top-0 right-0 pt-14 text-sm font-medium text-gray-700 z-30 hidden group-hover:block">
-              <div className="min-w-52 bg-white rounded-2xl shadow-xl border border-gray-100 flex flex-col gap-2 p-3">
+              <div className="min-w-56 bg-white rounded-2xl shadow-xl border border-gray-100 flex flex-col gap-1 p-3">
                 <button
                   onClick={() => navigate('/my-profile')}
                   className="w-full text-left px-3 py-2 rounded-xl hover:bg-gray-50 hover:text-primary flex items-center gap-2 transition-colors font-medium cursor-pointer"
@@ -83,6 +86,12 @@ export const Navbar: React.FC = () => {
                   className="w-full text-left px-3 py-2 rounded-xl hover:bg-gray-50 hover:text-primary flex items-center gap-2 transition-colors font-medium cursor-pointer"
                 >
                   <span>📅</span> My Appointments
+                </button>
+                <button
+                  onClick={() => navigate('/patient/dashboard')}
+                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-blue-50 text-blue-700 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                >
+                  <span>🎛️</span> Patient Dashboard
                 </button>
                 <button
                   onClick={logout}
@@ -98,8 +107,7 @@ export const Navbar: React.FC = () => {
             onClick={() => navigate('/login')}
             className="bg-primary hover:bg-[#4a58eb] text-white px-4 sm:px-6 py-2 sm:py-2.5 rounded-full font-bold text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2 transition-all shadow-md hover:shadow-primary/40 active:scale-95 cursor-pointer"
           >
-            <span>Login</span>
-            <span className="hidden sm:inline">/ Sign Up</span>
+            <span>Login / Sign Up</span>
             <span>→</span>
           </button>
         )}
@@ -134,15 +142,19 @@ export const Navbar: React.FC = () => {
               </button>
             </div>
             <ul className="flex flex-col gap-4 mt-6 text-lg font-medium">
-              <NavLink onClick={() => setShowMenu(false)} to="/">
-                <p className="px-4 py-2 rounded">HOME</p>
-              </NavLink>
+              {token && (
+                <NavLink onClick={() => setShowMenu(false)} to="/patient/dashboard">
+                  <p className="px-4 py-2 rounded text-[#1e2e6e] font-bold">DASHBOARD</p>
+                </NavLink>
+              )}
               <NavLink onClick={() => setShowMenu(false)} to="/doctors">
                 <p className="px-4 py-2 rounded">ALL DOCTORS</p>
               </NavLink>
-              <NavLink onClick={() => setShowMenu(false)} to="/patient/dashboard">
-                <p className="px-4 py-2 rounded text-[#1e2e6e] font-bold">5 PORTALS / DASHBOARDS</p>
-              </NavLink>
+              {token && (
+                <NavLink onClick={() => setShowMenu(false)} to="/my-appointments">
+                  <p className="px-4 py-2 rounded">MY APPOINTMENTS</p>
+                </NavLink>
+              )}
               <NavLink onClick={() => setShowMenu(false)} to="/about">
                 <p className="px-4 py-2 rounded">ABOUT</p>
               </NavLink>
@@ -159,7 +171,7 @@ export const Navbar: React.FC = () => {
                   }}
                   className="w-full bg-primary text-white py-3 rounded-full font-bold shadow-md cursor-pointer"
                 >
-                  Create account
+                  Login / Sign Up
                 </button>
               ) : (
                 <button

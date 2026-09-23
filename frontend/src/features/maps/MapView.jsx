@@ -1,20 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
-export interface LocationCoord {
-  lat: number;
-  lng: number;
-  address?: string;
-}
-
-export interface MapViewProps {
-  userLocation?: LocationCoord;
-  onSelectAmbulance?: (ambulance: any) => void;
-  onSelectHospital?: (hospital: any) => void;
-  onSelectDoctor?: (doctor: any) => void;
-}
-
 /**
- * 📍 MapView.tsx
+ * 📍 MapView.jsx
  * Interactive Map View supporting Google Maps API & Interactive Telemetry
  * Displays:
  *  1. User Location
@@ -22,54 +9,60 @@ export interface MapViewProps {
  *  3. Nearby Hospitals
  *  4. Doctors
  */
-export const MapView: React.FC<MapViewProps> = ({
+export const MapView = ({
   userLocation = { lat: 19.0760, lng: 72.8777, address: 'Bandra West, Mumbai' },
   onSelectAmbulance,
   onSelectHospital,
   onSelectDoctor,
 }) => {
   const apiKey = (import.meta.env.VITE_MAP_KEY || import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '').trim();
-  const [ambulances, setAmbulances] = useState<any[]>([]);
-  const [hospitals, setHospitals] = useState<any[]>([]);
-  const [doctors, setDoctors] = useState<any[]>([]);
-  const [selectedEntity, setSelectedEntity] = useState<any>(null);
-  const [filter, setFilter] = useState<'ALL' | 'DOCTORS' | 'HOSPITALS' | 'AMBULANCES'>('ALL');
-  const [loading, setLoading] = useState<boolean>(true);
+  const [ambulances, setAmbulances] = useState([]);
+  const [hospitals, setHospitals] = useState([]);
+  const [doctors, setDoctors] = useState([]);
+  const [selectedEntity, setSelectedEntity] = useState(null);
+  const [filter, setFilter] = useState('ALL');
+  const [loading, setLoading] = useState(true);
 
   // Load nearby ambulances, hospitals, and verified doctors
   useEffect(() => {
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+    let isMounted = true;
     const loadMapData = async () => {
       try {
         setLoading(true);
+        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
         // 1. Fetch nearby ambulances
         const ambRes = await fetch(`${backendUrl}/api/ambulance/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}&radiusKm=25`);
         const ambData = await ambRes.json();
-        if (ambData.success && ambData.ambulances) {
+        if (isMounted && ambData.success && ambData.ambulances) {
           setAmbulances(ambData.ambulances);
         }
 
         // 2. Fetch nearby hospitals
         const hospRes = await fetch(`${backendUrl}/api/hospitals/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}&radiusKm=25`);
         const hospData = await hospRes.json();
-        if (hospData.success && hospData.hospitals) {
+        if (isMounted && hospData.success && hospData.hospitals) {
           setHospitals(hospData.hospitals);
         }
 
         // 3. Fetch certified physicians
         const docRes = await fetch(`${backendUrl}/api/doctor/list`);
         const docData = await docRes.json();
-        if (docData.success && docData.doctors) {
+        if (isMounted && docData.success && docData.doctors) {
           setDoctors(docData.doctors.slice(0, 6)); // Top nearby clinics
         }
       } catch (err) {
-        console.error('Failed to load map entities:', err);
+        // Silent error suppression
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
     loadMapData();
+    return () => {
+      isMounted = false;
+    };
   }, [userLocation.lat, userLocation.lng]);
 
   return (
@@ -89,6 +82,7 @@ export const MapView: React.FC<MapViewProps> = ({
         {/* Layer Filters */}
         <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-gray-200 text-xs">
           <button
+            type="button"
             onClick={() => setFilter('ALL')}
             className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
               filter === 'ALL' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'
@@ -97,6 +91,7 @@ export const MapView: React.FC<MapViewProps> = ({
             All Entities
           </button>
           <button
+            type="button"
             onClick={() => setFilter('DOCTORS')}
             className={`px-2.5 py-1 rounded-lg font-medium transition-all flex items-center gap-1 ${
               filter === 'DOCTORS' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'
@@ -105,6 +100,7 @@ export const MapView: React.FC<MapViewProps> = ({
             <span>🩺</span> Doctors ({doctors.length})
           </button>
           <button
+            type="button"
             onClick={() => setFilter('HOSPITALS')}
             className={`px-2.5 py-1 rounded-lg font-medium transition-all flex items-center gap-1 ${
               filter === 'HOSPITALS' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'
@@ -113,6 +109,7 @@ export const MapView: React.FC<MapViewProps> = ({
             <span>🏥</span> Hospitals ({hospitals.length})
           </button>
           <button
+            type="button"
             onClick={() => setFilter('AMBULANCES')}
             className={`px-2.5 py-1 rounded-lg font-medium transition-all flex items-center gap-1 ${
               filter === 'AMBULANCES' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'
@@ -267,7 +264,7 @@ export const MapView: React.FC<MapViewProps> = ({
 
       {/* Selected Entity Details Card */}
       {selectedEntity && (
-        <div className="p-4 bg-blue-50/50 border-t border-blue-100 flex items-center justify-between gap-4 animate-fadeIn">
+        <div className="p-4 bg-blue-50/50 border-t border-blue-100 flex items-center justify-between gap-4">
           {selectedEntity.type === 'AMBULANCE' ? (
             <div className="space-y-0.5">
               <div className="flex items-center gap-2">

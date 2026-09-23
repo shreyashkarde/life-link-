@@ -122,7 +122,7 @@ export const AdminDashboard: React.FC = () => {
                     <p className="text-gray-900 font-bold text-base">{item.docData?.name}</p>
                     <p className="text-xs text-gray-500 font-medium">
                       Patient: <span className="font-semibold text-gray-700">{item.userData?.name || 'Walk-in'}</span> •{' '}
-                      Booking on <span className="text-primary font-bold">{item.slotDate?.replaceAll('_', ' / ')} at {item.slotTime}</span>
+                      Booking on <span className="text-primary font-bold">{item.slotDate?.replace(/_/g, ' / ')} at {item.slotTime}</span>
                     </p>
                   </div>
                 </div>

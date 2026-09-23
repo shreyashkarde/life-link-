@@ -4,9 +4,12 @@ import jwt from 'jsonwebtoken';
 import { Doctor } from '../models/Doctor';
 import { User } from '../models/User';
 import { Appointment } from '../models/Appointment';
+import { AmbulanceBooking } from '../models/AmbulanceBooking';
+import { Rating } from '../models/Rating';
+import { Notification } from '../models/Notification';
 import { ENV } from '../config/env';
 import { isMongoConnected } from '../config/db';
-import { prescriptoStore } from '../config/prescriptoStore';
+import { prescriptoStore, clearEntireStore } from '../config/prescriptoStore';
 
 // API for admin login
 export const loginAdmin = async (req: Request, res: Response): Promise<void> => {
@@ -15,7 +18,7 @@ export const loginAdmin = async (req: Request, res: Response): Promise<void> => 
 
     if (email === ENV.ADMIN_EMAIL && password === ENV.ADMIN_PASSWORD) {
       const token = jwt.sign(
-        { email, role: 'admin' },
+        { id: 'admin_root', email, role: 'admin' },
         ENV.JWT_SECRET,
         { expiresIn: '7d' }
       );
@@ -284,3 +287,29 @@ export const adminDashboard = async (_req: Request, res: Response): Promise<void
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+// API to completely wipe all dynamic transactional & test data
+export const clearAllData = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    // 1. Wipe in-memory store
+    clearEntireStore();
+
+    // 2. If MongoDB is connected, wipe transactional collections and reset booked slots
+    if (isMongoConnected()) {
+      await Appointment.deleteMany({});
+      await AmbulanceBooking.deleteMany({});
+      await Rating.deleteMany({});
+      await Notification.deleteMany({});
+      await Doctor.updateMany({}, { $set: { slots_booked: {} } });
+    }
+
+    res.json({
+      success: true,
+      message: 'All test and dynamic data (appointments, booked slots, ambulance trips, ratings, notifications) cleared successfully. Ready for real-time data entry!',
+    });
+  } catch (error: any) {
+    console.error('Clear All Data Error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+

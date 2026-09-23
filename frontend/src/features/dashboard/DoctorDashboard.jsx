@@ -37,7 +37,8 @@ export const DoctorDashboard = ({ initialDocId = 'doc1' }) => {
   const fetchDoctorAppointments = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`http://localhost:5000/api/realtime-appointments/doctor-appointments?docId=${docId}`);
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const res = await fetch(`${backendUrl}/api/realtime-appointments/doctor-appointments?docId=${docId}`);
       const data = await res.json();
       if (data.success) {
         setAppointments(data.appointments || []);
@@ -111,7 +112,8 @@ export const DoctorDashboard = ({ initialDocId = 'doc1' }) => {
   const handleUpdateStatus = async (appointmentId, newStatus) => {
     try {
       setActionLoading(appointmentId);
-      const res = await fetch('http://localhost:5000/api/realtime-appointments/update-status', {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const res = await fetch(`${backendUrl}/api/realtime-appointments/update-status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ appointmentId, status: newStatus, docId }),

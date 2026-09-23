@@ -22,49 +22,56 @@ export const Login: React.FC<LoginProps> = ({ embedded = false, initialMode = 'L
   const [showSupportModal, setShowSupportModal] = useState(false);
 
   const navigate = useNavigate();
-  const { backendUrl, token, dToken, aToken, userData, doctorData, setToken, setDToken, setAToken, showToast } = useApp();
+  const { backendUrl, setToken, setDToken, setAToken, showToast } = useApp();
 
   // Role-based automatic redirect helper
-  const handleRoleRouting = (role: string, token: string) => {
+  const handleRoleRouting = (role: string, targetToken: string) => {
     const normalizedRole = (role || 'PATIENT').toUpperCase();
 
+    // 1. Clear any conflicting old tokens first
+    sessionStorage.clear();
+    setToken('');
+    setAToken('');
+    setDToken('');
+
+    // 2. Set only the required token for the authenticated role
     switch (normalizedRole) {
       case 'DOCTOR':
-        setDToken(token);
-        localStorage.setItem('dToken', token);
+        setDToken(targetToken);
+        sessionStorage.setItem('dToken', targetToken);
         showToast('Welcome, Doctor! Redirecting to Doctor Workspace...', 'success');
-        navigate('/doctor/dashboard');
+        navigate('/doctor/dashboard', { replace: true });
         break;
 
       case 'ADMIN_HOSPITAL':
       case 'HOSPITAL_ADMIN':
-        setAToken(token);
-        localStorage.setItem('aToken', token);
+        setAToken(targetToken);
+        sessionStorage.setItem('aToken', targetToken);
         showToast('Welcome, Hospital Administrator! Redirecting to Hospital Desk...', 'success');
-        navigate('/hospital/dashboard');
+        navigate('/hospital/dashboard', { replace: true });
         break;
 
       case 'DRIVER':
-        setToken(token);
-        localStorage.setItem('token', token);
+        setToken(targetToken);
+        sessionStorage.setItem('token', targetToken);
         showToast('Welcome, Paramedic Driver! Redirecting to Ambulance Dashboard...', 'success');
-        navigate('/driver/dashboard');
+        navigate('/driver/dashboard', { replace: true });
         break;
 
       case 'SUPER_ADMIN':
       case 'ADMIN':
-        setAToken(token);
-        localStorage.setItem('aToken', token);
+        setAToken(targetToken);
+        sessionStorage.setItem('aToken', targetToken);
         showToast('Welcome, Super Administrator! Redirecting to Master Console...', 'success');
-        navigate('/super-admin/dashboard');
+        navigate('/super-admin/dashboard', { replace: true });
         break;
 
       case 'PATIENT':
       default:
-        setToken(token);
-        localStorage.setItem('token', token);
+        setToken(targetToken);
+        sessionStorage.setItem('token', targetToken);
         showToast('Welcome to b.well Healthcare! Redirecting to Patient Portal...', 'success');
-        navigate('/patient/dashboard');
+        navigate('/patient/dashboard', { replace: true });
         break;
     }
   };
@@ -168,32 +175,6 @@ export const Login: React.FC<LoginProps> = ({ embedded = false, initialMode = 'L
                 The heart of your healthcare
               </p>
             </div>
-
-            {/* Active User Session Banner (if already logged in) */}
-            {(token || dToken || aToken) && (
-              <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs max-w-sm mx-auto w-full">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <div className="text-left">
-                    <p className="font-bold text-emerald-950">Active: {userData?.name || doctorData?.name || 'Logged In'}</p>
-                    <p className="text-[10px] text-emerald-700 font-medium">
-                      {dToken ? 'Doctor' : aToken ? 'Admin' : 'Patient'} Workspace Ready
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (dToken) navigate('/doctor/dashboard');
-                    else if (aToken) navigate('/super-admin/dashboard');
-                    else navigate('/patient/dashboard');
-                  }}
-                  className="w-full sm:w-auto px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold rounded-xl text-xs transition-all shadow-sm cursor-pointer whitespace-nowrap"
-                >
-                  Go to Dashboard →
-                </button>
-              </div>
-            )}
 
             {/* Login / Sign Up Form */}
             <form onSubmit={onSubmitHandler} className="space-y-4 max-w-sm mx-auto w-full">

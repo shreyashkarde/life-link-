@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, ReactNode, useContext } from 'react';
+import React, { createContext, useState, useEffect, useRef, ReactNode, useContext } from 'react';
 import axios from 'axios';
 import { DoctorItem, fallbackDoctors } from '../assets/assets';
 
@@ -31,16 +31,29 @@ export const AppContextProvider: React.FC<{ children: ReactNode }> = ({ children
   const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
   const [doctors, setDoctors] = useState<DoctorItem[]>(fallbackDoctors);
-  const [token, setTokenState] = useState<string>(localStorage.getItem('token') || '');
+  const [token, setTokenState] = useState<string>(sessionStorage.getItem('token') || '');
   const [userData, setUserData] = useState<any>(null);
 
-  // Admin & Doctor tokens
-  const [aToken, setATokenState] = useState<string>(localStorage.getItem('aToken') || '');
-  const [dToken, setDTokenState] = useState<string>(localStorage.getItem('dToken') || '');
+  // Admin & Doctor tokens (Tab-isolated via sessionStorage)
+  const [aToken, setATokenState] = useState<string>(sessionStorage.getItem('aToken') || '');
+  const [dToken, setDTokenState] = useState<string>(sessionStorage.getItem('dToken') || '');
   const [doctorData, setDoctorData] = useState<any>(null);
 
   // Toast notification
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  const doctorsFetchedRef = useRef<boolean>(false);
+  const profileFetchTokenRef = useRef<string>('');
+
+  // Clear any legacy persistent tokens on startup to prevent auto-login leaks
+  useEffect(() => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('aToken');
+    localStorage.removeItem('dToken');
+    localStorage.removeItem('user');
+    localStorage.removeItem('userData');
+    localStorage.removeItem('role');
+  }, []);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setToast({ message, type });
@@ -52,9 +65,9 @@ export const AppContextProvider: React.FC<{ children: ReactNode }> = ({ children
   const setToken = (newToken: string) => {
     setTokenState(newToken);
     if (newToken) {
-      localStorage.setItem('token', newToken);
+      sessionStorage.setItem('token', newToken);
     } else {
-      localStorage.removeItem('token');
+      sessionStorage.removeItem('token');
       setUserData(null);
     }
   };
@@ -62,29 +75,45 @@ export const AppContextProvider: React.FC<{ children: ReactNode }> = ({ children
   const setAToken = (newToken: string) => {
     setATokenState(newToken);
     if (newToken) {
-      localStorage.setItem('aToken', newToken);
+      sessionStorage.setItem('aToken', newToken);
     } else {
-      localStorage.removeItem('aToken');
+      sessionStorage.removeItem('aToken');
     }
   };
 
   const setDToken = (newToken: string) => {
     setDTokenState(newToken);
     if (newToken) {
-      localStorage.setItem('dToken', newToken);
+      sessionStorage.setItem('dToken', newToken);
     } else {
-      localStorage.removeItem('dToken');
+      sessionStorage.removeItem('dToken');
       setDoctorData(null);
     }
   };
 
-  const logoutAll = () => {
-    setToken('');
-    setAToken('');
-    setDToken('');
+  const logoutAll = async () => {
+    setTokenState('');
+    setATokenState('');
+    setDTokenState('');
     setUserData(null);
     setDoctorData(null);
+    profileFetchTokenRef.current = '';
+
+    sessionStorage.clear();
+    localStorage.removeItem('token');
+    localStorage.removeItem('aToken');
+    localStorage.removeItem('dToken');
+    localStorage.removeItem('user');
+    localStorage.removeItem('userData');
+    localStorage.removeItem('role');
+
+    try {
+      await axios.post(`${backendUrl}/api/auth/logout`, {}, { withCredentials: true });
+    } catch {
+      // Silent error suppression
+    }
   };
+
 
   // Fetch doctors list from API
   const getDoctorsData = async () => {
@@ -93,8 +122,8 @@ export const AppContextProvider: React.FC<{ children: ReactNode }> = ({ children
       if (data.success && data.doctors && data.doctors.length > 0) {
         setDoctors(data.doctors);
       }
-    } catch (error) {
-      console.warn('API doctor fetch fallback to local Prescripto catalogue');
+    } catch {
+      // Fallback to local catalog silently
     }
   };
 
@@ -108,22 +137,30 @@ export const AppContextProvider: React.FC<{ children: ReactNode }> = ({ children
       if (data.success) {
         setUserData(data.userData);
       }
-    } catch (error: any) {
-      console.error('Failed to load user profile:', error.message);
+    } catch {
+      // Silent handling
     }
   };
 
   useEffect(() => {
-    getDoctorsData();
+    if (!doctorsFetchedRef.current) {
+      doctorsFetchedRef.current = true;
+      getDoctorsData();
+    }
   }, []);
 
   useEffect(() => {
     if (token) {
-      loadUserProfileData();
+      if (profileFetchTokenRef.current !== token) {
+        profileFetchTokenRef.current = token;
+        loadUserProfileData();
+      }
     } else {
+      profileFetchTokenRef.current = '';
       setUserData(null);
     }
   }, [token]);
+
 
   const value: AppContextType = {
     doctors,

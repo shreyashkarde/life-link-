@@ -158,7 +158,7 @@ export const LiveMap = ({
     return null;
   }, [latitude, longitude, pickupLat, pickupLng]);
 
-  // Google Maps SDK Loader (silent, zero modals)
+  // Google Maps SDK Loader (callback-based, zero console warnings)
   useEffect(() => {
     if (!envKey) return;
 
@@ -168,107 +168,130 @@ export const LiveMap = ({
     };
     window.gm_authFailure = handleAuthFailure;
 
-    if (window.google && window.google.maps) {
+    if (window.google && window.google.maps && typeof window.google.maps.Map === 'function') {
       setGoogleSdkLoaded(true);
       return;
     }
+
+    window.__initGoogleMapsCallback = () => {
+      if (window.google?.maps && typeof window.google.maps.Map === 'function') {
+        setGoogleSdkLoaded(true);
+      } else {
+        setGoogleAuthError(true);
+      }
+    };
 
     const scriptId = 'google-maps-api-script';
     let script = document.getElementById(scriptId);
     if (!script) {
       script = document.createElement('script');
       script.id = scriptId;
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(envKey)}&libraries=geometry`;
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(envKey)}&libraries=geometry&callback=__initGoogleMapsCallback`;
       script.async = true;
       script.defer = true;
-      script.onload = () => setGoogleSdkLoaded(true);
       script.onerror = () => setGoogleAuthError(true);
       document.head.appendChild(script);
-    } else {
-      script.addEventListener('load', () => setGoogleSdkLoaded(true));
-      script.addEventListener('error', () => setGoogleAuthError(true));
+    } else if (window.google?.maps) {
+      setGoogleSdkLoaded(true);
     }
   }, [envKey]);
 
-  // Google Maps Instance (only when valid envKey is provided)
-  const useGoogle = Boolean(envKey && googleSdkLoaded && !googleAuthError);
+  // Google Maps Instance (only when valid envKey is provided & Map is a constructor)
+  const useGoogle = Boolean(
+    envKey &&
+      googleSdkLoaded &&
+      !googleAuthError &&
+      typeof window.google?.maps?.Map === 'function'
+  );
 
   useEffect(() => {
-    if (!useGoogle || !googleMapContainerRef.current || !latitude || !longitude || !window.google?.maps) {
+    if (
+      !useGoogle ||
+      !googleMapContainerRef.current ||
+      !latitude ||
+      !longitude ||
+      typeof window.google?.maps?.Map !== 'function'
+    ) {
       return;
     }
 
-    const currentPos = { lat: latitude, lng: longitude };
+    try {
+      const currentPos = { lat: latitude, lng: longitude };
 
-    if (!googleMapInstanceRef.current) {
-      googleMapInstanceRef.current = new window.google.maps.Map(googleMapContainerRef.current, {
-        center: currentPos,
-        zoom: zoom,
-        mapTypeId: 'roadmap',
-        disableDefaultUI: false,
-        zoomControl: true,
-        streetViewControl: false,
-        fullscreenControl: true,
-      });
-    }
+      if (!googleMapInstanceRef.current) {
+        googleMapInstanceRef.current = new window.google.maps.Map(googleMapContainerRef.current, {
+          center: currentPos,
+          zoom: zoom,
+          mapTypeId: 'roadmap',
+          disableDefaultUI: false,
+          zoomControl: true,
+          streetViewControl: false,
+          fullscreenControl: true,
+        });
+      }
 
-    const map = googleMapInstanceRef.current;
-    if (!map) return;
+      const map = googleMapInstanceRef.current;
+      if (!map) return;
 
-    if (!googleDriverMarkerRef.current) {
-      googleDriverMarkerRef.current = new window.google.maps.Marker({
-        position: currentPos,
-        map: map,
-        title: `${driverName} (${vehicleNumber})`,
-        icon: {
-          url: 'https://cdn-icons-png.flaticon.com/512/2869/2869408.png',
-          scaledSize: new window.google.maps.Size(40, 40),
-          anchor: new window.google.maps.Point(20, 20),
-        },
-      });
-    } else {
-      googleDriverMarkerRef.current.setPosition(currentPos);
-    }
-
-    if (pickupLat && pickupLng) {
-      const pickupPos = { lat: pickupLat, lng: pickupLng };
-      if (!googlePickupMarkerRef.current) {
-        googlePickupMarkerRef.current = new window.google.maps.Marker({
-          position: pickupPos,
+      if (!googleDriverMarkerRef.current && typeof window.google?.maps?.Marker === 'function') {
+        googleDriverMarkerRef.current = new window.google.maps.Marker({
+          position: currentPos,
           map: map,
-          title: 'Patient Pickup Point',
+          title: `${driverName} (${vehicleNumber})`,
           icon: {
-            url: 'https://cdn-icons-png.flaticon.com/512/684/684908.png',
-            scaledSize: new window.google.maps.Size(36, 36),
-            anchor: new window.google.maps.Point(18, 36),
+            url: 'https://cdn-icons-png.flaticon.com/512/2869/2869408.png',
+            scaledSize: new window.google.maps.Size(40, 40),
+            anchor: new window.google.maps.Point(20, 20),
           },
         });
-      } else {
-        googlePickupMarkerRef.current.setPosition(pickupPos);
+      } else if (googleDriverMarkerRef.current && typeof googleDriverMarkerRef.current.setPosition === 'function') {
+        googleDriverMarkerRef.current.setPosition(currentPos);
       }
 
-      if (showRoute) {
-        const routePath = [currentPos, pickupPos];
-        if (!googlePolylineRef.current) {
-          googlePolylineRef.current = new window.google.maps.Polyline({
-            path: routePath,
-            geodesic: true,
-            strokeColor: '#2563EB',
-            strokeOpacity: 0.85,
-            strokeWeight: 4,
+      if (pickupLat && pickupLng) {
+        const pickupPos = { lat: pickupLat, lng: pickupLng };
+        if (!googlePickupMarkerRef.current && typeof window.google?.maps?.Marker === 'function') {
+          googlePickupMarkerRef.current = new window.google.maps.Marker({
+            position: pickupPos,
             map: map,
+            title: 'Patient Pickup Point',
+            icon: {
+              url: 'https://cdn-icons-png.flaticon.com/512/684/684908.png',
+              scaledSize: new window.google.maps.Size(36, 36),
+              anchor: new window.google.maps.Point(18, 36),
+            },
           });
-        } else {
-          googlePolylineRef.current.setPath(routePath);
+        } else if (googlePickupMarkerRef.current && typeof googlePickupMarkerRef.current.setPosition === 'function') {
+          googlePickupMarkerRef.current.setPosition(pickupPos);
         }
-      }
 
-      const bounds = new window.google.maps.LatLngBounds();
-      bounds.extend(currentPos);
-      bounds.extend(pickupPos);
-      map.fitBounds(bounds, { top: 40, right: 40, bottom: 40, left: 40 });
-    } else {
-      map.panTo(currentPos);
+        if (showRoute && typeof window.google?.maps?.Polyline === 'function') {
+          const routePath = [currentPos, pickupPos];
+          if (!googlePolylineRef.current) {
+            googlePolylineRef.current = new window.google.maps.Polyline({
+              path: routePath,
+              geodesic: true,
+              strokeColor: '#2563EB',
+              strokeOpacity: 0.85,
+              strokeWeight: 4,
+              map: map,
+            });
+          } else if (googlePolylineRef.current && typeof googlePolylineRef.current.setPath === 'function') {
+            googlePolylineRef.current.setPath(routePath);
+          }
+        }
+
+        if (typeof window.google?.maps?.LatLngBounds === 'function') {
+          const bounds = new window.google.maps.LatLngBounds();
+          bounds.extend(currentPos);
+          bounds.extend(pickupPos);
+          map.fitBounds(bounds, { top: 40, right: 40, bottom: 40, left: 40 });
+        }
+      } else if (typeof map.panTo === 'function') {
+        map.panTo(currentPos);
+      }
+    } catch {
+      setGoogleAuthError(true);
     }
   }, [useGoogle, latitude, longitude, pickupLat, pickupLng, driverName, vehicleNumber, zoom, showRoute]);
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 
@@ -16,16 +16,10 @@ export const DashboardNavbar: React.FC<DashboardNavbarProps> = ({
   avatarUrl = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200',
 }) => {
   const navigate = useNavigate();
-  const { setToken, setDToken, setAToken } = useApp();
-  const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
+  const { logoutAll } = useApp();
 
   const handleLogout = () => {
-    setToken('');
-    setDToken('');
-    setAToken('');
-    localStorage.removeItem('token');
-    localStorage.removeItem('dToken');
-    localStorage.removeItem('aToken');
+    logoutAll();
     navigate('/login');
   };
 
@@ -42,12 +36,28 @@ export const DashboardNavbar: React.FC<DashboardNavbarProps> = ({
 
   const currentMeta = roleMeta[currentRole] || roleMeta.PATIENT;
 
+  const getDashboardHome = () => {
+    switch (currentRole) {
+      case 'DOCTOR':
+        return '/doctor/dashboard';
+      case 'ADMIN_HOSPITAL':
+        return '/hospital/dashboard';
+      case 'DRIVER':
+        return '/driver/dashboard';
+      case 'SUPER_ADMIN':
+        return '/admin/dashboard';
+      case 'PATIENT':
+      default:
+        return '/patient/dashboard';
+    }
+  };
+
   return (
     <header className="bg-white border-b border-gray-100 sticky top-0 z-40 shadow-xs">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
         {/* Brand & Role Tag */}
         <div className="flex items-center gap-3">
-          <Link to="/" className="flex items-center gap-1.5 group">
+          <Link to={getDashboardHome()} className="flex items-center gap-1.5 group">
             <span className="text-2xl font-black tracking-tight text-[#1e2e6e] group-hover:opacity-90 transition-opacity">
               b<span className="inline-block w-2.5 h-2.5 bg-emerald-500 rounded-full mx-0.5"></span>well
             </span>
@@ -61,89 +71,8 @@ export const DashboardNavbar: React.FC<DashboardNavbarProps> = ({
           </span>
         </div>
 
-        {/* Right Section: Role Switcher, Profile, and Logout */}
+        {/* Right Section: Profile and Logout */}
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* 1-Click Role Switcher Dropdown (User Friendly) */}
-          <div className="relative">
-            <button
-              onClick={() => setShowRoleSwitcher(!showRoleSwitcher)}
-              className="px-2.5 sm:px-3 py-1.5 bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 rounded-xl text-xs font-semibold border border-slate-200 hover:border-blue-200 transition-all flex items-center gap-1.5 cursor-pointer"
-              title="Quickly switch to another role's dashboard"
-            >
-              <span>🎛️</span>
-              <span className="hidden md:inline">Switch Role</span>
-              <span className="text-[10px] text-gray-400">▾</span>
-            </button>
-
-            {showRoleSwitcher && (
-              <div
-                className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-gray-100 p-2 z-50 animate-fadeIn"
-                onMouseLeave={() => setShowRoleSwitcher(false)}
-              >
-                <div className="px-3 py-1.5 border-b border-gray-100 mb-1">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                    Switch Dashboard
-                  </p>
-                </div>
-                <button
-                  onClick={() => {
-                    setShowRoleSwitcher(false);
-                    navigate('/patient/dashboard');
-                  }}
-                  className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors ${
-                    currentRole === 'PATIENT' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-slate-50'
-                  }`}
-                >
-                  <span>👤</span> Patient Dashboard
-                </button>
-                <button
-                  onClick={() => {
-                    setShowRoleSwitcher(false);
-                    navigate('/doctor/dashboard');
-                  }}
-                  className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors ${
-                    currentRole === 'DOCTOR' ? 'bg-indigo-50 text-indigo-700' : 'text-gray-700 hover:bg-slate-50'
-                  }`}
-                >
-                  <span>👨‍⚕️</span> Doctor Workspace
-                </button>
-                <button
-                  onClick={() => {
-                    setShowRoleSwitcher(false);
-                    navigate('/hospital/dashboard');
-                  }}
-                  className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors ${
-                    currentRole === 'ADMIN_HOSPITAL' ? 'bg-emerald-50 text-emerald-700' : 'text-gray-700 hover:bg-slate-50'
-                  }`}
-                >
-                  <span>🏥</span> Hospital Admin Desk
-                </button>
-                <button
-                  onClick={() => {
-                    setShowRoleSwitcher(false);
-                    navigate('/driver/dashboard');
-                  }}
-                  className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors ${
-                    currentRole === 'DRIVER' ? 'bg-red-50 text-red-700' : 'text-gray-700 hover:bg-slate-50'
-                  }`}
-                >
-                  <span>🚑</span> Ambulance Driver
-                </button>
-                <button
-                  onClick={() => {
-                    setShowRoleSwitcher(false);
-                    navigate('/super-admin/dashboard');
-                  }}
-                  className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors ${
-                    currentRole === 'SUPER_ADMIN' ? 'bg-purple-50 text-purple-700' : 'text-gray-700 hover:bg-slate-50'
-                  }`}
-                >
-                  <span>👑</span> Super Admin Console
-                </button>
-              </div>
-            )}
-          </div>
-
           {/* User Profile Info */}
           <div className="flex items-center gap-2">
             <img
@@ -171,3 +100,4 @@ export const DashboardNavbar: React.FC<DashboardNavbarProps> = ({
 };
 
 export default DashboardNavbar;
+

@@ -27,7 +27,6 @@ import DoctorAppointments from './pages/admin/DoctorAppointments';
 import DoctorProfile from './pages/admin/DoctorProfile';
 
 import EmergencySOSButton from './components/EmergencySOSButton';
-import LiveFeaturesShowcase from './features/LiveFeaturesShowcase';
 import NotificationToast from './features/notifications/NotificationToast';
 
 // 5 Role Dedicated Dashboards
@@ -36,6 +35,7 @@ import DoctorPanelDashboard from './pages/dashboards/DoctorDashboard';
 import HospitalAdminDashboard from './pages/dashboards/HospitalAdminDashboard';
 import DriverDashboard from './pages/dashboards/DriverDashboard';
 import SuperAdminDashboard from './pages/dashboards/SuperAdminDashboard';
+import ProtectedRoute from './components/ProtectedRoute';
 
 // Patient Layout wrapper
 const PatientLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -45,15 +45,6 @@ const PatientLayout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       {children}
       <EmergencySOSButton />
       <NotificationToast />
-      {/* Non-intrusive floating link to Live Features Showcase */}
-      <a
-        href="/features"
-        className="fixed bottom-6 left-6 z-50 bg-slate-900/90 hover:bg-slate-900 text-white text-xs font-semibold px-3.5 py-2 rounded-full shadow-lg border border-blue-400/40 backdrop-blur-md flex items-center gap-2 transition-all hover:scale-105"
-        title="Open 8 Live Modular Features Showcase"
-      >
-        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-        <span>⚡ Live Features Showcase</span>
-      </a>
       <Footer />
     </div>
   );
@@ -76,19 +67,10 @@ export const App: React.FC = () => {
     <AppContextProvider>
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
-          {/* Primary Portal Entry: Dedicated Full-Screen Login Page */}
+          {/* Primary Portal Entry: Unified 5-Role Login Page */}
           <Route path="/" element={<Login />} />
           <Route path="/login" element={<Login />} />
-
-          {/* Optional Home / Landing Page */}
-          <Route
-            path="/home"
-            element={
-              <PatientLayout>
-                <Home />
-              </PatientLayout>
-            }
-          />
+          <Route path="/home" element={<Navigate to="/" replace />} />
           <Route
             path="/doctors"
             element={
@@ -145,31 +127,115 @@ export const App: React.FC = () => {
               </PatientLayout>
             }
           />
-          {/* Advanced Modular Features Showcase Route */}
-          <Route path="/features" element={<LiveFeaturesShowcase />} />
 
-          {/* 5 Dedicated Role Dashboards */}
-          <Route path="/patient/dashboard" element={<PatientDashboard />} />
-          <Route path="/doctor/dashboard" element={<DoctorPanelDashboard />} />
-          <Route path="/hospital/dashboard" element={<HospitalAdminDashboard />} />
-          <Route path="/driver/dashboard" element={<DriverDashboard />} />
-          <Route path="/super-admin/dashboard" element={<SuperAdminDashboard />} />
+          {/* 5 Dedicated Role Dashboards (Protected by Role) */}
+          <Route
+            path="/patient/dashboard"
+            element={
+              <ProtectedRoute allowedRoles={['PATIENT', 'USER']}>
+                <PatientDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/doctor/dashboard"
+            element={
+              <ProtectedRoute allowedRoles={['DOCTOR']}>
+                <DoctorPanelDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/hospital/dashboard"
+            element={
+              <ProtectedRoute allowedRoles={['HOSPITAL_ADMIN', 'ADMIN_HOSPITAL', 'ADMIN', 'SUPER_ADMIN']}>
+                <HospitalAdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/driver/dashboard"
+            element={
+              <ProtectedRoute allowedRoles={['DRIVER']}>
+                <DriverDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/super-admin/dashboard"
+            element={
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'ADMIN', 'SUPERADMIN']}>
+                <SuperAdminDashboard />
+              </ProtectedRoute>
+            }
+          />
 
-          {/* Modular Real-Time Features Dashboards */}
-          <Route path="/features/patient-dashboard" element={<PatientDashboard />} />
-          <Route path="/features/doctor-dashboard" element={<DoctorPanelDashboard />} />
-          <Route path="/features/admin-dashboard" element={<SuperAdminDashboard />} />
-
-          {/* Admin & Doctor Panel Routes */}
-          <Route path="/admin" element={<AdminLayout />}>
+          {/* Admin & Doctor Panel Routes (Protected) */}
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'ADMIN', 'SUPERADMIN', 'DOCTOR']}>
+                <AdminLayout />
+              </ProtectedRoute>
+            }
+          >
             <Route index element={<AdminIndex />} />
-            <Route path="dashboard" element={<AdminDashboard />} />
-            <Route path="all-appointments" element={<AllAppointments />} />
-            <Route path="add-doctor" element={<AddDoctor />} />
-            <Route path="doctor-list" element={<DoctorsList />} />
-            <Route path="doctor-dashboard" element={<DoctorDashboard />} />
-            <Route path="doctor-appointments" element={<DoctorAppointments />} />
-            <Route path="doctor-profile" element={<DoctorProfile />} />
+            <Route
+              path="dashboard"
+              element={
+                <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'ADMIN', 'SUPERADMIN']}>
+                  <AdminDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="all-appointments"
+              element={
+                <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'ADMIN', 'SUPERADMIN']}>
+                  <AllAppointments />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="add-doctor"
+              element={
+                <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'ADMIN', 'SUPERADMIN']}>
+                  <AddDoctor />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="doctor-list"
+              element={
+                <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'ADMIN', 'SUPERADMIN']}>
+                  <DoctorsList />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="doctor-dashboard"
+              element={
+                <ProtectedRoute allowedRoles={['DOCTOR']}>
+                  <DoctorDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="doctor-appointments"
+              element={
+                <ProtectedRoute allowedRoles={['DOCTOR']}>
+                  <DoctorAppointments />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="doctor-profile"
+              element={
+                <ProtectedRoute allowedRoles={['DOCTOR']}>
+                  <DoctorProfile />
+                </ProtectedRoute>
+              }
+            />
           </Route>
 
           {/* Catch-all Fallback */}

@@ -20,14 +20,16 @@ export const requireRole = (...allowedRoles: string[]) => {
     const userRole = (req.user.role || '').toUpperCase();
     const normalizedAllowed = allowedRoles.map((r) => r.toUpperCase());
 
-    // Normalize super admin aliases
-    const isSuperAdmin = userRole === 'SUPER_ADMIN' || userRole === 'ADMIN';
+    // Normalize super admin, hospital admin, and patient aliases
+    const isSuperAdmin = userRole === 'SUPER_ADMIN' || userRole === 'ADMIN' || userRole === 'SUPERADMIN';
     const isHospitalAdmin = userRole === 'HOSPITAL_ADMIN' || userRole === 'ADMIN_HOSPITAL';
+    const isPatient = userRole === 'PATIENT' || userRole === 'USER';
 
     const hasPermission =
       normalizedAllowed.includes(userRole) ||
-      (isSuperAdmin && (normalizedAllowed.includes('SUPER_ADMIN') || normalizedAllowed.includes('ADMIN'))) ||
-      (isHospitalAdmin && (normalizedAllowed.includes('HOSPITAL_ADMIN') || normalizedAllowed.includes('ADMIN_HOSPITAL')));
+      (isSuperAdmin && (normalizedAllowed.includes('SUPER_ADMIN') || normalizedAllowed.includes('ADMIN') || normalizedAllowed.includes('SUPERADMIN'))) ||
+      (isHospitalAdmin && (normalizedAllowed.includes('HOSPITAL_ADMIN') || normalizedAllowed.includes('ADMIN_HOSPITAL'))) ||
+      (isPatient && (normalizedAllowed.includes('PATIENT') || normalizedAllowed.includes('USER')));
 
     if (!hasPermission) {
       res.status(403).json({

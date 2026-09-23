@@ -7,15 +7,25 @@ import { ENV } from '../config/env';
 import { isMongoConnected } from '../config/db';
 import { prescriptoStore } from '../config/prescriptoStore';
 
-// Public API to get doctor list for frontend display
-export const doctorList = async (_req: Request, res: Response): Promise<void> => {
+// Public API to get doctor list for frontend display (supports optional ?hospitalId= filter)
+export const doctorList = async (req: Request, res: Response): Promise<void> => {
   try {
+    const { hospitalId } = req.query;
+
     if (!isMongoConnected()) {
-      const doctors = prescriptoStore.doctors.map(({ password, email, ...rest }) => rest);
+      let docs = prescriptoStore.doctors;
+      if (hospitalId) {
+        docs = docs.filter((d) => d.hospitalId === hospitalId);
+      }
+      const doctors = docs.map(({ password, email, ...rest }) => rest);
       res.json({ success: true, doctors });
       return;
     }
-    const doctors = await Doctor.find({}).select(['-password', '-email']);
+
+    const filter: any = {};
+    if (hospitalId) filter.hospitalId = hospitalId;
+
+    const doctors = await Doctor.find(filter).select(['-password', '-email']);
     res.json({ success: true, doctors });
   } catch (error: any) {
     console.error('Doctor List Error:', error);

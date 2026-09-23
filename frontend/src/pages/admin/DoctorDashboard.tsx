@@ -141,7 +141,7 @@ export const DoctorDashboard: React.FC = () => {
                   <div>
                     <p className="text-gray-900 font-bold text-base">{item.userData?.name || 'Patient'}</p>
                     <p className="text-xs text-gray-500 font-medium">
-                      Slot: <span className="font-semibold text-primary">{item.slotDate?.replaceAll('_', ' / ')} at {item.slotTime}</span> •{' '}
+                      Slot: <span className="font-semibold text-primary">{item.slotDate?.replace(/_/g, ' / ')} at {item.slotTime}</span> •{' '}
                       Fee: <span className="text-emerald-600 font-bold">${item.amount}</span>
                     </p>
                   </div>

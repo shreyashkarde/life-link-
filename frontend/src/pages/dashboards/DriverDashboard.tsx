@@ -5,7 +5,8 @@ import { LiveMap } from '../../features/maps/LiveMap';
 import { useLiveLocation } from '../../features/tracking/useLiveLocation';
 
 export const DriverDashboard: React.FC = () => {
-  const { showToast } = useApp();
+  const { showToast, backendUrl } = useApp();
+  const apiBase = backendUrl || 'http://localhost:5000';
   const [isOnDuty, setIsOnDuty] = useState(true);
   const [tripStatus, setTripStatus] = useState<'IDLE' | 'ASSIGNED' | 'EN_ROUTE_PICKUP' | 'PATIENT_ONBOARD' | 'COMPLETED'>('ASSIGNED');
 
@@ -23,7 +24,7 @@ export const DriverDashboard: React.FC = () => {
     setIsOnDuty(nextStatus);
     showToast(`Duty Status: ${nextStatus ? 'ONLINE' : 'OFFLINE'}`, 'info');
     try {
-      await fetch('http://localhost:5000/api/ambulance/duty-toggle', {
+      await fetch(`${apiBase}/api/ambulance/duty-toggle`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isAvailable: nextStatus }),
@@ -42,9 +43,9 @@ export const DriverDashboard: React.FC = () => {
 
     // Notify backend and patient room
     try {
-      await fetch('http://localhost:5000/api/driver/trips/trip_108992/status', {
+      await fetch(`${apiBase}/api/driver/trips/trip_108992/status`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token') || localStorage.getItem('token') || ''}` },
         body: JSON.stringify({ status }),
       });
     } catch (e) {}

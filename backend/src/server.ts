@@ -17,6 +17,7 @@ import authRouter from './routes/authRoutes';
 import ambulanceRouter from './routes/ambulanceRoutes';
 import bookingRouter from './routes/bookingRoutes';
 import ratingRouter from './routes/ratingRoutes';
+import hospitalRouter from './routes/hospitalRoutes';
 
 const app: Application = express();
 const server = http.createServer(app);
@@ -24,14 +25,22 @@ const server = http.createServer(app);
 // Initialize Socket.io (strictly room-based real-time communication)
 const io = new SocketIOServer(server, {
   cors: {
-    origin: '*',
+    origin: (_origin, callback) => callback(null, true),
+    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
   },
 });
 initSocket(io);
 
-// Middlewares
-app.use(cors({ origin: '*', credentials: true }));
+// Middlewares - reflect origin for withCredentials support
+app.use(
+  cors({
+    origin: (_origin, callback) => callback(null, true),
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'token', 'aToken', 'dToken', 'x-refresh-token', 'x-role'],
+  })
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -63,6 +72,8 @@ app.use('/api/auth', authRouter);
 app.use('/api/ambulance', ambulanceRouter);
 app.use('/api/bookings', bookingRouter);
 app.use('/api/ratings', ratingRouter);
+app.use('/api/hospitals', hospitalRouter);
+app.use('/api/hospital', hospitalRouter);
 
 // Advanced Modular Features (Tracking, Hospitals, Notifications, Auth Enhancements, Rate Limiter)
 import { registerModularFeatures } from './features';

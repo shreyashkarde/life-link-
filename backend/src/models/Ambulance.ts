@@ -22,6 +22,8 @@ export interface IAmbulance extends Document {
   isAvailable: boolean; // Online / Offline toggle
   currentStatus: AmbulanceStatus;
   assignedHospital: string;
+  hospitalId?: string;
+  hospitalName?: string;
   rating: number;
   reviewCount: number;
   equipmentList?: string[];
@@ -54,7 +56,9 @@ const ambulanceSchema = new Schema<IAmbulance>(
       enum: ['IDLE', 'ASSIGNED', 'EN_ROUTE_PICKUP', 'PATIENT_ONBOARD', 'COMPLETED'],
       default: 'IDLE',
     },
-    assignedHospital: { type: String, default: 'City Care Central Hospital' },
+    assignedHospital: { type: String, default: 'Lilavati Hospital & Research Centre' },
+    hospitalId: { type: String, default: 'hosp_lilavati', ref: 'Hospital' },
+    hospitalName: { type: String, default: 'Lilavati Hospital & Research Centre' },
     rating: { type: Number, default: 4.9 },
     reviewCount: { type: Number, default: 35 },
     equipmentList: {

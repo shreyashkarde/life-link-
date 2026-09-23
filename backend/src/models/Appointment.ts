@@ -2,7 +2,11 @@ import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IAppointment extends Document {
   userId: string;
+  patientId?: string;
   docId: string;
+  doctorId?: string;
+  hospitalId?: string;
+  hospitalName?: string;
   slotDate: string;
   slotTime: string;
   userData: any;
@@ -19,7 +23,11 @@ export interface IAppointment extends Document {
 const appointmentSchema = new Schema<IAppointment>(
   {
     userId: { type: String, required: true },
+    patientId: { type: String, required: false },
     docId: { type: String, required: true },
+    doctorId: { type: String, required: false },
+    hospitalId: { type: String, default: 'hosp_lilavati', ref: 'Hospital' },
+    hospitalName: { type: String, default: 'Lilavati Hospital & Research Centre' },
     slotDate: { type: String, required: true },
     slotTime: { type: String, required: true },
     userData: { type: Object, required: true },

@@ -24,6 +24,8 @@ export interface IUser extends Document {
   phone: string;
   googleId?: string;
   isVerified?: boolean;
+  hospitalId?: string;
+  hospitalName?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -51,6 +53,8 @@ const userSchema = new Schema<IUser>(
     phone: { type: String, default: '0000000000' },
     googleId: { type: String, required: false },
     isVerified: { type: Boolean, default: true },
+    hospitalId: { type: String, default: 'hosp_lilavati', ref: 'Hospital' },
+    hospitalName: { type: String, default: 'Lilavati Hospital & Research Centre' },
   },
   { timestamps: true, minimize: false }
 );

@@ -21,6 +21,8 @@ export const authUser = async (
 
     const tokenDecode = jwt.verify(token, ENV.JWT_SECRET) as {
       id?: string;
+      role?: string;
+      email?: string;
     };
 
     if (!tokenDecode.id) {
@@ -28,15 +30,20 @@ export const authUser = async (
       return;
     }
 
-    // Attach userId to request body and locals
+    // Attach userId to request body, locals, and req.user
     req.body.userId = tokenDecode.id;
     res.locals.userId = tokenDecode.id;
+    (req as any).user = {
+      id: tokenDecode.id,
+      role: tokenDecode.role || 'PATIENT',
+      email: tokenDecode.email || '',
+    };
 
     next();
   } catch (error: any) {
-    console.error('User Auth Error:', error.message);
     res.status(401).json({ success: false, message: error.message || 'Authentication failed' });
   }
 };
 
 export default authUser;
+

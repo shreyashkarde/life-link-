@@ -3,7 +3,15 @@ import axios from 'axios';
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
 const getHeaders = () => {
-  const token = localStorage.getItem('token') || localStorage.getItem('aToken') || localStorage.getItem('dToken') || '';
+  const token =
+    sessionStorage.getItem('token') ||
+    sessionStorage.getItem('aToken') ||
+    sessionStorage.getItem('dToken') ||
+    localStorage.getItem('token') ||
+    localStorage.getItem('aToken') ||
+    localStorage.getItem('dToken') ||
+    '';
+
   return {
     headers: {
       Authorization: `Bearer ${token}`,

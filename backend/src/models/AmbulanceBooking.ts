@@ -1,7 +1,15 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
 export type BookingType = 'NORMAL' | 'EMERGENCY_SOS';
-export type BookingStatus = 'PENDING' | 'ACCEPTED' | 'ONGOING' | 'COMPLETED' | 'CANCELLED';
+export type BookingStatus =
+  | 'PENDING'
+  | 'ACCEPTED'
+  | 'EN_ROUTE_PICKUP'
+  | 'PATIENT_ONBOARD'
+  | 'ONGOING'
+  | 'COMPLETED'
+  | 'REJECTED'
+  | 'CANCELLED';
 export type EmergencySeverity = 'LOW' | 'MEDIUM' | 'CRITICAL_CODE_RED';
 export type PaymentStatus = 'PENDING' | 'PAID_ONLINE' | 'CASH';
 
@@ -16,6 +24,7 @@ export interface IBookingTimeline {
   acceptedAt?: Date;
   arrivedAt?: Date;
   completedAt?: Date;
+  rejectedAt?: Date;
   cancelledAt?: Date;
 }
 
@@ -24,9 +33,12 @@ export interface IAmbulanceBooking extends Document {
   patientName: string;
   patientPhone: string;
   ambulanceId?: string;
+  driverId?: string;
   driverName?: string;
   driverPhone?: string;
   vehicleNumber?: string;
+  hospitalId?: string;
+  hospitalName?: string;
   pickupLocation: ILocationPoint;
   destinationHospital: {
     name: string;
@@ -51,19 +63,22 @@ const ambulanceBookingSchema = new Schema<IAmbulanceBooking>(
     patientName: { type: String, required: true },
     patientPhone: { type: String, required: true },
     ambulanceId: { type: String, required: false },
+    driverId: { type: String, required: false },
     driverName: { type: String, required: false },
     driverPhone: { type: String, required: false },
     vehicleNumber: { type: String, required: false },
+    hospitalId: { type: String, default: 'hosp_lilavati', ref: 'Hospital' },
+    hospitalName: { type: String, default: 'Lilavati Hospital & Research Centre' },
     pickupLocation: {
       address: { type: String, required: true },
       lat: { type: Number, required: true },
       lng: { type: Number, required: true },
     },
     destinationHospital: {
-      name: { type: String, default: 'City Care Central Hospital' },
-      address: { type: String, default: 'Trauma Bay & Emergency Ward, Sector 4' },
-      lat: { type: Number, default: 19.0760 },
-      lng: { type: Number, default: 72.8777 },
+      name: { type: String, default: 'Lilavati Hospital & Research Centre' },
+      address: { type: String, default: 'Trauma Bay & Emergency Ward, Bandra West' },
+      lat: { type: Number, default: 19.0544 },
+      lng: { type: Number, default: 72.8277 },
     },
     bookingType: {
       type: String,
@@ -72,7 +87,16 @@ const ambulanceBookingSchema = new Schema<IAmbulanceBooking>(
     },
     status: {
       type: String,
-      enum: ['PENDING', 'ACCEPTED', 'ONGOING', 'COMPLETED', 'CANCELLED'],
+      enum: [
+        'PENDING',
+        'ACCEPTED',
+        'EN_ROUTE_PICKUP',
+        'PATIENT_ONBOARD',
+        'ONGOING',
+        'COMPLETED',
+        'REJECTED',
+        'CANCELLED',
+      ],
       default: 'PENDING',
     },
     emergencySeverity: {
@@ -92,6 +116,7 @@ const ambulanceBookingSchema = new Schema<IAmbulanceBooking>(
       acceptedAt: { type: Date },
       arrivedAt: { type: Date },
       completedAt: { type: Date },
+      rejectedAt: { type: Date },
       cancelledAt: { type: Date },
     },
   },
