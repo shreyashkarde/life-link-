@@ -28,6 +28,9 @@ export interface IUser extends Document {
   verificationTokenExpires?: Date;
   resetPasswordToken?: string;
   resetPasswordExpires?: Date;
+  loginAttempts?: number;
+  lockUntil?: Date;
+  refreshTokenHash?: string;
   hospitalId?: string;
   hospitalName?: string;
   createdAt: Date;
@@ -61,6 +64,9 @@ const userSchema = new Schema<IUser>(
     verificationTokenExpires: { type: Date, required: false },
     resetPasswordToken: { type: String, required: false },
     resetPasswordExpires: { type: Date, required: false },
+    loginAttempts: { type: Number, default: 0 },
+    lockUntil: { type: Date, required: false },
+    refreshTokenHash: { type: String, required: false },
     hospitalId: { type: String, default: 'hosp_lilavati', ref: 'Hospital' },
     hospitalName: { type: String, default: 'Lilavati Hospital & Research Centre' },
   },

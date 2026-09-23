@@ -32,9 +32,19 @@ const io = new SocketIOServer(server, {
 });
 initSocket(io);
 
+import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
+
 // Middlewares - reflect origin for withCredentials support
 import { hospitalContextMiddleware } from './middleware/hospitalIsolation';
 
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+  })
+);
+app.use(cookieParser());
 app.use(
   cors({
     origin: (_origin, callback) => callback(null, true),

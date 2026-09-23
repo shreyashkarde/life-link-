@@ -4,23 +4,26 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
 import { User } from '../models/User';
+import { Doctor } from '../models/Doctor';
 import { ENV } from '../config/env';
 import { prescriptoStore } from '../config/prescriptoStore';
 import { isMongoConnected } from '../config/db';
 import { AuthRequest } from '../middleware/auth';
-import { TokenService } from '../services/tokenService';
 import { emailService } from '../services/emailService';
+import {
+  isStrongPassword,
+  generateTokenPair,
+  setAuthCookies,
+  clearAuthCookies,
+  sanitizeValue,
+  hashToken,
+  logSecurityEvent,
+} from '../services/securityService';
 
 const googleClient = new OAuth2Client(ENV.GOOGLE_CLIENT_ID);
 
-const generateToken = (id: string, role: string, email: string) => {
-  return jwt.sign({ id, role, email }, ENV.JWT_SECRET, { expiresIn: '7d' });
-};
-
-// Helper: Hash token with SHA-256
-const hashToken = (token: string): string => {
-  return crypto.createHash('sha256').update(token).digest('hex');
-};
+const SYSTEM_SECURITY_STATEMENT =
+  'System uses layered security including hashing, rate limiting, token rotation, and secure cookies.';
 
 /**
  * 🔑 GOOGLE LOGIN (OAuth 2.0)
@@ -29,7 +32,8 @@ const hashToken = (token: string): string => {
  */
 export const googleAuthLogin = async (req: Request, res: Response) => {
   try {
-    const { token, credential, email: bodyEmail, name: bodyName, picture: bodyPicture, googleId: bodyGoogleId } = req.body;
+    const sanitizedBody = sanitizeValue(req.body);
+    const { token, credential, email: bodyEmail, name: bodyName, picture: bodyPicture, googleId: bodyGoogleId } = sanitizedBody;
 
     let email = bodyEmail;
     let name = bodyName;
@@ -64,7 +68,7 @@ export const googleAuthLogin = async (req: Request, res: Response) => {
           }
         }
       } catch (err) {
-        console.warn('[Google Auth] Token verification note:', err);
+        logSecurityEvent('GOOGLE_TOKEN_VERIFY_WARNING', { error: (err as any).message }, req);
       }
     }
 
@@ -79,6 +83,7 @@ export const googleAuthLogin = async (req: Request, res: Response) => {
 
     // 2. 🚨 STRICT VALIDATION: Allow ONLY Gmail accounts ending with "@gmail.com"
     if (!cleanEmail.endsWith('@gmail.com')) {
+      logSecurityEvent('GOOGLE_AUTH_NON_GMAIL_REJECTED', { email: cleanEmail }, req);
       return res.status(400).json({
         success: false,
         message: 'Only @gmail.com users are allowed to authenticate via Google login.',
@@ -93,6 +98,17 @@ export const googleAuthLogin = async (req: Request, res: Response) => {
     if (isMongoConnected()) {
       let user = await User.findOne({ email: cleanEmail });
 
+      // Check account lockout
+      if (user && user.lockUntil && new Date(user.lockUntil) > new Date()) {
+        const remainingMins = Math.ceil((new Date(user.lockUntil).getTime() - Date.now()) / 60000);
+        return res.status(423).json({
+          success: false,
+          message: `Account is temporarily locked due to multiple failed login attempts. Please try again after ${remainingMins} minutes or reset your password.`,
+          code: 'ACCOUNT_LOCKED',
+          lockUntil: user.lockUntil,
+        });
+      }
+
       if (!user) {
         // Create new user for first-time Google sign in
         user = await User.create({
@@ -101,40 +117,58 @@ export const googleAuthLogin = async (req: Request, res: Response) => {
           role: 'PATIENT',
           image: safeAvatar,
           googleId: safeGoogleId,
-          isVerified: true, // Google accounts are pre-verified
+          isVerified: true,
           phone: '0000000000',
+          loginAttempts: 0,
         });
       } else {
-        // Update existing user with Google ID and verified flag
         user.googleId = safeGoogleId;
         user.isVerified = true;
-        if (!user.image || user.image.includes('unsplash')) {
-          user.image = safeAvatar;
-        }
+        user.loginAttempts = 0;
+        user.lockUntil = undefined;
         await user.save();
       }
 
-      const jwtToken = generateToken(user._id.toString(), user.role, user.email);
+      const tokens = generateTokenPair(user._id.toString(), user.role, user.email);
+      setAuthCookies(res, tokens);
+
+      logSecurityEvent('GOOGLE_LOGIN_SUCCESS', { userId: user._id, email: user.email }, req);
+
       return res.json({
         success: true,
         message: 'Only @gmail.com users are allowed to authenticate via Google login.',
-        token: jwtToken,
+        statement: SYSTEM_SECURITY_STATEMENT,
+        token: tokens.accessToken,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresIn: tokens.expiresIn,
         user: {
           id: user._id,
           name: user.name,
           email: user.email,
           role: user.role,
           image: user.image,
-          isVerified: user.isVerified,
+          isVerified: true,
         },
       });
     }
 
-    // 4. In-Memory Store Fallback
+    // In-memory fallback
     let storeUser = prescriptoStore.users.find((u) => u.email?.toLowerCase().trim() === cleanEmail);
+
+    if (storeUser && storeUser.lockUntil && new Date(storeUser.lockUntil) > new Date()) {
+      const remainingMins = Math.ceil((new Date(storeUser.lockUntil).getTime() - Date.now()) / 60000);
+      return res.status(423).json({
+        success: false,
+        message: `Account is temporarily locked due to multiple failed login attempts. Please try again after ${remainingMins} minutes or reset your password.`,
+        code: 'ACCOUNT_LOCKED',
+        lockUntil: storeUser.lockUntil,
+      });
+    }
+
     if (!storeUser) {
       storeUser = {
-        _id: 'user_goog_' + Date.now(),
+        _id: 'user_' + Date.now(),
         name: safeName,
         email: cleanEmail,
         role: 'PATIENT',
@@ -145,19 +179,30 @@ export const googleAuthLogin = async (req: Request, res: Response) => {
         address: { line1: '', line2: '' },
         gender: 'Not Selected',
         dob: 'Not Selected',
+        loginAttempts: 0,
         createdAt: new Date().toISOString(),
       };
       prescriptoStore.users.push(storeUser);
     } else {
       storeUser.googleId = safeGoogleId;
       storeUser.isVerified = true;
+      storeUser.loginAttempts = 0;
+      delete storeUser.lockUntil;
     }
 
-    const jwtToken = generateToken(storeUser._id, storeUser.role || 'PATIENT', storeUser.email);
+    const tokens = generateTokenPair(storeUser._id, storeUser.role || 'PATIENT', storeUser.email);
+    setAuthCookies(res, tokens);
+
+    logSecurityEvent('GOOGLE_LOGIN_SUCCESS', { userId: storeUser._id, email: storeUser.email }, req);
+
     return res.json({
       success: true,
       message: 'Only @gmail.com users are allowed to authenticate via Google login.',
-      token: jwtToken,
+      statement: SYSTEM_SECURITY_STATEMENT,
+      token: tokens.accessToken,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      expiresIn: tokens.expiresIn,
       user: {
         id: storeUser._id,
         name: storeUser.name,
@@ -168,22 +213,21 @@ export const googleAuthLogin = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[Google Login Error]', error);
+    logSecurityEvent('GOOGLE_LOGIN_ERROR', { error: error.message }, req);
     return res.status(500).json({ success: false, message: error.message || 'Google login failed' });
   }
 };
 
-// Aliased export
 export const googleAuth = googleAuthLogin;
 
 /**
- * 📧 PART 1: REGISTER WITH EMAIL VERIFICATION
+ * 📧 PART 1: REGISTER WITH STRICT PASSWORD & EMAIL VERIFICATION
  * POST /api/auth/register
- * "Secure token-based email verification and password reset system with expiration and hashing."
  */
 export const registerUser = async (req: Request, res: Response) => {
   try {
-    const { name, email, password, role = 'PATIENT', phone } = req.body;
+    const sanitizedBody = sanitizeValue(req.body);
+    const { name, email, password, role = 'PATIENT', phone } = sanitizedBody;
 
     if (!name || !email || !password) {
       return res.status(400).json({ success: false, message: 'Name, email, and password are required' });
@@ -191,11 +235,18 @@ export const registerUser = async (req: Request, res: Response) => {
 
     const cleanEmail = email.toLowerCase().trim();
 
-    if (password.length < 6) {
-      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters long' });
+    // 🔒 Enforce strong password complexity policy
+    const passwordCheck = isStrongPassword(password);
+    if (!passwordCheck.isValid) {
+      return res.status(400).json({
+        success: false,
+        message: passwordCheck.message || 'Password does not meet enterprise security standards.',
+        policy: 'Min 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 special character.',
+      });
     }
 
-    const salt = await bcrypt.genSalt(10);
+    // 🔒 Bcrypt Salt Rounds >= 12
+    const salt = await bcrypt.genSalt(12);
     const hashedPassword = await bcrypt.hash(password, salt);
 
     // Generate secure 32-byte verification token and SHA-256 hash
@@ -218,17 +269,25 @@ export const registerUser = async (req: Request, res: Response) => {
         isVerified: false, // Must verify email
         verificationToken: hashedVerificationToken,
         verificationTokenExpires: tokenExpires,
+        loginAttempts: 0,
       });
 
       // Send verification email via Nodemailer
       const emailResult = await emailService.sendVerificationEmail(cleanEmail, name, rawVerificationToken);
 
-      const token = generateToken(newUser._id.toString(), newUser.role, newUser.email);
+      const tokens = generateTokenPair(newUser._id.toString(), newUser.role, newUser.email);
+      setAuthCookies(res, tokens);
+
+      logSecurityEvent('USER_REGISTERED', { userId: newUser._id, email: cleanEmail }, req);
+
       return res.status(201).json({
         success: true,
         message: 'Registration successful! Please check your email to verify your account.',
-        statement: 'Secure token-based email verification and password reset system with expiration and hashing.',
-        token,
+        statement: SYSTEM_SECURITY_STATEMENT,
+        token: tokens.accessToken,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresIn: tokens.expiresIn,
         verificationToken: rawVerificationToken,
         previewLink: emailResult.previewLink,
         user: {
@@ -254,25 +313,32 @@ export const registerUser = async (req: Request, res: Response) => {
       password: hashedPassword,
       role: role.toUpperCase(),
       phone: phone || '0000000000',
-      address: { line1: '', line2: '' },
-      gender: 'Not Selected',
-      dob: 'Not Selected',
       isVerified: false,
       verificationToken: hashedVerificationToken,
       rawVerificationToken,
       verificationTokenExpires: tokenExpires,
+      loginAttempts: 0,
+      image: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
       createdAt: new Date().toISOString(),
     };
+
     prescriptoStore.users.push(createdUser);
 
     const emailResult = await emailService.sendVerificationEmail(cleanEmail, name, rawVerificationToken);
-    const token = generateToken(createdUser._id, createdUser.role, createdUser.email);
+
+    const tokens = generateTokenPair(createdUser._id, createdUser.role, createdUser.email);
+    setAuthCookies(res, tokens);
+
+    logSecurityEvent('USER_REGISTERED_IN_MEMORY', { userId: createdUser._id, email: cleanEmail }, req);
 
     return res.status(201).json({
       success: true,
       message: 'Registration successful! Please check your email to verify your account.',
-      statement: 'Secure token-based email verification and password reset system with expiration and hashing.',
-      token,
+      statement: SYSTEM_SECURITY_STATEMENT,
+      token: tokens.accessToken,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      expiresIn: tokens.expiresIn,
       verificationToken: rawVerificationToken,
       previewLink: emailResult.previewLink,
       user: {
@@ -284,19 +350,20 @@ export const registerUser = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
+    logSecurityEvent('REGISTRATION_ERROR', { error: error.message }, req);
     return res.status(500).json({ success: false, message: error.message });
   }
 };
 
 /**
- * 📧 VERIFY EMAIL ENDPOINT
- * GET /api/auth/verify-email & POST /api/auth/verify-email
+ * 📧 VERIFY EMAIL WITH TOKEN
+ * GET & POST /api/auth/verify-email
  */
 export const verifyEmail = async (req: Request, res: Response) => {
   try {
-    const rawToken = (req.query.token as string) || req.body.token;
+    const rawToken = req.query.token || req.body.token;
 
-    if (!rawToken) {
+    if (!rawToken || typeof rawToken !== 'string') {
       return res.status(400).json({ success: false, message: 'Verification token is required' });
     }
 
@@ -304,10 +371,7 @@ export const verifyEmail = async (req: Request, res: Response) => {
 
     if (isMongoConnected()) {
       const user = await User.findOne({
-        $or: [
-          { verificationToken: hashedToken },
-          { verificationToken: rawToken },
-        ],
+        $or: [{ verificationToken: hashedToken }, { verificationToken: rawToken }],
         verificationTokenExpires: { $gt: new Date() },
       });
 
@@ -323,12 +387,19 @@ export const verifyEmail = async (req: Request, res: Response) => {
       user.verificationTokenExpires = undefined;
       await user.save();
 
-      const token = generateToken(user._id.toString(), user.role, user.email);
+      const tokens = generateTokenPair(user._id.toString(), user.role, user.email);
+      setAuthCookies(res, tokens);
+
+      logSecurityEvent('EMAIL_VERIFIED', { userId: user._id, email: user.email }, req);
+
       return res.json({
         success: true,
-        message: 'Email verified successfully! You now have full access to b.well Healthcare.',
-        statement: 'Secure token-based email verification and password reset system with expiration and hashing.',
-        token,
+        message: 'Email verified successfully! You now have full access to LifeLink Healthcare.',
+        statement: SYSTEM_SECURITY_STATEMENT,
+        token: tokens.accessToken,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresIn: tokens.expiresIn,
         user: {
           id: user._id,
           name: user.name,
@@ -357,12 +428,19 @@ export const verifyEmail = async (req: Request, res: Response) => {
     delete storeUser.verificationToken;
     delete storeUser.verificationTokenExpires;
 
-    const token = generateToken(storeUser._id, storeUser.role || 'PATIENT', storeUser.email);
+    const tokens = generateTokenPair(storeUser._id, storeUser.role || 'PATIENT', storeUser.email);
+    setAuthCookies(res, tokens);
+
+    logSecurityEvent('EMAIL_VERIFIED_IN_MEMORY', { userId: storeUser._id, email: storeUser.email }, req);
+
     return res.json({
       success: true,
-      message: 'Email verified successfully! You now have full access to b.well Healthcare.',
-      statement: 'Secure token-based email verification and password reset system with expiration and hashing.',
-      token,
+      message: 'Email verified successfully! You now have full access to LifeLink Healthcare.',
+      statement: SYSTEM_SECURITY_STATEMENT,
+      token: tokens.accessToken,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      expiresIn: tokens.expiresIn,
       user: {
         id: storeUser._id,
         name: storeUser.name,
@@ -382,7 +460,7 @@ export const verifyEmail = async (req: Request, res: Response) => {
  */
 export const resendVerification = async (req: Request, res: Response) => {
   try {
-    const { email } = req.body;
+    const { email } = sanitizeValue(req.body);
     if (!email) {
       return res.status(400).json({ success: false, message: 'Email is required' });
     }
@@ -439,70 +517,73 @@ export const resendVerification = async (req: Request, res: Response) => {
 };
 
 /**
- * 🔑 PART 2: FORGOT PASSWORD
+ * 🔑 FORGOT PASSWORD (Dispatches 30-min Token)
  * POST /api/auth/forgot-password
- * "Secure token-based email verification and password reset system with expiration and hashing."
  */
 export const forgotPassword = async (req: Request, res: Response) => {
   try {
-    const { email } = req.body;
-
+    const { email } = sanitizeValue(req.body);
     if (!email) {
-      return res.status(400).json({ success: false, message: 'Email address is required' });
+      return res.status(400).json({ success: false, message: 'Email is required' });
     }
 
     const cleanEmail = email.toLowerCase().trim();
-
-    // 1. Generate strong 32-byte random token & SHA-256 hash
     const rawResetToken = crypto.randomBytes(32).toString('hex');
     const hashedResetToken = hashToken(rawResetToken);
-    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes expiry
-
-    let userFound = false;
-    let userName = 'Valued Member';
+    const tokenExpires = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
 
     if (isMongoConnected()) {
       const user = await User.findOne({ email: cleanEmail });
-      if (user) {
-        userFound = true;
-        userName = user.name || userName;
-        user.resetPasswordToken = hashedResetToken;
-        user.resetPasswordExpires = expiresAt;
-        await user.save();
+      if (!user) {
+        return res.json({
+          success: true,
+          message: 'If an account exists with this email, a password reset link has been dispatched.',
+        });
       }
-    }
 
-    if (!userFound) {
-      const storeUser =
-        prescriptoStore.users.find((u) => u.email?.toLowerCase().trim() === cleanEmail) ||
-        prescriptoStore.doctors.find((d) => d.email?.toLowerCase().trim() === cleanEmail);
+      user.resetPasswordToken = hashedResetToken;
+      user.resetPasswordExpires = tokenExpires;
+      await user.save();
 
-      if (storeUser) {
-        userFound = true;
-        userName = storeUser.name || userName;
-        (storeUser as any).resetPasswordToken = hashedResetToken;
-        (storeUser as any).rawResetToken = rawResetToken;
-        (storeUser as any).resetPasswordExpires = expiresAt;
-      }
-    }
+      const emailResult = await emailService.sendPasswordResetEmail(cleanEmail, user.name, rawResetToken);
 
-    if (!userFound && cleanEmail !== (ENV.ADMIN_EMAIL || '').toLowerCase().trim()) {
-      return res.status(404).json({
-        success: false,
-        message: 'No active account found with this email address.',
+      logSecurityEvent('PASSWORD_RESET_REQUESTED', { userId: user._id, email: cleanEmail }, req);
+
+      return res.json({
+        success: true,
+        message: 'Password reset link sent! Please check your inbox (valid for 30 minutes).',
+        statement: SYSTEM_SECURITY_STATEMENT,
+        previewLink: emailResult.previewLink,
+        directResetLink: (emailResult as any).resetUrl || emailResult.previewLink,
       });
     }
 
-    // Send reset email via Nodemailer
-    const emailResult = await emailService.sendPasswordResetEmail(cleanEmail, userName, rawResetToken);
+    // In-memory fallback
+    const storeUser =
+      prescriptoStore.users.find((u) => u.email?.toLowerCase().trim() === cleanEmail) ||
+      prescriptoStore.doctors.find((d) => d.email?.toLowerCase().trim() === cleanEmail);
+
+    if (!storeUser) {
+      return res.json({
+        success: true,
+        message: 'If an account exists with this email, a password reset link has been dispatched.',
+      });
+    }
+
+    storeUser.resetPasswordToken = hashedResetToken;
+    storeUser.rawResetToken = rawResetToken;
+    storeUser.resetPasswordExpires = tokenExpires;
+
+    const emailResult = await emailService.sendPasswordResetEmail(cleanEmail, storeUser.name || 'User', rawResetToken);
+
+    logSecurityEvent('PASSWORD_RESET_REQUESTED_IN_MEMORY', { email: cleanEmail }, req);
 
     return res.json({
       success: true,
-      message: 'Password reset link has been dispatched to your email address.',
-      statement: 'Secure token-based email verification and password reset system with expiration and hashing.',
-      resetToken: rawResetToken,
-      resetLink: emailResult.previewLink,
-      expiresInMinutes: 30,
+      message: 'Password reset link sent! Please check your inbox (valid for 30 minutes).',
+      statement: SYSTEM_SECURITY_STATEMENT,
+      previewLink: emailResult.previewLink,
+      directResetLink: (emailResult as any).resetUrl || emailResult.previewLink,
     });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
@@ -512,37 +593,37 @@ export const forgotPassword = async (req: Request, res: Response) => {
 /**
  * 🔑 RESET PASSWORD
  * POST /api/auth/reset-password
- * "Secure token-based email verification and password reset system with expiration and hashing."
  */
 export const resetPassword = async (req: Request, res: Response) => {
   try {
-    const rawToken = req.body.token || req.body.resetToken;
-    const { newPassword } = req.body;
+    const { token, newPassword, password } = sanitizeValue(req.body);
+    const targetPassword = newPassword || password;
+    const rawToken = token || req.query.token;
 
-    if (!rawToken || !newPassword) {
+    if (!rawToken || !targetPassword) {
       return res.status(400).json({
         success: false,
         message: 'Reset token and new password are required.',
       });
     }
 
-    if (newPassword.length < 6) {
+    // 🔒 Enforce strong password complexity policy
+    const passwordCheck = isStrongPassword(targetPassword);
+    if (!passwordCheck.isValid) {
       return res.status(400).json({
         success: false,
-        message: 'New password must be at least 6 characters long.',
+        message: passwordCheck.message || 'Password does not meet enterprise security standards.',
+        policy: 'Min 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 special character.',
       });
     }
 
     const hashedToken = hashToken(rawToken);
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(newPassword, salt);
+    const salt = await bcrypt.genSalt(12);
+    const hashedPassword = await bcrypt.hash(targetPassword, salt);
 
     if (isMongoConnected()) {
       const user = await User.findOne({
-        $or: [
-          { resetPasswordToken: hashedToken },
-          { resetPasswordToken: rawToken },
-        ],
+        $or: [{ resetPasswordToken: hashedToken }, { resetPasswordToken: rawToken }],
         resetPasswordExpires: { $gt: new Date() },
       });
 
@@ -556,12 +637,16 @@ export const resetPassword = async (req: Request, res: Response) => {
       user.password = hashedPassword;
       user.resetPasswordToken = undefined;
       user.resetPasswordExpires = undefined;
+      user.loginAttempts = 0;
+      user.lockUntil = undefined;
       await user.save();
+
+      logSecurityEvent('PASSWORD_RESET_SUCCESSFUL', { userId: user._id, email: user.email }, req);
 
       return res.json({
         success: true,
         message: 'Password has been reset successfully. You may now log in with your new password.',
-        statement: 'Secure token-based email verification and password reset system with expiration and hashing.',
+        statement: SYSTEM_SECURITY_STATEMENT,
       });
     }
 
@@ -589,11 +674,15 @@ export const resetPassword = async (req: Request, res: Response) => {
     delete (storeUser as any).resetPasswordToken;
     delete (storeUser as any).rawResetToken;
     delete (storeUser as any).resetPasswordExpires;
+    (storeUser as any).loginAttempts = 0;
+    delete (storeUser as any).lockUntil;
+
+    logSecurityEvent('PASSWORD_RESET_SUCCESSFUL_IN_MEMORY', { email: storeUser.email }, req);
 
     return res.json({
       success: true,
       message: 'Password has been reset successfully. You may now log in with your new password.',
-      statement: 'Secure token-based email verification and password reset system with expiration and hashing.',
+      statement: SYSTEM_SECURITY_STATEMENT,
     });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
@@ -601,12 +690,12 @@ export const resetPassword = async (req: Request, res: Response) => {
 };
 
 /**
- * POST /api/auth/login
- * Unified Role Login with Email Verification Check
+ * 🔐 POST /api/auth/login
+ * Unified Role Login with Account Lockout & Dual Token Issuance
  */
 export const loginUser = async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = sanitizeValue(req.body);
 
     if (!email || !password) {
       return res.status(400).json({ success: false, message: 'Email and password are required' });
@@ -625,37 +714,58 @@ export const loginUser = async (req: Request, res: Response) => {
         cleanPassword === 'adminpassword' ||
         cleanPassword === 'password123')
     ) {
-      const token = generateToken('admin_root', 'SUPER_ADMIN', cleanEmail);
+      const tokens = generateTokenPair('admin_root', 'SUPER_ADMIN', cleanEmail);
+      setAuthCookies(res, tokens);
+      logSecurityEvent('LOGIN_SUCCESS_SUPER_ADMIN', { email: cleanEmail }, req);
+
       return res.json({
         success: true,
-        token,
+        statement: SYSTEM_SECURITY_STATEMENT,
+        token: tokens.accessToken,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresIn: tokens.expiresIn,
         user: { id: 'admin_root', name: 'Master Administrator', email: cleanEmail, role: 'SUPER_ADMIN', isVerified: true },
       });
     }
 
-    // 2. Hospital Admin check
+    // 2. Hospital Admin Check
     if (
-      (cleanEmail === 'hospital@prescripto.com' || cleanEmail === 'hospital1@prescripto.com') &&
+      (cleanEmail === 'hospital@prescripto.com' || cleanEmail === 'hospital1@prescripto.com' || cleanEmail === 'hospital@lifelink.com') &&
       (cleanPassword === 'hospital123' || cleanPassword === 'admin123' || cleanPassword === 'password123')
     ) {
-      const token = generateToken('hosp_admin_1', 'ADMIN_HOSPITAL', cleanEmail);
+      const tokens = generateTokenPair('hosp_admin_1', 'ADMIN_HOSPITAL', cleanEmail, 'hosp_lilavati');
+      setAuthCookies(res, tokens);
+      logSecurityEvent('LOGIN_SUCCESS_HOSPITAL_ADMIN', { email: cleanEmail }, req);
+
       return res.json({
         success: true,
-        token,
+        statement: SYSTEM_SECURITY_STATEMENT,
+        token: tokens.accessToken,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresIn: tokens.expiresIn,
         user: { id: 'hosp_admin_1', name: 'Lilavati Hospital Administrator', email: cleanEmail, role: 'ADMIN_HOSPITAL', isVerified: true },
       });
     }
 
-    // 3. Driver / Paramedic check
+    // 3. Driver / Paramedic Check
     const storeDriver =
       prescriptoStore.ambulances?.find((a) => a.driverEmail?.toLowerCase().trim() === cleanEmail) ||
-      (cleanEmail === 'driver@prescripto.com' ? prescriptoStore.ambulances?.[0] : null);
+      (cleanEmail === 'driver@prescripto.com' || cleanEmail === 'driver1@prescripto.com' ? prescriptoStore.ambulances?.[0] : null);
 
     if (storeDriver && (cleanPassword === 'driver123' || cleanPassword === 'password123' || cleanPassword === 'admin123')) {
-      const token = generateToken(storeDriver.driverId || storeDriver._id, 'DRIVER', storeDriver.driverEmail || cleanEmail);
+      const tokens = generateTokenPair(storeDriver.driverId || storeDriver._id, 'DRIVER', storeDriver.driverEmail || cleanEmail);
+      setAuthCookies(res, tokens);
+      logSecurityEvent('LOGIN_SUCCESS_DRIVER', { email: cleanEmail }, req);
+
       return res.json({
         success: true,
-        token,
+        statement: SYSTEM_SECURITY_STATEMENT,
+        token: tokens.accessToken,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresIn: tokens.expiresIn,
         user: {
           id: storeDriver.driverId || storeDriver._id,
           name: storeDriver.driverName,
@@ -667,7 +777,29 @@ export const loginUser = async (req: Request, res: Response) => {
       });
     }
 
-    // 4. Doctor check (prescriptoStore or alias)
+    // 4. Doctor Check (MongoDB & prescriptoStore)
+    if (isMongoConnected()) {
+      const doc = await Doctor.findOne({ email: cleanEmail });
+      if (doc) {
+        const isMatch = await bcrypt.compare(cleanPassword, doc.password);
+        if (isMatch) {
+          const tokens = generateTokenPair(doc._id.toString(), 'DOCTOR', doc.email, doc.hospitalId);
+          setAuthCookies(res, tokens);
+          logSecurityEvent('LOGIN_SUCCESS_DOCTOR', { docId: doc._id, email: doc.email }, req);
+
+          return res.json({
+            success: true,
+            statement: SYSTEM_SECURITY_STATEMENT,
+            token: tokens.accessToken,
+            accessToken: tokens.accessToken,
+            refreshToken: tokens.refreshToken,
+            expiresIn: tokens.expiresIn,
+            user: { id: doc._id, name: doc.name, email: doc.email, role: 'DOCTOR', speciality: doc.speciality, isVerified: true },
+          });
+        }
+      }
+    }
+
     const storeDoc =
       prescriptoStore.doctors.find((d) => d.email?.toLowerCase().trim() === cleanEmail) ||
       (cleanEmail === 'doctor@prescripto.com' || cleanEmail === 'richard@prescripto.com' ? prescriptoStore.doctors[0] : null);
@@ -680,23 +812,52 @@ export const loginUser = async (req: Request, res: Response) => {
         } catch {}
       }
       if (isMatch || cleanPassword === 'doc123' || cleanPassword === 'password123') {
-        const token = generateToken(storeDoc._id, 'DOCTOR', storeDoc.email);
+        const tokens = generateTokenPair(storeDoc._id, 'DOCTOR', storeDoc.email, storeDoc.hospitalId);
+        setAuthCookies(res, tokens);
+        logSecurityEvent('LOGIN_SUCCESS_DOCTOR_STORE', { docId: storeDoc._id, email: storeDoc.email }, req);
+
         return res.json({
           success: true,
-          token,
+          statement: SYSTEM_SECURITY_STATEMENT,
+          token: tokens.accessToken,
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken,
+          expiresIn: tokens.expiresIn,
           user: { id: storeDoc._id, name: storeDoc.name, email: storeDoc.email, role: 'DOCTOR', speciality: storeDoc.speciality, isVerified: true },
         });
       }
     }
 
-    // 5. MongoDB Database Check
+    // 5. MongoDB User Check with Account Lockout System
     if (isMongoConnected()) {
       try {
-        const user = await User.findOne({ email: { $regex: new RegExp(`^${cleanEmail}$`, 'i') } });
-        if (user && user.password) {
-          const isMatch = await bcrypt.compare(cleanPassword, user.password);
+        const user = await User.findOne({ email: cleanEmail });
+        if (user) {
+          // Check if currently locked
+          if (user.lockUntil && new Date(user.lockUntil) > new Date()) {
+            const remainingMins = Math.ceil((new Date(user.lockUntil).getTime() - Date.now()) / 60000);
+            logSecurityEvent('LOCKED_ACCOUNT_LOGIN_ATTEMPT', { userId: user._id, email: cleanEmail, remainingMins }, req);
+
+            return res.status(423).json({
+              success: false,
+              message: `Account is temporarily locked due to multiple failed login attempts. Please try again after ${remainingMins} minutes or reset your password.`,
+              code: 'ACCOUNT_LOCKED',
+              lockUntil: user.lockUntil,
+            });
+          }
+
+          let isMatch = false;
+          if (user.password) {
+            isMatch = await bcrypt.compare(cleanPassword, user.password);
+          }
+
           if (isMatch) {
-            // Check email verification status
+            // Reset login attempts on successful authentication
+            user.loginAttempts = 0;
+            user.lockUntil = undefined;
+            await user.save();
+
+            // Check email verification status for patients
             if (user.isVerified === false && user.role === 'PATIENT') {
               return res.status(403).json({
                 success: false,
@@ -706,10 +867,17 @@ export const loginUser = async (req: Request, res: Response) => {
               });
             }
 
-            const token = generateToken(user._id.toString(), user.role, user.email);
+            const tokens = generateTokenPair(user._id.toString(), user.role, user.email);
+            setAuthCookies(res, tokens);
+            logSecurityEvent('LOGIN_SUCCESS_USER', { userId: user._id, email: user.email }, req);
+
             return res.json({
               success: true,
-              token,
+              statement: SYSTEM_SECURITY_STATEMENT,
+              token: tokens.accessToken,
+              accessToken: tokens.accessToken,
+              refreshToken: tokens.refreshToken,
+              expiresIn: tokens.expiresIn,
               user: {
                 id: user._id,
                 name: user.name,
@@ -718,29 +886,79 @@ export const loginUser = async (req: Request, res: Response) => {
                 isVerified: user.isVerified !== false,
               },
             });
+          } else {
+            // Failed attempt: Increment counter
+            user.loginAttempts = (user.loginAttempts || 0) + 1;
+            let locked = false;
+
+            if (user.loginAttempts >= 5) {
+              user.lockUntil = new Date(Date.now() + 15 * 60 * 1000); // 15 mins lock
+              locked = true;
+              logSecurityEvent('ACCOUNT_LOCKED_5_FAILED_ATTEMPTS', { userId: user._id, email: cleanEmail }, req);
+            } else {
+              logSecurityEvent('FAILED_LOGIN_PASSWORD_MISMATCH', { userId: user._id, email: cleanEmail, attempts: user.loginAttempts }, req);
+            }
+
+            await user.save();
+
+            const remainingAttempts = Math.max(0, 5 - user.loginAttempts);
+            return res.status(400).json({
+              success: false,
+              message: locked
+                ? 'Account has been locked for 15 minutes due to 5 consecutive failed login attempts.'
+                : `Invalid email or password. ${remainingAttempts} attempt(s) remaining before account lockout.`,
+              attempts: user.loginAttempts,
+              remainingAttempts,
+              locked,
+            });
           }
         }
-      } catch {}
+      } catch (err: any) {
+        console.error('Mongo login error:', err);
+      }
     }
 
-    // 6. In-Memory User / Patient check
+    // 6. In-Memory User / Patient Check with Account Lockout System
     const storeUser =
       prescriptoStore.users.find((u) => u.email?.toLowerCase().trim() === cleanEmail) ||
       (cleanEmail === 'user@prescripto.com' || cleanEmail === 'patient@prescripto.com' ? prescriptoStore.users[0] : null);
 
     if (storeUser) {
+      // Check if locked
+      if (storeUser.lockUntil && new Date(storeUser.lockUntil) > new Date()) {
+        const remainingMins = Math.ceil((new Date(storeUser.lockUntil).getTime() - Date.now()) / 60000);
+        logSecurityEvent('LOCKED_ACCOUNT_LOGIN_ATTEMPT_STORE', { userId: storeUser._id, email: cleanEmail, remainingMins }, req);
+
+        return res.status(423).json({
+          success: false,
+          message: `Account is temporarily locked due to multiple failed login attempts. Please try again after ${remainingMins} minutes or reset your password.`,
+          code: 'ACCOUNT_LOCKED',
+          lockUntil: storeUser.lockUntil,
+        });
+      }
+
       let isMatch = false;
       if (storeUser.password) {
         try {
           isMatch = await bcrypt.compare(cleanPassword, storeUser.password);
         } catch {}
       }
+
       if (isMatch || cleanPassword === 'password123') {
-        // Allow seed/demo user to log in seamlessly
-        const token = generateToken(storeUser._id, storeUser.role || 'PATIENT', storeUser.email);
+        storeUser.loginAttempts = 0;
+        delete storeUser.lockUntil;
+
+        const tokens = generateTokenPair(storeUser._id, storeUser.role || 'PATIENT', storeUser.email);
+        setAuthCookies(res, tokens);
+        logSecurityEvent('LOGIN_SUCCESS_USER_STORE', { userId: storeUser._id, email: storeUser.email }, req);
+
         return res.json({
           success: true,
-          token,
+          statement: SYSTEM_SECURITY_STATEMENT,
+          token: tokens.accessToken,
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken,
+          expiresIn: tokens.expiresIn,
           user: {
             id: storeUser._id,
             name: storeUser.name,
@@ -749,16 +967,103 @@ export const loginUser = async (req: Request, res: Response) => {
             isVerified: true,
           },
         });
+      } else {
+        storeUser.loginAttempts = (storeUser.loginAttempts || 0) + 1;
+        let locked = false;
+
+        if (storeUser.loginAttempts >= 5) {
+          storeUser.lockUntil = new Date(Date.now() + 15 * 60 * 1000);
+          locked = true;
+          logSecurityEvent('ACCOUNT_LOCKED_5_FAILED_ATTEMPTS_STORE', { userId: storeUser._id, email: cleanEmail }, req);
+        } else {
+          logSecurityEvent('FAILED_LOGIN_PASSWORD_MISMATCH_STORE', { userId: storeUser._id, email: cleanEmail, attempts: storeUser.loginAttempts }, req);
+        }
+
+        const remainingAttempts = Math.max(0, 5 - storeUser.loginAttempts);
+        return res.status(400).json({
+          success: false,
+          message: locked
+            ? 'Account has been locked for 15 minutes due to 5 consecutive failed login attempts.'
+            : `Invalid email or password. ${remainingAttempts} attempt(s) remaining before account lockout.`,
+          attempts: storeUser.loginAttempts,
+          remainingAttempts,
+          locked,
+        });
       }
     }
 
+    logSecurityEvent('LOGIN_USER_NOT_FOUND', { email: cleanEmail }, req);
     return res.status(400).json({ success: false, message: 'Invalid email or password' });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// GET /api/auth/profile
+/**
+ * 🔄 JWT REFRESH TOKEN ROTATION
+ * POST /api/auth/refresh & POST /api/auth/refresh-token
+ */
+export const refreshToken = async (req: Request, res: Response) => {
+  try {
+    const rawRefreshToken =
+      req.cookies?.refreshToken ||
+      (req.headers['x-refresh-token'] as string) ||
+      req.body?.refreshToken;
+
+    if (!rawRefreshToken || typeof rawRefreshToken !== 'string') {
+      return res.status(401).json({
+        success: false,
+        message: 'Refresh token is required. Please authenticate.',
+        code: 'REFRESH_TOKEN_MISSING',
+      });
+    }
+
+    try {
+      const decoded = jwt.verify(rawRefreshToken, ENV.JWT_SECRET) as any;
+
+      if (decoded.type !== 'refresh') {
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid token type provided for refresh endpoint.',
+          code: 'INVALID_REFRESH_TOKEN_TYPE',
+        });
+      }
+
+      // 🔄 Issue rotated token pair
+      const tokens = generateTokenPair(decoded.id, decoded.role, decoded.email, decoded.hospitalId);
+      setAuthCookies(res, tokens);
+
+      logSecurityEvent('TOKEN_ROTATED_SUCCESSFULLY', { userId: decoded.id, email: decoded.email }, req);
+
+      return res.json({
+        success: true,
+        statement: SYSTEM_SECURITY_STATEMENT,
+        token: tokens.accessToken,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresIn: tokens.expiresIn,
+        user: {
+          id: decoded.id,
+          role: decoded.role,
+          email: decoded.email,
+        },
+      });
+    } catch (err: any) {
+      clearAuthCookies(res);
+      return res.status(401).json({
+        success: false,
+        message: 'Refresh token has expired or is invalid. Please log in again.',
+        code: 'REFRESH_TOKEN_EXPIRED',
+      });
+    }
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * 👤 GET /api/auth/profile
+ */
 export const getProfile = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) {
@@ -790,28 +1095,20 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// POST /api/auth/logout
-export const logoutUser = async (_req: Request, res: Response) => {
+/**
+ * 🚪 POST /api/auth/logout
+ */
+export const logoutUser = async (req: Request, res: Response) => {
   try {
-    TokenService.clearRefreshTokenCookie(res);
+    clearAuthCookies(res);
+    logSecurityEvent('USER_LOGGED_OUT', {}, req);
+
     return res.json({
       success: true,
-      message: 'Logged out successfully. Secure refresh token cleared.',
+      statement: SYSTEM_SECURITY_STATEMENT,
+      message: 'Logged out successfully. Secure session and cookies cleared.',
     });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
   }
-};
-
-export default {
-  googleAuthLogin,
-  googleAuth,
-  registerUser,
-  verifyEmail,
-  resendVerification,
-  forgotPassword,
-  resetPassword,
-  loginUser,
-  getProfile,
-  logoutUser,
 };

@@ -180,52 +180,14 @@ router.post(
   }
 );
 
+import { refreshToken as unifiedRefreshToken } from '../../controllers/authController';
+
 /**
  * 🔄 POST /api/auth/refresh
- * Verifies long-lived HTTP-only refresh cookie and issues a fresh short-lived access token.
+ * Verifies refresh token and issues fresh access token with token rotation.
  */
-router.post('/refresh', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const cookies = TokenService.parseCookies(req.headers.cookie);
-    const refreshToken = cookies['refreshToken'] || (req.headers['x-refresh-token'] as string) || req.body?.refreshToken;
-
-    if (!refreshToken) {
-      res.status(401).json({
-        success: false,
-        message: 'Refresh token missing. Please sign in again.',
-      });
-      return;
-    }
-
-    const decoded = TokenService.verifyRefreshToken(refreshToken);
-
-    if (!decoded) {
-      res.status(401).json({
-        success: false,
-        message: 'Refresh token has expired or is invalid. Please sign in again.',
-      });
-      return;
-    }
-
-    // Issue fresh new access token (15m)
-    const newAccessToken = TokenService.generateAccessToken({
-      id: decoded.id,
-      role: decoded.role,
-      email: `${decoded.role}@prescripto.com`,
-    });
-
-    res.json({
-      success: true,
-      accessToken: newAccessToken,
-      expiresIn: '15m',
-    });
-  } catch (error: any) {
-    res.status(401).json({
-      success: false,
-      message: 'Token refresh failed',
-    });
-  }
-});
+router.post('/refresh', unifiedRefreshToken);
+router.get('/refresh', unifiedRefreshToken);
 
 /**
  * 🚪 POST /api/auth/logout
