@@ -8,6 +8,8 @@ import { useLiveLocation } from '../../features/tracking/useLiveLocation';
 import { EmergencySOSModal } from '../../components/EmergencySOSModal';
 import { DoctorItem } from '../../assets/assets';
 
+import { socketService } from '../../services/socket';
+
 export const PatientDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { userData, token, backendUrl, showToast, doctors, getDoctorsData } = useApp();
@@ -19,6 +21,7 @@ export const PatientDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'consultations' | 'ambulance'>('consultations');
   const [isSOSModalOpen, setIsSOSModalOpen] = useState<boolean>(false);
   const [showNotifications, setShowNotifications] = useState<boolean>(false);
+  const [driverAcceptedNotice, setDriverAcceptedNotice] = useState<string | null>(null);
 
   const patientName = userData?.name || 'Edward Vincent';
   const apiBase = backendUrl || 'http://localhost:5000';
@@ -73,7 +76,24 @@ export const PatientDashboard: React.FC = () => {
 
   useEffect(() => {
     fetchDashboardData();
-  }, [token, apiBase]);
+
+    // 🔔 Real-time Socket.IO Subscriptions for Patient
+    const patientId = userData?._id || 'user_edward_101';
+    socketService.connect();
+    socketService.joinPatient(patientId);
+
+    socketService.onRideAccepted((data: any) => {
+      const driverName = data?.driverName || data?.booking?.driverName || 'Paramedic Unit';
+      const noticeText = 'Driver accepted your request';
+      setDriverAcceptedNotice(`${noticeText} (${driverName})`);
+      showToast(`🚑 ${noticeText}! Ambulance en route to your location.`, 'success');
+      fetchDashboardData();
+    });
+
+    return () => {
+      // Cleanup
+    };
+  }, [token, apiBase, userData?._id]);
 
   // Filter doctors by selected speciality
   const specialities = [
@@ -437,6 +457,15 @@ export const PatientDashboard: React.FC = () => {
                 ETA: {etaMinutes ? `${etaMinutes} mins` : '3 mins'}
               </span>
             </div>
+
+            {/* Real-time Driver Accepted Notification Banner */}
+            {driverAcceptedNotice && (
+              <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 font-bold flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                <span className="text-base">🚑</span>
+                <span className="flex-1">{driverAcceptedNotice}</span>
+                <span className="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded-full">ACTIVE</span>
+              </div>
+            )}
 
             <div className="space-y-1">
               <div className="flex items-center justify-between">

@@ -15,6 +15,7 @@ export interface IDoctor extends Document {
   experience: string;
   about: string;
   available: boolean;
+  isAvailable?: boolean;
   fees: number;
   address: IDoctorAddress;
   date: number;
@@ -36,6 +37,7 @@ const doctorSchema = new Schema<IDoctor>(
     experience: { type: String, required: true },
     about: { type: String, required: true },
     available: { type: Boolean, default: true },
+    isAvailable: { type: Boolean, default: true },
     fees: { type: Number, required: true },
     address: { type: Object, required: true },
     hospitalId: { type: String, default: 'hosp_lilavati', ref: 'Hospital', index: true },
@@ -47,6 +49,7 @@ const doctorSchema = new Schema<IDoctor>(
 );
 
 doctorSchema.index({ hospitalId: 1, available: 1 });
+doctorSchema.index({ hospitalId: 1, isAvailable: 1 });
 doctorSchema.index({ hospitalId: 1, speciality: 1 });
 
 export const Doctor = mongoose.models.Doctor || mongoose.model<IDoctor>('Doctor', doctorSchema);

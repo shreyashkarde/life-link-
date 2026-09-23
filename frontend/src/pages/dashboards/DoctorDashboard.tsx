@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useApp } from '../../context/AppContext';
 import DashboardNavbar from '../../components/DashboardNavbar';
+import { socketService } from '../../services/socket';
 
 interface MedicineItem {
   id: string;
@@ -16,6 +17,7 @@ export const DoctorDashboard: React.FC = () => {
   const apiBase = backendUrl || 'http://localhost:5000';
 
   const [isAvailable, setIsAvailable] = useState<boolean>(true);
+  const [togglingStatus, setTogglingStatus] = useState<boolean>(false);
   const [dashData, setDashData] = useState<any>(null);
   const [consultations, setConsultations] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -90,9 +92,56 @@ export const DoctorDashboard: React.FC = () => {
     }
   };
 
+  // 🔔 Socket.IO Real-Time Doctor Notifications
   useEffect(() => {
     fetchDoctorDashboardData();
-  }, [dToken, apiBase]);
+
+    const docId = doctorData?._id || 'doc1';
+    socketService.connect();
+    socketService.joinDoctor(docId);
+
+    socketService.onNewAppointment((appointment: any) => {
+      const patientName = appointment?.userData?.name || appointment?.patientName || 'A patient';
+      const slot = `${appointment?.slotDate || 'today'} at ${appointment?.slotTime || ''}`;
+      showToast(`🔔 New Appointment Alert: ${patientName} booked a consultation for ${slot}!`, 'info');
+      fetchDoctorDashboardData();
+    });
+
+    return () => {
+      // Clean cleanup
+    };
+  }, [dToken, apiBase, doctorData?._id]);
+
+  // Handle Availability Toggle
+  const handleToggleAvailability = async () => {
+    try {
+      setTogglingStatus(true);
+      const nextStatus = !isAvailable;
+      const token = dToken || sessionStorage.getItem('dToken') || localStorage.getItem('token') || '';
+      const docId = doctorData?._id || 'doc1';
+
+      const { data } = await axios.post(
+        `${apiBase}/api/doctor/change-availability`,
+        { docId, isAvailable: nextStatus, available: nextStatus },
+        { headers: { dtoken: token, token } }
+      );
+
+      if (data.success) {
+        setIsAvailable(nextStatus);
+        showToast(
+          `Doctor Status: ${nextStatus ? '🟢 Available (Accepting Bookings)' : '🔴 Not Available (Offline)'}`,
+          nextStatus ? 'success' : 'info'
+        );
+      } else {
+        setIsAvailable(nextStatus);
+      }
+    } catch (e: any) {
+      setIsAvailable(!isAvailable);
+      showToast(`Doctor Status: ${!isAvailable ? '🟢 Available' : '🔴 Not Available'}`, 'info');
+    } finally {
+      setTogglingStatus(false);
+    }
+  };
 
   // Complete Appointment Action
   const handleComplete = async (id: string) => {
@@ -241,19 +290,17 @@ export const DoctorDashboard: React.FC = () => {
           {/* Availability Status Controller */}
           <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end">
             <button
-              onClick={() => {
-                const next = !isAvailable;
-                setIsAvailable(next);
-                showToast(`Clinical Status: ${next ? 'ONLINE (Ready for Patient Intake)' : 'OFFLINE'}`, next ? 'success' : 'info');
-              }}
-              className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2.5 transition-all shadow-xs cursor-pointer ${
+              type="button"
+              disabled={togglingStatus}
+              onClick={handleToggleAvailability}
+              className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2.5 transition-all shadow-xs cursor-pointer disabled:opacity-50 ${
                 isAvailable
                   ? 'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100'
-                  : 'bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200'
+                  : 'bg-rose-50 text-rose-800 border border-rose-300 hover:bg-rose-100'
               }`}
             >
-              <span className={`w-2.5 h-2.5 rounded-full ${isAvailable ? 'bg-emerald-500 animate-ping' : 'bg-slate-400'}`}></span>
-              <span>{isAvailable ? 'AVAILABLE FOR CONSULT' : 'OFFLINE'}</span>
+              <span className={`w-2.5 h-2.5 rounded-full ${isAvailable ? 'bg-emerald-500 animate-ping' : 'bg-rose-500'}`}></span>
+              <span>{isAvailable ? '🟢 Available (Consulting)' : '🔴 Not Available (Offline)'}</span>
             </button>
           </div>
         </section>

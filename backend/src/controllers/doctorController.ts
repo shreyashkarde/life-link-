@@ -363,6 +363,7 @@ export const updateDoctorProfile = async (req: Request, res: Response): Promise<
       fees: Number(fees),
       address: parsedAddress,
       available: Boolean(available),
+      isAvailable: Boolean(available),
     });
 
     res.json({ success: true, message: 'Profile Updated Successfully' });
@@ -371,3 +372,60 @@ export const updateDoctorProfile = async (req: Request, res: Response): Promise<
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+// API to toggle doctor availability
+export const changeAvailablity = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const docId = req.body.docId || res.locals.docId || (req as any).doctor?.id;
+    const { isAvailable, available } = req.body;
+
+    if (!docId) {
+      res.status(400).json({ success: false, message: 'Doctor ID is required' });
+      return;
+    }
+
+    if (!isMongoConnected()) {
+      const doc = prescriptoStore.doctors.find((d) => d._id === docId || d.id === docId);
+      if (!doc) {
+        res.status(404).json({ success: false, message: 'Doctor not found' });
+        return;
+      }
+
+      const newStatus = isAvailable !== undefined ? Boolean(isAvailable) : available !== undefined ? Boolean(available) : !doc.available;
+      doc.available = newStatus;
+      (doc as any).isAvailable = newStatus;
+
+      res.json({
+        success: true,
+        message: `Doctor status updated to ${newStatus ? 'Available 🟢' : 'Not Available 🔴'}`,
+        available: newStatus,
+        isAvailable: newStatus,
+      });
+      return;
+    }
+
+    const doc = await Doctor.findById(docId);
+    if (!doc) {
+      res.status(404).json({ success: false, message: 'Doctor not found' });
+      return;
+    }
+
+    const newStatus = isAvailable !== undefined ? Boolean(isAvailable) : available !== undefined ? Boolean(available) : !doc.available;
+    doc.available = newStatus;
+    doc.isAvailable = newStatus;
+    await doc.save();
+
+    res.json({
+      success: true,
+      message: `Doctor status updated to ${newStatus ? 'Available 🟢' : 'Not Available 🔴'}`,
+      available: newStatus,
+      isAvailable: newStatus,
+    });
+  } catch (error: any) {
+    console.error('Change Doctor Availability Error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const toggleAvailability = changeAvailablity;
+

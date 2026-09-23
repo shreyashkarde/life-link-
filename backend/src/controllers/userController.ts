@@ -7,6 +7,7 @@ import { Appointment } from '../models/Appointment';
 import { ENV } from '../config/env';
 import { isMongoConnected } from '../config/db';
 import { prescriptoStore } from '../config/prescriptoStore';
+import { emitAppointmentBooked } from '../socket/socketHandler';
 
 // API to register user
 export const registerUser = async (req: Request, res: Response): Promise<void> => {
@@ -245,7 +246,13 @@ export const bookAppointment = async (req: Request, res: Response): Promise<void
     }
 
     if (!isMongoConnected()) {
-      const doc = prescriptoStore.doctors.find((d) => d._id === docId || d.id === docId);
+      const normalizedDocId = docId.toString().trim();
+      const doc = prescriptoStore.doctors.find((d) => 
+        d._id === normalizedDocId || 
+        d.id === normalizedDocId || 
+        d._id === `doc_${normalizedDocId.replace(/^doc_?/, '')}` || 
+        d._id === `doc${normalizedDocId.replace(/^doc_?/, '')}`
+      );
       if (!doc) {
         res.status(404).json({ success: false, message: 'Doctor not found' });
         return;
@@ -263,7 +270,7 @@ export const bookAppointment = async (req: Request, res: Response): Promise<void
         return;
       }
 
-      if (!doc.available) {
+      if (doc.available === false || (doc as any).isAvailable === false) {
         res.status(400).json({ success: false, message: 'Doctor is currently not available for bookings' });
         return;
       }
@@ -317,6 +324,10 @@ export const bookAppointment = async (req: Request, res: Response): Promise<void
       };
 
       prescriptoStore.appointments.unshift(newAppt);
+
+      // 🔔 Emit real-time "newAppointment" notification to doctor and hospital
+      emitAppointmentBooked(newAppt);
+
       res.json({
         success: true,
         message: `Appointment Booked Successfully at ${hospitalName}!`,
@@ -343,7 +354,7 @@ export const bookAppointment = async (req: Request, res: Response): Promise<void
       return;
     }
 
-    if (!docData.available) {
+    if (docData.available === false || docData.isAvailable === false) {
       res.status(400).json({ success: false, message: 'Doctor is currently not available for bookings' });
       return;
     }
@@ -406,6 +417,9 @@ export const bookAppointment = async (req: Request, res: Response): Promise<void
     await newAppointment.save();
 
     await Doctor.findByIdAndUpdate(docId, { slots_booked });
+
+    // 🔔 Emit real-time "newAppointment" notification to doctor and hospital
+    emitAppointmentBooked(newAppointment);
 
     res.json({
       success: true,

@@ -96,6 +96,25 @@ class SocketService {
     }
   }
 
+  public joinDoctor(doctorId: string): void {
+    const s = this.getSocket();
+    if (s && doctorId) {
+      s.emit('join_doctor', doctorId);
+      s.emit('join_room', { room: `doctor_${doctorId}` });
+    }
+  }
+
+  // 📥 Listen to incoming doctor appointments
+  public onNewAppointment(callback: (appointment: any) => void): void {
+    const s = this.getSocket();
+    if (s) {
+      s.off('newAppointment');
+      s.off('appointmentBooked');
+      s.on('newAppointment', callback);
+      s.on('appointmentBooked', callback);
+    }
+  }
+
   // 📍 Live Driver Location (Driver -> Socket Server -> Rooms)
   public emitDriverLocation(payload: DriverLocationPayload): void {
     const s = this.getSocket();

@@ -8,6 +8,8 @@ import {
   doctorDashboard,
   doctorProfile,
   updateDoctorProfile,
+  changeAvailablity,
+  toggleAvailability,
 } from '../controllers/doctorController';
 import { authDoctor } from '../middleware/authDoctor';
 
@@ -27,5 +29,7 @@ doctorRouter.post('/dashboard', authDoctor, doctorDashboard);
 doctorRouter.get('/profile', authDoctor, doctorProfile);
 doctorRouter.post('/profile', authDoctor, doctorProfile);
 doctorRouter.post('/update-profile', authDoctor, updateDoctorProfile);
+doctorRouter.post('/change-availability', authDoctor, changeAvailablity);
+doctorRouter.post('/toggle-availability', authDoctor, toggleAvailability);
 
 export default doctorRouter;

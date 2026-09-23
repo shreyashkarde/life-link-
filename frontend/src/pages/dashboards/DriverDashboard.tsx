@@ -4,6 +4,8 @@ import DashboardNavbar from '../../components/DashboardNavbar';
 import { LiveMap } from '../../features/maps/LiveMap';
 import { useLiveLocation } from '../../features/tracking/useLiveLocation';
 
+import { socketService } from '../../services/socket';
+
 export const DriverDashboard: React.FC = () => {
   const { showToast, backendUrl } = useApp();
   const apiBase = backendUrl || 'http://localhost:5000';
@@ -69,6 +71,35 @@ export const DriverDashboard: React.FC = () => {
 
   useEffect(() => {
     fetchDriverTrips();
+
+    // 🔔 Socket.IO Real-time Driver Dispatch Subscription
+    socketService.connect();
+    socketService.joinDriver('driver_108');
+
+    socketService.onNewBooking((booking: any) => {
+      const pName = booking?.patientName || booking?.userData?.name || 'Emergency Patient';
+      const cond = booking?.patientCondition || booking?.emergencyType || 'Emergency SOS';
+      const pAddress = booking?.pickupLocation?.address || 'GPS Ping Location';
+
+      setIncomingRequest({
+        bookingId: booking._id || booking.bookingId || 'SOS-' + Date.now(),
+        patientId: booking.patientId || 'user_edward_101',
+        patientName: pName,
+        patientPhone: booking.patientPhone || '+91 98200 99999',
+        emergencySeverity: booking.emergencySeverity || 'CRITICAL CODE-RED',
+        condition: cond,
+        pickupAddress: pAddress,
+        destinationHospital: booking.hospitalName || 'Lilavati Hospital & Research Centre',
+        distanceKm: booking.distanceKm || 1.4,
+        etaMinutes: booking.etaMinutes || 3,
+      });
+
+      showToast(`🚨 New Emergency Dispatch Alert for ${pName}!`, 'error');
+    });
+
+    return () => {
+      // Cleanup
+    };
   }, [apiBase]);
 
   // Duty Toggle

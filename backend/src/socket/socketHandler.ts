@@ -296,20 +296,27 @@ export const emitEmergencyAlert = (emergencyPayload: any) => {
  */
 export const emitAppointmentBooked = (appointment: any) => {
   if (!ioInstance || !appointment) return;
-  const docId = appointment.docId || appointment.docData?._id;
-  const userId = appointment.userId || appointment.userData?._id;
+  const docId = appointment.docId || appointment.docData?._id || appointment.doctorId;
+  const userId = appointment.userId || appointment.userData?._id || appointment.patientId;
 
   if (docId) {
+    ioInstance.to(`doctor_${docId}`).emit('newAppointment', appointment);
     ioInstance.to(`doctor_${docId}`).emit('appointmentBooked', appointment);
     const norm = docId.includes('_') ? docId.replace('_', '') : docId.replace(/^doc(\d+)/, 'doc_$1');
+    ioInstance.to(`doctor_${norm}`).emit('newAppointment', appointment);
     ioInstance.to(`doctor_${norm}`).emit('appointmentBooked', appointment);
   }
   if (userId) {
+    ioInstance.to(`user_${userId}`).emit('newAppointment', appointment);
     ioInstance.to(`user_${userId}`).emit('appointmentBooked', appointment);
+    ioInstance.to(`patient_${userId}`).emit('newAppointment', appointment);
+    ioInstance.to(`patient_${userId}`).emit('appointmentBooked', appointment);
   }
   if (appointment.hospitalId) {
+    ioInstance.to(`hospital_${appointment.hospitalId}`).emit('newAppointment', appointment);
     ioInstance.to(`hospital_${appointment.hospitalId}`).emit('appointmentBooked', appointment);
   }
+  ioInstance.to('admin_room').emit('newAppointment', appointment);
   ioInstance.to('admin_room').emit('appointmentBooked', appointment);
 };
 
