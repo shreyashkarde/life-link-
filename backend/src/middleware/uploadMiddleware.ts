@@ -5,10 +5,10 @@ import { Request, Response, NextFunction } from 'express';
 const storage = multer.memoryStorage();
 
 // File filter strictly for Excel spreadsheets (.xlsx, .xls)
-const fileFilter = (
-  _req: Request,
-  file: Express.Multer.File,
-  callback: multer.FileFilterCallback
+const fileFilter: any = (
+  _req: any,
+  file: any,
+  callback: any
 ) => {
   const allowedMimes = [
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -17,16 +17,16 @@ const fileFilter = (
     'application/zip',
   ];
 
-  const hasExcelExtension = file.originalname.match(/\.(xlsx|xls)$/i);
+  const hasExcelExtension = file?.originalname?.match(/\.(xlsx|xls)$/i);
 
-  if (allowedMimes.includes(file.mimetype) || hasExcelExtension) {
+  if (allowedMimes.includes(file?.mimetype) || hasExcelExtension) {
     callback(null, true);
   } else {
     callback(new Error('Invalid file type. Please upload a valid Excel (.xlsx or .xls) file.'));
   }
 };
 
-export const excelUpload = multer({
+export const excelUpload: any = multer({
   storage,
   fileFilter,
   limits: {
