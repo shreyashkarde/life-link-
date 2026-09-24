@@ -1,20 +1,21 @@
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
 import { useApp } from '../../context/AppContext';
+import { apiClient } from '../../services/apiClient';
+import { socketService } from '../../services/socket';
 
 export const DoctorsList: React.FC = () => {
-  const { aToken, backendUrl, showToast, getDoctorsData } = useApp();
+  const { aToken, backendUrl, showToast, getDoctorsData, refreshVersion } = useApp();
   const [doctorsList, setDoctorsList] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   const getAllDoctors = async () => {
     try {
       setLoading(true);
-      const { data } = await axios.get(`${backendUrl}/api/admin/all-doctors`, {
-        headers: { atoken: aToken },
-      });
-      if (data.success) {
+      const { data } = await apiClient.get('/api/admin/all-doctors');
+      if (data.success && Array.isArray(data.doctors)) {
         setDoctorsList(data.doctors);
+      } else {
+        setDoctorsList([]);
       }
     } catch (error: any) {
       console.error('Error fetching doctors list:', error.message);
@@ -25,11 +26,7 @@ export const DoctorsList: React.FC = () => {
 
   const changeAvailability = async (docId: string) => {
     try {
-      const { data } = await axios.post(
-        `${backendUrl}/api/admin/change-availability`,
-        { docId },
-        { headers: { atoken: aToken } }
-      );
+      const { data } = await apiClient.post('/api/admin/change-availability', { docId });
       if (data.success) {
         showToast(data.message || 'Availability updated', 'success');
         getAllDoctors();
@@ -46,7 +43,20 @@ export const DoctorsList: React.FC = () => {
     if (aToken) {
       getAllDoctors();
     }
-  }, [aToken]);
+
+    socketService.connect();
+    socketService.joinAdmin();
+
+    const unsubCleared = socketService.onDataCleared(() => {
+      console.log('🧹 [DoctorsList] DB Cleared event received. Resetting state...');
+      setDoctorsList([]);
+      if (aToken) getAllDoctors();
+    });
+
+    return () => {
+      if (typeof unsubCleared === 'function') unsubCleared();
+    };
+  }, [aToken, refreshVersion]);
 
   return (
     <div className="m-2 sm:m-5">

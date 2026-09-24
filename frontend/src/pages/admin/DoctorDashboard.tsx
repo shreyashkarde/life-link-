@@ -1,19 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
 import { useApp } from '../../context/AppContext';
+import { apiClient } from '../../services/apiClient';
+import { socketService } from '../../services/socket';
 
 export const DoctorDashboard: React.FC = () => {
-  const { dToken, backendUrl, showToast, doctorData } = useApp();
+  const { dToken, backendUrl, showToast, doctorData, refreshVersion } = useApp();
   const [dashData, setDashData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
   const getDoctorDashData = async () => {
     try {
       setLoading(true);
-      const { data } = await axios.get(`${backendUrl}/api/doctor/dashboard`, {
-        headers: { dtoken: dToken },
-      });
-      if (data.success) {
+      const { data } = await apiClient.get('/api/doctor/dashboard');
+      if (data.success && data.dashData) {
         setDashData(data.dashData);
       }
     } catch (error: any) {
@@ -25,11 +24,7 @@ export const DoctorDashboard: React.FC = () => {
 
   const completeAppointment = async (appointmentId: string) => {
     try {
-      const { data } = await axios.post(
-        `${backendUrl}/api/doctor/complete-appointment`,
-        { appointmentId },
-        { headers: { dtoken: dToken } }
-      );
+      const { data } = await apiClient.post('/api/doctor/complete-appointment', { appointmentId });
       if (data.success) {
         showToast('Appointment completed! Earnings credited.', 'success');
         getDoctorDashData();
@@ -43,11 +38,7 @@ export const DoctorDashboard: React.FC = () => {
 
   const cancelAppointment = async (appointmentId: string) => {
     try {
-      const { data } = await axios.post(
-        `${backendUrl}/api/doctor/cancel-appointment`,
-        { appointmentId },
-        { headers: { dtoken: dToken } }
-      );
+      const { data } = await apiClient.post('/api/doctor/cancel-appointment', { appointmentId });
       if (data.success) {
         showToast('Appointment cancelled', 'success');
         getDoctorDashData();
@@ -63,7 +54,34 @@ export const DoctorDashboard: React.FC = () => {
     if (dToken) {
       getDoctorDashData();
     }
-  }, [dToken]);
+
+    socketService.connect();
+
+    const unsubCleared = socketService.onDataCleared(() => {
+      console.log('🧹 [DoctorDashboard] DB Cleared event received. Resetting state...');
+      setDashData({ earnings: 0, appointments: 0, patients: 0, latestAppointments: [] });
+      if (dToken) getDoctorDashData();
+    });
+
+    const unsubNewAppt = socketService.onNewAppointment(() => {
+      if (dToken) getDoctorDashData();
+    });
+
+    const unsubUpdated = socketService.onAppointmentUpdated(() => {
+      if (dToken) getDoctorDashData();
+    });
+
+    const unsubCancelled = socketService.onAppointmentCancelled(() => {
+      if (dToken) getDoctorDashData();
+    });
+
+    return () => {
+      if (typeof unsubCleared === 'function') unsubCleared();
+      if (typeof unsubNewAppt === 'function') unsubNewAppt();
+      if (typeof unsubUpdated === 'function') unsubUpdated();
+      if (typeof unsubCancelled === 'function') unsubCancelled();
+    };
+  }, [dToken, refreshVersion]);
 
   if (loading && !dashData) {
     return (

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import React, { useState, useEffect, useCallback } from 'react';
+import apiClient from '../../services/apiClient';
 import { useApp } from '../../context/AppContext';
 import DashboardNavbar from '../../components/DashboardNavbar';
 import { socketService } from '../../services/socket';
@@ -13,8 +13,7 @@ interface MedicineItem {
 }
 
 export const DoctorDashboard: React.FC = () => {
-  const { showToast, backendUrl, dToken, doctorData } = useApp();
-  const apiBase = backendUrl || 'http://localhost:5000';
+  const { showToast, dToken, doctorData, refreshVersion } = useApp();
 
   const [isAvailable, setIsAvailable] = useState<boolean>(true);
   const [togglingStatus, setTogglingStatus] = useState<boolean>(false);
@@ -69,28 +68,32 @@ export const DoctorDashboard: React.FC = () => {
   });
 
   // Fetch Doctor Dashboard API Data
-  const fetchDoctorDashboardData = async () => {
+  const fetchDoctorDashboardData = useCallback(async () => {
     try {
       setLoading(true);
-      const token = dToken || sessionStorage.getItem('dToken') || localStorage.getItem('token') || '';
-      const { data } = await axios.get(`${apiBase}/api/doctor/dashboard`, {
-        headers: { dtoken: token, token },
-      });
+      console.log('🔄 [Doctor Dashboard] Fetching dashboard metrics from DB...');
+      const { data } = await apiClient.get('/api/doctor/dashboard');
       if (data.success && data.dashData) {
+        console.log('✅ [Doctor Dashboard] Metrics received:', data.dashData);
         setDashData(data.dashData);
         if (Array.isArray(data.dashData.latestAppointments)) {
           setConsultations(data.dashData.latestAppointments);
           if (data.dashData.latestAppointments.length > 0 && !selectedAppointment) {
             setSelectedAppointment(data.dashData.latestAppointments[0]);
           }
+        } else {
+          setConsultations([]);
         }
+      } else {
+        setConsultations([]);
       }
     } catch (error: any) {
-      console.error('Doctor Dashboard Fetch Error:', error.message);
+      console.error('❌ [Doctor Dashboard Fetch Error]:', error.message);
+      setConsultations([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedAppointment]);
 
   // 🔔 Socket.IO Real-Time Doctor Notifications
   useEffect(() => {
@@ -100,6 +103,13 @@ export const DoctorDashboard: React.FC = () => {
     socketService.connect();
     socketService.joinDoctor(docId);
 
+    socketService.onDataCleared(() => {
+      console.log('🧹 [Doctor Dashboard] dataCleared socket event received. Resetting state & refetching...');
+      setConsultations([]);
+      setSelectedAppointment(null);
+      fetchDoctorDashboardData();
+    });
+
     socketService.onNewAppointment((appointment: any) => {
       const patientName = appointment?.userData?.name || appointment?.patientName || 'A patient';
       const slot = `${appointment?.slotDate || 'today'} at ${appointment?.slotTime || ''}`;
@@ -107,24 +117,27 @@ export const DoctorDashboard: React.FC = () => {
       fetchDoctorDashboardData();
     });
 
-    return () => {
-      // Clean cleanup
-    };
-  }, [dToken, apiBase, doctorData?._id]);
+    socketService.onAppointmentUpdated(() => {
+      fetchDoctorDashboardData();
+    });
+
+    socketService.onAppointmentCancelled(() => {
+      fetchDoctorDashboardData();
+    });
+  }, [dToken, doctorData?._id, refreshVersion, fetchDoctorDashboardData]);
 
   // Handle Availability Toggle
   const handleToggleAvailability = async () => {
     try {
       setTogglingStatus(true);
       const nextStatus = !isAvailable;
-      const token = dToken || sessionStorage.getItem('dToken') || localStorage.getItem('token') || '';
       const docId = doctorData?._id || 'doc1';
 
-      const { data } = await axios.post(
-        `${apiBase}/api/doctor/change-availability`,
-        { docId, isAvailable: nextStatus, available: nextStatus },
-        { headers: { dtoken: token, token } }
-      );
+      const { data } = await apiClient.post('/api/doctor/change-availability', {
+        docId,
+        isAvailable: nextStatus,
+        available: nextStatus,
+      });
 
       if (data.success) {
         setIsAvailable(nextStatus);
@@ -146,12 +159,9 @@ export const DoctorDashboard: React.FC = () => {
   // Complete Appointment Action
   const handleComplete = async (id: string) => {
     try {
-      const token = dToken || sessionStorage.getItem('dToken') || localStorage.getItem('token') || '';
-      const { data } = await axios.post(
-        `${apiBase}/api/doctor/complete-appointment`,
-        { appointmentId: id },
-        { headers: { dtoken: token, token } }
-      );
+      const { data } = await apiClient.post('/api/doctor/complete-appointment', {
+        appointmentId: id,
+      });
       if (data.success) {
         showToast('Consultation marked as Completed. Earnings credited.', 'success');
         fetchDoctorDashboardData();
@@ -166,12 +176,9 @@ export const DoctorDashboard: React.FC = () => {
   // Cancel Appointment Action
   const handleCancel = async (id: string) => {
     try {
-      const token = dToken || sessionStorage.getItem('dToken') || localStorage.getItem('token') || '';
-      const { data } = await axios.post(
-        `${apiBase}/api/doctor/cancel-appointment`,
-        { appointmentId: id },
-        { headers: { dtoken: token, token } }
-      );
+      const { data } = await apiClient.post('/api/doctor/cancel-appointment', {
+        appointmentId: id,
+      });
       if (data.success) {
         showToast('Consultation cancelled.', 'info');
         fetchDoctorDashboardData();

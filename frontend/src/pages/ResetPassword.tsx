@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
-import axios from 'axios';
 import { useApp } from '../context/AppContext';
+import { apiClient } from '../services/apiClient';
 
 /**
  * 🔑 ResetPassword.tsx
@@ -39,7 +39,7 @@ export const ResetPassword: React.FC = () => {
 
     try {
       setLoading(true);
-      const { data } = await axios.post(`${backendUrl}/api/auth/reset-password`, {
+      const { data } = await apiClient.post('/api/auth/reset-password', {
         token,
         newPassword,
       });

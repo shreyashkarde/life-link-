@@ -256,14 +256,19 @@ export const getHospitalDoctors = async (req: AuthRequest, res: Response): Promi
 
     if (isMongoConnected()) {
       const doctors = await Doctor.find({
-        $or: [{ hospitalId }, { hospitalId: { $exists: false } }],
+        $or: [
+          { hospitalId },
+          { hospitalId: 'hosp_lilavati' },
+          { hospitalId: { $exists: false } },
+          { hospitalId: null },
+        ],
       }).select('-password');
       res.json({ success: true, doctors, count: doctors.length });
       return;
     }
 
     const doctors = prescriptoStore.doctors.filter(
-      (d) => !d.hospitalId || d.hospitalId === hospitalId || hospitalId === 'hosp_lilavati'
+      (d) => !d.hospitalId || d.hospitalId === hospitalId || hospitalId === 'hosp_lilavati' || d.hospitalId === 'hosp_lilavati'
     );
     res.json({ success: true, doctors, count: doctors.length });
   } catch (error: any) {
@@ -474,7 +479,7 @@ export const getHospitalDashboard = async (req: AuthRequest, res: Response): Pro
     if (isMongoConnected()) {
       hospital = await Hospital.findById(hospitalId);
       doctorsCount = await Doctor.countDocuments({
-        $or: [{ hospitalId }, { hospitalId: { $exists: false } }],
+        $or: [{ hospitalId }, { hospitalId: 'hosp_lilavati' }, { hospitalId: { $exists: false } }, { hospitalId: null }],
       });
       driversCount = await Ambulance.countDocuments({
         $or: [{ hospitalId }, { assignedHospital: { $regex: 'Lilavati', $options: 'i' } }],

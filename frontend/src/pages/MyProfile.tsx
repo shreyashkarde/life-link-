@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import axios from 'axios';
 import { useApp } from '../context/AppContext';
 import { assets } from '../assets/assets';
+import { apiClient } from '../services/apiClient';
 
 export const MyProfile: React.FC = () => {
   const { userData, setUserData, token, backendUrl, loadUserProfileData, showToast } = useApp();
@@ -21,11 +21,7 @@ export const MyProfile: React.FC = () => {
         image: image || userData.image,
       };
 
-      const { data } = await axios.post(
-        `${backendUrl}/api/user/update-profile`,
-        updatePayload,
-        { headers: { token } }
-      );
+      const { data } = await apiClient.post('/api/user/update-profile', updatePayload);
 
       if (data.success) {
         showToast('Profile updated successfully!', 'success');

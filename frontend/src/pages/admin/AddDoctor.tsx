@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import axios from 'axios';
 import { useApp } from '../../context/AppContext';
+import { apiClient } from '../../services/apiClient';
 
 export const AddDoctor: React.FC = () => {
   const { aToken, backendUrl, showToast, getDoctorsData } = useApp();
@@ -41,9 +41,7 @@ export const AddDoctor: React.FC = () => {
           'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400',
       };
 
-      const { data } = await axios.post(`${backendUrl}/api/admin/add-doctor`, payload, {
-        headers: { atoken: aToken },
-      });
+      const { data } = await apiClient.post('/api/admin/add-doctor', payload);
 
       if (data.success) {
         showToast('Doctor added successfully!', 'success');

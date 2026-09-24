@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
 import { useApp } from '../context/AppContext';
+import { apiClient } from '../services/apiClient';
+import { socketService } from '../services/socket';
 
 export const MyAppointments: React.FC = () => {
-  const { backendUrl, token, showToast, getDoctorsData } = useApp();
+  const { backendUrl, token, showToast, getDoctorsData, refreshVersion } = useApp();
   const [appointments, setAppointments] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [payingApptId, setPayingApptId] = useState<string | null>(null);
@@ -11,11 +12,11 @@ export const MyAppointments: React.FC = () => {
   const getUserAppointments = async () => {
     try {
       setLoading(true);
-      const { data } = await axios.get(`${backendUrl}/api/user/appointments`, {
-        headers: { token },
-      });
-      if (data.success) {
+      const { data } = await apiClient.get('/api/user/appointments');
+      if (data.success && Array.isArray(data.appointments)) {
         setAppointments(data.appointments);
+      } else {
+        setAppointments([]);
       }
     } catch (error: any) {
       console.error('Error fetching appointments:', error.message);
@@ -26,11 +27,7 @@ export const MyAppointments: React.FC = () => {
 
   const cancelAppointment = async (appointmentId: string) => {
     try {
-      const { data } = await axios.post(
-        `${backendUrl}/api/user/cancel-appointment`,
-        { appointmentId },
-        { headers: { token } }
-      );
+      const { data } = await apiClient.post('/api/user/cancel-appointment', { appointmentId });
       if (data.success) {
         showToast('Appointment cancelled successfully', 'success');
         getUserAppointments();
@@ -45,11 +42,10 @@ export const MyAppointments: React.FC = () => {
 
   const completePayment = async (appointmentId: string, method: string) => {
     try {
-      const { data } = await axios.post(
-        `${backendUrl}/api/user/payment-complete`,
-        { appointmentId, paymentMethod: method },
-        { headers: { token } }
-      );
+      const { data } = await apiClient.post('/api/user/payment-complete', {
+        appointmentId,
+        paymentMethod: method,
+      });
       if (data.success) {
         showToast(data.message || 'Payment successful!', 'success');
         setPayingApptId(null);
@@ -66,7 +62,34 @@ export const MyAppointments: React.FC = () => {
     if (token) {
       getUserAppointments();
     }
-  }, [token]);
+
+    socketService.connect();
+
+    const unsubCleared = socketService.onDataCleared(() => {
+      console.log('🧹 [MyAppointments] DB Cleared event received. Resetting state...');
+      setAppointments([]);
+      getDoctorsData();
+    });
+
+    const unsubUpdated = socketService.onAppointmentUpdated(() => {
+      if (token) getUserAppointments();
+    });
+
+    const unsubCancelled = socketService.onAppointmentCancelled(() => {
+      if (token) getUserAppointments();
+    });
+
+    const unsubNewAppt = socketService.onNewAppointment(() => {
+      if (token) getUserAppointments();
+    });
+
+    return () => {
+      if (typeof unsubCleared === 'function') unsubCleared();
+      if (typeof unsubUpdated === 'function') unsubUpdated();
+      if (typeof unsubCancelled === 'function') unsubCancelled();
+      if (typeof unsubNewAppt === 'function') unsubNewAppt();
+    };
+  }, [token, refreshVersion]);
 
   return (
     <div>

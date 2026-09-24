@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import { useApp } from '../context/AppContext';
 import ForgotPasswordModal from '../features/auth/ForgotPasswordModal';
 import GoogleLoginButton from '../features/auth/GoogleLoginButton';
+import { apiClient } from '../services/apiClient';
 
 export interface LoginProps {
   embedded?: boolean;
@@ -82,7 +82,7 @@ export const Login: React.FC<LoginProps> = ({ embedded = false, initialMode = 'L
   const handleResendVerification = async (targetEmail: string) => {
     try {
       setResendingVerification(true);
-      const { data } = await axios.post(`${backendUrl}/api/auth/resend-verification`, {
+      const { data } = await apiClient.post('/api/auth/resend-verification', {
         email: targetEmail.trim().toLowerCase(),
       });
       if (data.success) {
@@ -104,7 +104,7 @@ export const Login: React.FC<LoginProps> = ({ embedded = false, initialMode = 'L
 
     try {
       if (state === 'Sign Up') {
-        const { data } = await axios.post(`${backendUrl}/api/auth/register`, {
+        const { data } = await apiClient.post('/api/auth/register', {
           name: name || email.split('@')[0],
           email: email.trim().toLowerCase(),
           password,
@@ -127,7 +127,7 @@ export const Login: React.FC<LoginProps> = ({ embedded = false, initialMode = 'L
         }
       } else {
         // Unified single login for all 5 roles
-        const { data } = await axios.post(`${backendUrl}/api/auth/login`, {
+        const { data } = await apiClient.post('/api/auth/login', {
           email: email.trim().toLowerCase(),
           password,
         });
@@ -152,11 +152,34 @@ export const Login: React.FC<LoginProps> = ({ embedded = false, initialMode = 'L
     }
   };
 
-  // 1-Click Fast Role Credential Fillers for Instant Pair-Programming
-  const fillRoleCredentials = (targetEmail: string, targetPass: string) => {
+  // 1-Click Fast Direct Role Login
+  const handleInstantLogin = async (targetEmail: string, targetPass: string) => {
     setEmail(targetEmail);
     setPassword(targetPass);
     setState('Login');
+    setLoading(true);
+    setUnverifiedEmail(null);
+
+    try {
+      const { data } = await apiClient.post('/api/auth/login', {
+        email: targetEmail.trim().toLowerCase(),
+        password: targetPass,
+      });
+
+      if (data.success) {
+        handleRoleRouting(data.user?.role || 'PATIENT', data.token);
+      } else {
+        showToast(data.message || 'Login failed', 'error');
+      }
+    } catch (error: any) {
+      showToast(error.response?.data?.message || 'Authentication error. Please check your credentials.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fillRoleCredentials = (targetEmail: string, targetPass: string) => {
+    handleInstantLogin(targetEmail, targetPass);
   };
 
   return (

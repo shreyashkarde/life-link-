@@ -488,14 +488,14 @@ export const getDriverTrips = async (req: AuthRequest, res: Response) => {
         query.hospitalId = hospitalId;
       }
       const bookings = await AmbulanceBooking.find(query).sort({ createdAt: -1 });
-      return res.json({ success: true, count: bookings.length, bookings });
+      return res.json({ success: true, count: bookings.length, bookings, trips: bookings });
     }
 
     let bookings = prescriptoStore.ambulanceBookings;
     if (hospitalId) {
       bookings = bookings.filter((b) => b.hospitalId === hospitalId);
     }
-    return res.json({ success: true, count: bookings.length, bookings });
+    return res.json({ success: true, count: bookings.length, bookings, trips: bookings });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
   }

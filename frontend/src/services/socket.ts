@@ -23,19 +23,31 @@ class SocketService {
 
   public connect(): Socket {
     if (!this.socket) {
+      const token =
+        sessionStorage.getItem('token') ||
+        sessionStorage.getItem('aToken') ||
+        sessionStorage.getItem('dToken') ||
+        localStorage.getItem('token') ||
+        '';
+
       this.socket = io(BACKEND_URL, {
         transports: ['websocket', 'polling'],
         reconnection: true,
-        reconnectionAttempts: 10,
+        reconnectionAttempts: 20,
         reconnectionDelay: 1000,
+        auth: { token },
       });
 
       this.socket.on('connect', () => {
-        // console.log(`[Socket Client] Connected with ID: ${this.socket?.id}`);
+        console.log(`📡 [Socket.io Client] Connected with ID: ${this.socket?.id}`);
       });
 
-      this.socket.on('disconnect', () => {
-        // console.log('[Socket Client] Disconnected');
+      this.socket.on('disconnect', (reason) => {
+        console.log(`🔌 [Socket.io Client] Disconnected (${reason})`);
+      });
+
+      this.socket.on('connect_error', (err) => {
+        console.warn(`⚠️ [Socket.io Client] Connection Error:`, err.message);
       });
     }
     return this.socket;
@@ -104,15 +116,84 @@ class SocketService {
     }
   }
 
+  public joinAdmin(): void {
+    const s = this.getSocket();
+    if (s) {
+      s.emit('join_admin');
+      s.emit('join_room', { room: 'admin_room' });
+      s.emit('join_room', { room: 'admin_emergency_room' });
+    }
+  }
+
+  // 🧹 Listen to Database Clear sync event
+  public onDataCleared(callback: (data: any) => void): () => void {
+    const s = this.getSocket();
+    if (s) {
+      s.off('dataCleared');
+      const handler = (payload: any) => {
+        console.log('🧹 [Socket.IO] Received dataCleared event. Synchronizing state...', payload);
+        callback(payload);
+      };
+      s.on('dataCleared', handler);
+      return () => {
+        s.off('dataCleared', handler);
+      };
+    }
+    return () => {};
+  }
+
   // 📥 Listen to incoming doctor appointments
-  public onNewAppointment(callback: (appointment: any) => void): void {
+  public onNewAppointment(callback: (appointment: any) => void): () => void {
     const s = this.getSocket();
     if (s) {
       s.off('newAppointment');
       s.off('appointmentBooked');
-      s.on('newAppointment', callback);
-      s.on('appointmentBooked', callback);
+      const handler = (data: any) => {
+        console.log('🔔 [Socket.IO] Received newAppointment event:', data);
+        callback(data);
+      };
+      s.on('newAppointment', handler);
+      s.on('appointmentBooked', handler);
+      return () => {
+        s.off('newAppointment', handler);
+        s.off('appointmentBooked', handler);
+      };
     }
+    return () => {};
+  }
+
+  // 🔄 Listen to appointment status updates
+  public onAppointmentUpdated(callback: (appointment: any) => void): () => void {
+    const s = this.getSocket();
+    if (s) {
+      s.off('appointmentUpdated');
+      const handler = (data: any) => {
+        console.log('🔄 [Socket.IO] Received appointmentUpdated event:', data);
+        callback(data);
+      };
+      s.on('appointmentUpdated', handler);
+      return () => {
+        s.off('appointmentUpdated', handler);
+      };
+    }
+    return () => {};
+  }
+
+  // ❌ Listen to appointment cancellations
+  public onAppointmentCancelled(callback: (appointment: any) => void): () => void {
+    const s = this.getSocket();
+    if (s) {
+      s.off('appointmentCancelled');
+      const handler = (data: any) => {
+        console.log('❌ [Socket.IO] Received appointmentCancelled event:', data);
+        callback(data);
+      };
+      s.on('appointmentCancelled', handler);
+      return () => {
+        s.off('appointmentCancelled', handler);
+      };
+    }
+    return () => {};
   }
 
   // 📍 Live Driver Location (Driver -> Socket Server -> Rooms)
@@ -130,72 +211,117 @@ class SocketService {
   }
 
   // 📡 Listen to real-time driver location updates
-  public onDriverLocation(callback: (data: DriverLocationPayload) => void): void {
+  public onDriverLocation(callback: (data: DriverLocationPayload) => void): () => void {
     const s = this.getSocket();
     if (s) {
       s.off('driverLocation');
       s.off('locationUpdate');
       s.on('driverLocation', callback);
       s.on('locationUpdate', callback);
+      return () => {
+        s.off('driverLocation', callback);
+        s.off('locationUpdate', callback);
+      };
     }
+    return () => {};
   }
 
-  public onLocationUpdate(callback: (data: DriverLocationPayload) => void): void {
-    this.onDriverLocation(callback);
+  public onLocationUpdate(callback: (data: DriverLocationPayload) => void): () => void {
+    return this.onDriverLocation(callback);
   }
 
   // 📥 Listen to incoming dispatch bookings for drivers
-  public onNewBooking(callback: (booking: any) => void): void {
+  public onNewBooking(callback: (booking: any) => void): () => void {
     const s = this.getSocket();
     if (s) {
       s.off('newBooking');
-      s.on('newBooking', callback);
+      const handler = (booking: any) => {
+        console.log('🚑 [Socket.IO] Received newBooking event:', booking);
+        callback(booking);
+      };
+      s.on('newBooking', handler);
+      return () => {
+        s.off('newBooking', handler);
+      };
     }
+    return () => {};
   }
 
   // 📥 Listen to ride accepted confirmation
-  public onRideAccepted(callback: (data: any) => void): void {
+  public onRideAccepted(callback: (data: any) => void): () => void {
     const s = this.getSocket();
     if (s) {
       s.off('rideAccepted');
       s.off('bookingAccepted');
-      s.on('rideAccepted', callback);
-      s.on('bookingAccepted', callback);
+      const handler = (data: any) => {
+        console.log('✅ [Socket.IO] Received rideAccepted event:', data);
+        callback(data);
+      };
+      s.on('rideAccepted', handler);
+      s.on('bookingAccepted', handler);
+      return () => {
+        s.off('rideAccepted', handler);
+        s.off('bookingAccepted', handler);
+      };
     }
+    return () => {};
   }
 
-  public onBookingAccepted(callback: (data: any) => void): void {
-    this.onRideAccepted(callback);
+  public onBookingAccepted(callback: (data: any) => void): () => void {
+    return this.onRideAccepted(callback);
   }
 
   // 📥 Listen to ride status lifecycle (ACCEPTED, EN_ROUTE_PICKUP, PATIENT_ONBOARD, COMPLETED, CANCELLED)
-  public onRideStatusUpdate(callback: (data: { bookingId: string; status: string; booking?: any }) => void): void {
+  public onRideStatusUpdate(callback: (data: { bookingId: string; status: string; booking?: any }) => void): () => void {
     const s = this.getSocket();
     if (s) {
       s.off('rideStatusUpdate');
-      s.on('rideStatusUpdate', callback);
+      const handler = (data: any) => {
+        console.log('🔄 [Socket.IO] Received rideStatusUpdate event:', data);
+        callback(data);
+      };
+      s.on('rideStatusUpdate', handler);
+      return () => {
+        s.off('rideStatusUpdate', handler);
+      };
     }
+    return () => {};
   }
 
-  public onEmergencyAlert(callback: (data: any) => void): void {
+  public onEmergencyAlert(callback: (data: any) => void): () => void {
     const s = this.getSocket();
     if (s) {
       s.off('emergencyAlert');
-      s.on('emergencyAlert', callback);
+      const handler = (data: any) => {
+        console.log('🚨 [Socket.IO] Received emergencyAlert event:', data);
+        callback(data);
+      };
+      s.on('emergencyAlert', handler);
+      return () => {
+        s.off('emergencyAlert', handler);
+      };
     }
+    return () => {};
   }
 
-  public onRideCompleted(callback: (data: any) => void): void {
+  public onRideCompleted(callback: (data: any) => void): () => void {
     const s = this.getSocket();
     if (s) {
       s.off('rideCompleted');
-      s.on('rideCompleted', callback);
+      const handler = (data: any) => {
+        console.log('🏁 [Socket.IO] Received rideCompleted event:', data);
+        callback(data);
+      };
+      s.on('rideCompleted', handler);
+      return () => {
+        s.off('rideCompleted', handler);
+      };
     }
+    return () => {};
   }
 
   /**
    * 📱 Start continuous browser Geolocation watchPosition stream
-   * Continuous high-accuracy GPS emitter for drivers
    */
   public startDriverGeolocationWatch(options: {
     bookingId?: string;
@@ -229,7 +355,6 @@ class SocketService {
           timestamp: new Date().toISOString(),
         };
 
-        // Broadcast to socket
         this.emitDriverLocation(payload);
 
         if (options.onLocation) {
@@ -273,4 +398,3 @@ class SocketService {
 
 export const socketService = new SocketService();
 export default socketService;
-

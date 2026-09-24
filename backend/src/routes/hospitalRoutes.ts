@@ -22,8 +22,12 @@ import {
 } from '../controllers/bulkUploadController';
 import { excelUpload, handleUploadError } from '../middleware/uploadMiddleware';
 import { authenticateJWT } from '../middleware/auth';
+import { loginUser } from '../controllers/authController';
 
 const router = express.Router();
+
+// 🔑 Hospital Login Alias
+router.post('/login', loginUser);
 
 // 👑 SuperAdmin Hospital Management Routes
 router.post('/hospitals', createHospital);

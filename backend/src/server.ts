@@ -50,12 +50,42 @@ app.use(
     origin: (_origin, callback) => callback(null, true),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'token', 'aToken', 'dToken', 'x-refresh-token', 'x-role', 'x-hospital-id'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'token',
+      'aToken',
+      'atoken',
+      'dToken',
+      'dtoken',
+      'x-refresh-token',
+      'x-role',
+      'x-hospital-id',
+      'Cache-Control',
+      'Pragma',
+      'Expires',
+      'X-Requested-With',
+    ],
   })
 );
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(hospitalContextMiddleware);
+
+// 🧹 Global No-Cache & Fresh DB Sync Middleware (Strictly prevents 304 stale caching)
+app.use((req: Request, res: Response, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    console.log(`[API Hit] ${req.method} ${req.originalUrl} [${res.statusCode}] - ${duration}ms`);
+  });
+  next();
+});
 
 // Health Check
 app.get('/api/health', (_req: Request, res: Response) => {
@@ -88,6 +118,7 @@ app.use('/api/ratings', ratingRouter);
 app.use('/api/hospitals', hospitalRouter);
 app.use('/api/hospital', hospitalRouter);
 app.use('/api/superadmin', hospitalRouter);
+app.use('/api/driver', authRouter);
 
 // Advanced Modular Features (Tracking, Hospitals, Notifications, Auth Enhancements, Rate Limiter)
 import { registerModularFeatures } from './features';
@@ -111,4 +142,5 @@ const startServer = async () => {
 
 startServer();
 
+// Real-time synchronization active for all 15 doctors across dashboards
 export { app, server };

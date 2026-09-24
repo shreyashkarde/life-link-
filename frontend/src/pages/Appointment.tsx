@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import axios from 'axios';
 import { useApp } from '../context/AppContext';
 import { DoctorItem } from '../assets/assets';
 import RelatedDoctors from '../components/RelatedDoctors';
+import { apiClient } from '../services/apiClient';
 
 export const Appointment: React.FC = () => {
   const { docId } = useParams<{ docId: string }>();
@@ -104,11 +104,12 @@ export const Appointment: React.FC = () => {
       const year = date.getFullYear();
       const slotDate = `${day}_${month}_${year}`;
 
-      const { data } = await axios.post(
-        `${backendUrl}/api/user/book-appointment`,
-        { docId, slotDate, slotTime },
-        { headers: { token } }
-      );
+      const { data } = await apiClient.post('/api/user/book-appointment', {
+        docId,
+        slotDate,
+        slotTime,
+        hospitalId: docInfo?.hospitalId || 'hosp_lilavati',
+      });
 
       if (data.success) {
         showToast('Appointment booked successfully!', 'success');

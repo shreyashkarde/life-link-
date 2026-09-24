@@ -16,6 +16,7 @@ const bookingRouter = express.Router();
 
 bookingRouter.post('/create', authenticate, createAmbulanceBooking);
 bookingRouter.post('/emergency-sos', authenticate, triggerEmergencySOS);
+bookingRouter.post('/emergency', authenticate, triggerEmergencySOS);
 bookingRouter.post('/ai-recommendations', getAiRecommendations);
 bookingRouter.get('/ai-recommendations', getAiRecommendations);
 bookingRouter.get('/recommendations', getAiRecommendations);

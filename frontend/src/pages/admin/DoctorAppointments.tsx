@@ -1,20 +1,21 @@
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
 import { useApp } from '../../context/AppContext';
+import { apiClient } from '../../services/apiClient';
+import { socketService } from '../../services/socket';
 
 export const DoctorAppointments: React.FC = () => {
-  const { dToken, backendUrl, showToast } = useApp();
+  const { dToken, backendUrl, showToast, refreshVersion } = useApp();
   const [appointments, setAppointments] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   const getAppointments = async () => {
     try {
       setLoading(true);
-      const { data } = await axios.get(`${backendUrl}/api/doctor/appointments`, {
-        headers: { dtoken: dToken },
-      });
-      if (data.success) {
+      const { data } = await apiClient.get('/api/doctor/appointments');
+      if (data.success && Array.isArray(data.appointments)) {
         setAppointments(data.appointments);
+      } else {
+        setAppointments([]);
       }
     } catch (error: any) {
       console.error('Error fetching doctor appointments:', error.message);
@@ -25,11 +26,7 @@ export const DoctorAppointments: React.FC = () => {
 
   const completeAppointment = async (appointmentId: string) => {
     try {
-      const { data } = await axios.post(
-        `${backendUrl}/api/doctor/complete-appointment`,
-        { appointmentId },
-        { headers: { dtoken: dToken } }
-      );
+      const { data } = await apiClient.post('/api/doctor/complete-appointment', { appointmentId });
       if (data.success) {
         showToast('Appointment completed! Earnings credited.', 'success');
         getAppointments();
@@ -43,11 +40,7 @@ export const DoctorAppointments: React.FC = () => {
 
   const cancelAppointment = async (appointmentId: string) => {
     try {
-      const { data } = await axios.post(
-        `${backendUrl}/api/doctor/cancel-appointment`,
-        { appointmentId },
-        { headers: { dtoken: dToken } }
-      );
+      const { data } = await apiClient.post('/api/doctor/cancel-appointment', { appointmentId });
       if (data.success) {
         showToast('Appointment cancelled', 'success');
         getAppointments();
@@ -70,7 +63,34 @@ export const DoctorAppointments: React.FC = () => {
     if (dToken) {
       getAppointments();
     }
-  }, [dToken]);
+
+    socketService.connect();
+
+    const unsubCleared = socketService.onDataCleared(() => {
+      console.log('🧹 [DoctorAppointments] DB Cleared event received. Resetting state...');
+      setAppointments([]);
+      if (dToken) getAppointments();
+    });
+
+    const unsubNewAppt = socketService.onNewAppointment(() => {
+      if (dToken) getAppointments();
+    });
+
+    const unsubUpdated = socketService.onAppointmentUpdated(() => {
+      if (dToken) getAppointments();
+    });
+
+    const unsubCancelled = socketService.onAppointmentCancelled(() => {
+      if (dToken) getAppointments();
+    });
+
+    return () => {
+      if (typeof unsubCleared === 'function') unsubCleared();
+      if (typeof unsubNewAppt === 'function') unsubNewAppt();
+      if (typeof unsubUpdated === 'function') unsubUpdated();
+      if (typeof unsubCancelled === 'function') unsubCancelled();
+    };
+  }, [dToken, refreshVersion]);
 
   return (
     <div className="w-full max-w-6xl m-2 sm:m-5">

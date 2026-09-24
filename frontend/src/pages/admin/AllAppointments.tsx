@@ -1,20 +1,21 @@
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
 import { useApp } from '../../context/AppContext';
+import { apiClient } from '../../services/apiClient';
+import { socketService } from '../../services/socket';
 
 export const AllAppointments: React.FC = () => {
-  const { aToken, backendUrl, showToast } = useApp();
+  const { aToken, backendUrl, showToast, refreshVersion } = useApp();
   const [appointments, setAppointments] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   const getAllAppointments = async () => {
     try {
       setLoading(true);
-      const { data } = await axios.get(`${backendUrl}/api/admin/appointments`, {
-        headers: { atoken: aToken },
-      });
-      if (data.success) {
+      const { data } = await apiClient.get('/api/admin/appointments');
+      if (data.success && Array.isArray(data.appointments)) {
         setAppointments(data.appointments);
+      } else {
+        setAppointments([]);
       }
     } catch (error: any) {
       console.error('Error fetching all appointments:', error.message);
@@ -25,11 +26,7 @@ export const AllAppointments: React.FC = () => {
 
   const cancelAppointment = async (appointmentId: string) => {
     try {
-      const { data } = await axios.post(
-        `${backendUrl}/api/admin/cancel-appointment`,
-        { appointmentId },
-        { headers: { atoken: aToken } }
-      );
+      const { data } = await apiClient.post('/api/admin/cancel-appointment', { appointmentId });
       if (data.success) {
         showToast('Appointment cancelled by administrator', 'success');
         getAllAppointments();
@@ -52,7 +49,35 @@ export const AllAppointments: React.FC = () => {
     if (aToken) {
       getAllAppointments();
     }
-  }, [aToken]);
+
+    socketService.connect();
+    socketService.joinAdmin();
+
+    const unsubCleared = socketService.onDataCleared(() => {
+      console.log('🧹 [AllAppointments] DB Cleared event received. Resetting state...');
+      setAppointments([]);
+      if (aToken) getAllAppointments();
+    });
+
+    const unsubNewAppt = socketService.onNewAppointment(() => {
+      if (aToken) getAllAppointments();
+    });
+
+    const unsubUpdated = socketService.onAppointmentUpdated(() => {
+      if (aToken) getAllAppointments();
+    });
+
+    const unsubCancelled = socketService.onAppointmentCancelled(() => {
+      if (aToken) getAllAppointments();
+    });
+
+    return () => {
+      if (typeof unsubCleared === 'function') unsubCleared();
+      if (typeof unsubNewAppt === 'function') unsubNewAppt();
+      if (typeof unsubUpdated === 'function') unsubUpdated();
+      if (typeof unsubCancelled === 'function') unsubCancelled();
+    };
+  }, [aToken, refreshVersion]);
 
   return (
     <div className="w-full max-w-6xl m-2 sm:m-5">

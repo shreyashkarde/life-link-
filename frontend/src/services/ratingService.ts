@@ -1,17 +1,4 @@
-import axios from 'axios';
-
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-
-const getHeaders = () => {
-  const token = sessionStorage.getItem('token') || localStorage.getItem('token') || '';
-
-  return {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      token,
-    },
-  };
-};
+import apiClient from './apiClient';
 
 export const ratingService = {
   submitRating: async (payload: {
@@ -21,12 +8,12 @@ export const ratingService = {
     review?: string;
     userName?: string;
   }) => {
-    const { data } = await axios.post(`${BACKEND_URL}/api/ratings/submit`, payload, getHeaders());
+    const { data } = await apiClient.post(`/api/ratings/submit`, payload);
     return data;
   },
 
   getRatings: async (targetType: 'DOCTOR' | 'DRIVER', targetId: string) => {
-    const { data } = await axios.get(`${BACKEND_URL}/api/ratings/${targetType}/${targetId}`);
+    const { data } = await apiClient.get(`/api/ratings/${targetType}/${targetId}`);
     return data;
   },
 };

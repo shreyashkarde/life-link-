@@ -1,19 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
 import { useApp } from '../../context/AppContext';
+import { apiClient } from '../../services/apiClient';
+import { socketService } from '../../services/socket';
 
 export const AdminDashboard: React.FC = () => {
-  const { aToken, backendUrl, showToast } = useApp();
+  const { aToken, backendUrl, showToast, refreshVersion } = useApp();
   const [dashData, setDashData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
   const getDashData = async () => {
     try {
       setLoading(true);
-      const { data } = await axios.get(`${backendUrl}/api/admin/dashboard`, {
-        headers: { atoken: aToken },
-      });
-      if (data.success) {
+      const { data } = await apiClient.get('/api/admin/dashboard');
+      if (data.success && data.dashData) {
         setDashData(data.dashData);
       }
     } catch (error: any) {
@@ -25,11 +24,7 @@ export const AdminDashboard: React.FC = () => {
 
   const cancelAppointment = async (appointmentId: string) => {
     try {
-      const { data } = await axios.post(
-        `${backendUrl}/api/admin/cancel-appointment`,
-        { appointmentId },
-        { headers: { atoken: aToken } }
-      );
+      const { data } = await apiClient.post('/api/admin/cancel-appointment', { appointmentId });
       if (data.success) {
         showToast('Appointment cancelled by admin', 'success');
         getDashData();
@@ -45,7 +40,35 @@ export const AdminDashboard: React.FC = () => {
     if (aToken) {
       getDashData();
     }
-  }, [aToken]);
+
+    socketService.connect();
+    socketService.joinAdmin();
+
+    const unsubCleared = socketService.onDataCleared(() => {
+      console.log('🧹 [AdminDashboard] DB Cleared event received. Resetting state...');
+      setDashData({ doctors: 0, appointments: 0, patients: 0, latestAppointments: [] });
+      if (aToken) getDashData();
+    });
+
+    const unsubNewAppt = socketService.onNewAppointment(() => {
+      if (aToken) getDashData();
+    });
+
+    const unsubUpdated = socketService.onAppointmentUpdated(() => {
+      if (aToken) getDashData();
+    });
+
+    const unsubCancelled = socketService.onAppointmentCancelled(() => {
+      if (aToken) getDashData();
+    });
+
+    return () => {
+      if (typeof unsubCleared === 'function') unsubCleared();
+      if (typeof unsubNewAppt === 'function') unsubNewAppt();
+      if (typeof unsubUpdated === 'function') unsubUpdated();
+      if (typeof unsubCancelled === 'function') unsubCancelled();
+    };
+  }, [aToken, refreshVersion]);
 
   if (loading && !dashData) {
     return (

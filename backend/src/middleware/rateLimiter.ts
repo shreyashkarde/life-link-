@@ -8,11 +8,15 @@ import { logSecurityEvent } from '../services/securityService';
  */
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // Limit each IP to 10 requests per windowMs
+  max: process.env.NODE_ENV === 'production' ? 20 : 1000, // Generous during development/testing
   standardHeaders: true, // Return standard RateLimit headers
   legacyHeaders: false,
-  skipSuccessfulRequests: false,
-  skip: (req: Request) => process.env.NODE_ENV === 'test' || req.headers['x-test-bypass'] === 'lifelink-security-test',
+  skipSuccessfulRequests: true,
+  skip: (req: Request) =>
+    process.env.NODE_ENV !== 'production' ||
+    req.headers['x-test-bypass'] === 'lifelink-security-test' ||
+    req.ip === '127.0.0.1' ||
+    req.ip === '::1',
   handler: (req: Request, res: Response) => {
     logSecurityEvent('BRUTE_FORCE_RATE_LIMIT_EXCEEDED', {
       path: req.path,

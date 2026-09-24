@@ -6,7 +6,7 @@ let mongoConnected = false;
 export const connectDB = async (): Promise<boolean> => {
   try {
     const conn = await mongoose.connect(ENV.MONGODB_URI, {
-      serverSelectionTimeoutMS: 3000,
+      serverSelectionTimeoutMS: 10000,
     });
     console.log(`[MongoDB] Connected successfully to host: ${conn.connection.host}, database: ${conn.connection.name}`);
     mongoConnected = true;

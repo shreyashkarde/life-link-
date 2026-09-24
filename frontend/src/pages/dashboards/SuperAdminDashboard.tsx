@@ -1,62 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import { useApp } from '../../context/AppContext';
 import DashboardNavbar from '../../components/DashboardNavbar';
+import { apiClient } from '../../services/apiClient';
+import { socketService } from '../../services/socket';
 
 export const SuperAdminDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { aToken, token, backendUrl, showToast, doctors, getDoctorsData } = useApp();
+  const { aToken, token, backendUrl, showToast, doctors, getDoctorsData, clearAllSystemData, refreshVersion } = useApp();
   const apiBase = backendUrl || 'http://localhost:5000';
 
   const [dashData, setDashData] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [hospitals, setHospitals] = useState<any[]>([
-    {
-      id: 'hosp_lilavati',
-      name: 'Lilavati Hospital & Research Centre',
-      location: 'Bandra West Reclamation, Mumbai, Maharashtra',
-      city: 'Mumbai',
-      type: 'Level-1 Apex Trauma Center',
-      doctorsCount: 15,
-      driversCount: 5,
-      emergencyPhone: '+91 22 2675 1000',
-      status: 'ACTIVE',
-    },
-    {
-      id: 'hosp_kokilaben',
-      name: 'Kokilaben Dhirubhai Ambani Hospital',
-      location: 'Rao Saheb Achutrao Patwardhan Marg, Andheri West, Mumbai',
-      city: 'Mumbai',
-      type: 'Multi-Specialty & Quaternary Care',
-      doctorsCount: 12,
-      driversCount: 4,
-      emergencyPhone: '+91 22 4269 6969',
-      status: 'ACTIVE',
-    },
-    {
-      id: 'hosp_hinduja',
-      name: 'P.D. Hinduja National Hospital',
-      location: 'Veer Savarkar Marg, Mahim, Mumbai',
-      city: 'Mumbai',
-      type: 'Tertiary Care & Trauma Emergency',
-      doctorsCount: 10,
-      driversCount: 3,
-      emergencyPhone: '+91 22 2445 1515',
-      status: 'ACTIVE',
-    },
-    {
-      id: 'hosp_fortis',
-      name: 'Fortis Hospital Mulund',
-      location: 'Mulund Goregaon Link Road, Mumbai',
-      city: 'Mumbai',
-      type: 'Cardiac Care & Emergency Node',
-      doctorsCount: 8,
-      driversCount: 3,
-      emergencyPhone: '+91 22 6799 4444',
-      status: 'ACTIVE',
-    },
-  ]);
+  const [hospitals, setHospitals] = useState<any[]>([]);
 
   // Search & Filter States
   const [hospitalSearch, setHospitalSearch] = useState<string>('');
@@ -82,19 +38,16 @@ export const SuperAdminDashboard: React.FC = () => {
   const fetchAdminDash = async () => {
     try {
       setLoading(true);
-      const authToken = aToken || token || sessionStorage.getItem('aToken') || localStorage.getItem('token') || '';
-      
+
       // 1. Admin Dash stats
-      const { data } = await axios.get(`${apiBase}/api/admin/dashboard`, {
-        headers: { atoken: authToken, token: authToken },
-      });
+      const { data } = await apiClient.get('/api/admin/dashboard');
       if (data.success && data.dashData) {
         setDashData(data.dashData);
       }
 
       // 2. Fetch Hospitals
-      const hospRes = await axios.get(`${apiBase}/api/hospitals`).catch(() => null);
-      if (hospRes?.data?.success && Array.isArray(hospRes.data.hospitals) && hospRes.data.hospitals.length > 0) {
+      const hospRes = await apiClient.get('/api/hospitals').catch(() => null);
+      if (hospRes?.data?.success && Array.isArray(hospRes.data.hospitals)) {
         setHospitals(hospRes.data.hospitals);
       }
 
@@ -109,7 +62,40 @@ export const SuperAdminDashboard: React.FC = () => {
 
   useEffect(() => {
     fetchAdminDash();
-  }, [aToken, token, apiBase]);
+
+    socketService.connect();
+    socketService.joinAdmin();
+
+    const unsubCleared = socketService.onDataCleared(() => {
+      console.log('🧹 [SuperAdminDashboard] DB Cleared event received. Resetting state...');
+      setDashData({ doctors: 0, appointments: 0, patients: 0, latestAppointments: [] });
+      fetchAdminDash();
+    });
+
+    const unsubBooking = socketService.onNewBooking(() => {
+      fetchAdminDash();
+    });
+
+    const unsubAppt = socketService.onNewAppointment(() => {
+      fetchAdminDash();
+    });
+
+    const unsubUpdated = socketService.onAppointmentUpdated(() => {
+      fetchAdminDash();
+    });
+
+    const unsubCancelled = socketService.onAppointmentCancelled(() => {
+      fetchAdminDash();
+    });
+
+    return () => {
+      if (typeof unsubCleared === 'function') unsubCleared();
+      if (typeof unsubBooking === 'function') unsubBooking();
+      if (typeof unsubAppt === 'function') unsubAppt();
+      if (typeof unsubUpdated === 'function') unsubUpdated();
+      if (typeof unsubCancelled === 'function') unsubCancelled();
+    };
+  }, [aToken, token, apiBase, refreshVersion]);
 
   // Bulk Upload Hospitals Excel (.xlsx)
   const handleHospitalExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -121,13 +107,9 @@ export const SuperAdminDashboard: React.FC = () => {
 
     try {
       setIsUploadingHospitals(true);
-      const authToken = aToken || token || sessionStorage.getItem('aToken') || localStorage.getItem('token') || '';
-      const res = await axios.post(`${apiBase}/api/admin/upload-hospitals`, formData, {
+      const res = await apiClient.post('/api/admin/upload-hospitals', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
-          Authorization: `Bearer ${authToken}`,
-          atoken: authToken,
-          token: authToken,
         },
       });
 
@@ -176,13 +158,11 @@ export const SuperAdminDashboard: React.FC = () => {
   // System-Wide Data Reset (Clear All Test Data)
   const handleClearAllData = async () => {
     try {
-      const res = await axios.post(`${apiBase}/api/admin/clear-all-data`);
-      if (res.data?.success) {
-        showToast('✓ All dynamic test data cleared successfully! Clean real-time state active.', 'success');
+      const ok = await clearAllSystemData();
+      if (ok) {
         setIsClearDataOpen(false);
-        fetchAdminDash();
-      } else {
-        showToast(res.data?.message || 'Failed to clear data', 'error');
+        setDashData({ doctors: 0, appointments: 0, patients: 0, latestAppointments: [] });
+        await fetchAdminDash();
       }
     } catch (e: any) {
       showToast(e.response?.data?.message || 'Error executing database clean', 'error');

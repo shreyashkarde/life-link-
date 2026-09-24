@@ -7,6 +7,8 @@ import { ENV } from '../config/env';
 import { isMongoConnected } from '../config/db';
 import { prescriptoStore } from '../config/prescriptoStore';
 
+import { seedDefaultDoctorsToMongo } from '../config/prescriptoStore';
+
 // Public API to get doctor list for frontend display (supports strict ?hospitalId= filter & x-hospital-id header)
 export const doctorList = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -15,10 +17,10 @@ export const doctorList = async (req: Request, res: Response): Promise<void> => 
 
     if (!isMongoConnected()) {
       let docs = prescriptoStore.doctors;
-      if (hospitalId) {
+      if (hospitalId && hospitalId !== 'ALL' && hospitalId !== 'all' && hospitalId !== 'hosp_lilavati') {
         docs = docs.filter((d) => d.hospitalId === hospitalId);
       }
-      if (speciality) {
+      if (speciality && speciality !== 'All' && speciality !== 'ALL') {
         docs = docs.filter((d) => d.speciality?.toLowerCase() === speciality.toLowerCase());
       }
       const doctors = docs.map(({ password, email, ...rest }) => rest);
@@ -26,15 +28,22 @@ export const doctorList = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
+    // Ensure all 15 doctors are synchronized and updated in MongoDB
+    await seedDefaultDoctorsToMongo();
+
     const filter: any = {};
-    if (hospitalId) {
-      filter.hospitalId = hospitalId;
+    if (hospitalId && hospitalId !== 'ALL' && hospitalId !== 'all' && hospitalId !== 'hosp_lilavati') {
+      filter.$or = [
+        { hospitalId: hospitalId },
+        { hospitalId: { $exists: false } },
+        { hospitalId: null },
+      ];
     }
-    if (speciality) {
+    if (speciality && speciality !== 'All' && speciality !== 'ALL') {
       filter.speciality = { $regex: `^${speciality}$`, $options: 'i' };
     }
 
-    const doctors = await Doctor.find(filter).select(['-password', '-email']).sort({ createdAt: -1 });
+    const doctors = await Doctor.find(filter).select(['-password', '-email']).sort({ createdAt: 1 });
     res.json({ success: true, count: doctors.length, hospitalId: hospitalId || 'ALL', doctors });
   } catch (error: any) {
     console.error('Doctor List Error:', error);

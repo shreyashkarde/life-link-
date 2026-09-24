@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
 import { useApp } from '../../context/AppContext';
 import DashboardNavbar from '../../components/DashboardNavbar';
+import { apiClient } from '../../services/apiClient';
+import { socketService } from '../../services/socket';
 
 export const HospitalAdminDashboard: React.FC = () => {
-  const { showToast, backendUrl, token, doctors, getDoctorsData } = useApp();
+  const { showToast, backendUrl, token, doctors, getDoctorsData, refreshVersion } = useApp();
   const apiBase = backendUrl || 'http://localhost:5000';
 
   // Metrics & State
@@ -18,22 +19,6 @@ export const HospitalAdminDashboard: React.FC = () => {
       vehicleNumber: 'MH-01-EQ-1108',
       type: 'ALS (Advanced Life Support)',
       status: 'ONLINE',
-    },
-    {
-      id: 'drv_2',
-      name: 'Suresh Patil',
-      phone: '+91 98202 10200',
-      vehicleNumber: 'MH-02-AB-1020',
-      type: 'ICU Mobile Unit',
-      status: 'ONLINE',
-    },
-    {
-      id: 'drv_3',
-      name: 'Amit Sharma',
-      phone: '+91 98203 10300',
-      vehicleNumber: 'MH-03-CD-3040',
-      type: 'BLS (Basic Life Support)',
-      status: 'STANDBY',
     },
   ]);
   const [appointments, setAppointments] = useState<any[]>([]);
@@ -71,22 +56,21 @@ export const HospitalAdminDashboard: React.FC = () => {
   const fetchHospitalData = async () => {
     try {
       setLoading(true);
-      const authToken = token || sessionStorage.getItem('token') || localStorage.getItem('token') || '';
 
       // 1. Fetch Inbound Emergency Rides
-      const resRides = await axios.get(`${apiBase}/api/hospital/ambulance-bookings`, {
-        headers: { Authorization: `Bearer ${authToken}`, token: authToken },
-      });
+      const resRides = await apiClient.get('/api/hospital/ambulance-bookings');
       if (resRides.data?.success && Array.isArray(resRides.data.bookings)) {
         setInboundRides(resRides.data.bookings);
+      } else {
+        setInboundRides([]);
       }
 
       // 2. Fetch Appointments
-      const resApts = await axios.get(`${apiBase}/api/admin/appointments`, {
-        headers: { atoken: authToken, token: authToken },
-      });
+      const resApts = await apiClient.get('/api/admin/appointments');
       if (resApts.data?.success && Array.isArray(resApts.data.appointments)) {
         setAppointments(resApts.data.appointments);
+      } else {
+        setAppointments([]);
       }
 
       // 3. Refresh Doctors Roster
@@ -100,7 +84,41 @@ export const HospitalAdminDashboard: React.FC = () => {
 
   useEffect(() => {
     fetchHospitalData();
-  }, [apiBase, token]);
+
+    socketService.connect();
+    socketService.joinAdmin();
+
+    const unsubCleared = socketService.onDataCleared(() => {
+      console.log('🧹 [HospitalAdminDashboard] DB Cleared event received. Resetting state...');
+      setAppointments([]);
+      setInboundRides([]);
+      fetchHospitalData();
+    });
+
+    const unsubBooking = socketService.onNewBooking(() => {
+      fetchHospitalData();
+    });
+
+    const unsubNewAppt = socketService.onNewAppointment(() => {
+      fetchHospitalData();
+    });
+
+    const unsubUpdated = socketService.onAppointmentUpdated(() => {
+      fetchHospitalData();
+    });
+
+    const unsubCancelled = socketService.onAppointmentCancelled(() => {
+      fetchHospitalData();
+    });
+
+    return () => {
+      if (typeof unsubCleared === 'function') unsubCleared();
+      if (typeof unsubBooking === 'function') unsubBooking();
+      if (typeof unsubNewAppt === 'function') unsubNewAppt();
+      if (typeof unsubUpdated === 'function') unsubUpdated();
+      if (typeof unsubCancelled === 'function') unsubCancelled();
+    };
+  }, [apiBase, token, refreshVersion]);
 
   // Handle Bulk Excel Upload for Doctors
   const handleDoctorExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -113,13 +131,9 @@ export const HospitalAdminDashboard: React.FC = () => {
 
     try {
       setIsUploadingDoctors(true);
-      const authToken = token || sessionStorage.getItem('aToken') || localStorage.getItem('token') || '';
-      const res = await axios.post(`${apiBase}/api/admin/upload-doctors`, formData, {
+      const res = await apiClient.post('/api/admin/upload-doctors', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
-          Authorization: `Bearer ${authToken}`,
-          token: authToken,
-          atoken: authToken,
         },
       });
 
@@ -148,12 +162,9 @@ export const HospitalAdminDashboard: React.FC = () => {
 
     try {
       setIsUploadingDrivers(true);
-      const authToken = token || localStorage.getItem('token') || '';
-      const res = await axios.post(`${apiBase}/api/hospital/upload/drivers`, formData, {
+      const res = await apiClient.post('/api/hospital/upload/drivers', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
-          Authorization: `Bearer ${authToken}`,
-          token: authToken,
         },
       });
 
@@ -175,7 +186,6 @@ export const HospitalAdminDashboard: React.FC = () => {
   const handleAddDoctorSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const authToken = token || sessionStorage.getItem('aToken') || localStorage.getItem('token') || '';
       const docPayload = {
         name: docName,
         email: docEmail,
@@ -190,9 +200,7 @@ export const HospitalAdminDashboard: React.FC = () => {
         hospitalName: 'Lilavati Hospital & Research Centre',
       };
 
-      const res = await axios.post(`${apiBase}/api/admin/add-doctor`, docPayload, {
-        headers: { atoken: authToken, Authorization: `Bearer ${authToken}` },
-      });
+      const res = await apiClient.post('/api/admin/add-doctor', docPayload);
 
       if (res.data?.success) {
         showToast(`✓ Doctor ${docName} onboarded successfully!`, 'success');

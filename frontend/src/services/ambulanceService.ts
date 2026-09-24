@@ -1,24 +1,4 @@
-import axios from 'axios';
-
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-
-const getHeaders = () => {
-  const token =
-    sessionStorage.getItem('token') ||
-    sessionStorage.getItem('aToken') ||
-    sessionStorage.getItem('dToken') ||
-    localStorage.getItem('token') ||
-    localStorage.getItem('aToken') ||
-    localStorage.getItem('dToken') ||
-    '';
-
-  return {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      token,
-    },
-  };
-};
+import apiClient from './apiClient';
 
 export interface LocationCoordinates {
   lat: number;
@@ -48,12 +28,12 @@ export interface AmbulanceItem {
 export const ambulanceService = {
   // Geo-search for closest available ambulances
   getNearbyAmbulances: async (lat: number = 19.076, lng: number = 72.8777, radius: number = 25) => {
-    const { data } = await axios.get(`${BACKEND_URL}/api/ambulance/nearby?lat=${lat}&lng=${lng}&radius=${radius}`);
+    const { data } = await apiClient.get(`/api/ambulance/nearby?lat=${lat}&lng=${lng}&radius=${radius}`);
     return data;
   },
 
   getAllAmbulances: async () => {
-    const { data } = await axios.get(`${BACKEND_URL}/api/ambulance/all`);
+    const { data } = await apiClient.get(`/api/ambulance/all`);
     return data;
   },
 
@@ -65,7 +45,7 @@ export const ambulanceService = {
     patientPhone?: string;
     ambulanceId?: string;
   }) => {
-    const { data } = await axios.post(`${BACKEND_URL}/api/bookings/create`, payload, getHeaders());
+    const { data } = await apiClient.post(`/api/bookings/create`, payload);
     return data;
   },
 
@@ -76,44 +56,44 @@ export const ambulanceService = {
     patientPhone?: string;
     condition?: string;
   }) => {
-    const { data } = await axios.post(`${BACKEND_URL}/api/bookings/emergency-sos`, payload, getHeaders());
+    const { data } = await apiClient.post(`/api/bookings/emergency-sos`, payload);
     return data;
   },
 
   // Driver actions
   acceptBooking: async (bookingId: string, ambulanceId?: string) => {
-    const { data } = await axios.post(`${BACKEND_URL}/api/bookings/accept`, { bookingId, ambulanceId }, getHeaders());
+    const { data } = await apiClient.post(`/api/bookings/accept`, { bookingId, ambulanceId });
     return data;
   },
 
   updateBookingStatus: async (bookingId: string, status: 'ACCEPTED' | 'ONGOING' | 'COMPLETED' | 'CANCELLED') => {
-    const { data } = await axios.post(`${BACKEND_URL}/api/bookings/status`, { bookingId, status }, getHeaders());
+    const { data } = await apiClient.post(`/api/bookings/status`, { bookingId, status });
     return data;
   },
 
   toggleDuty: async (ambulanceId?: string, isAvailable?: boolean) => {
-    const { data } = await axios.post(`${BACKEND_URL}/api/ambulance/duty-toggle`, { ambulanceId, isAvailable }, getHeaders());
+    const { data } = await apiClient.post(`/api/ambulance/duty-toggle`, { ambulanceId, isAvailable });
     return data;
   },
 
   updateLocation: async (payload: { ambulanceId?: string; lat: number; lng: number; heading?: number; address?: string }) => {
-    const { data } = await axios.put(`${BACKEND_URL}/api/ambulance/location`, payload, getHeaders());
+    const { data } = await apiClient.put(`/api/ambulance/location`, payload);
     return data;
   },
 
   // History & Tracking
   getPatientBookings: async () => {
-    const { data } = await axios.get(`${BACKEND_URL}/api/bookings/my-bookings`, getHeaders());
+    const { data } = await apiClient.get(`/api/bookings/my-bookings`);
     return data;
   },
 
   getDriverTrips: async () => {
-    const { data } = await axios.get(`${BACKEND_URL}/api/bookings/driver-trips`, getHeaders());
+    const { data } = await apiClient.get(`/api/bookings/driver-trips`);
     return data;
   },
 
   getBookingById: async (bookingId: string) => {
-    const { data } = await axios.get(`${BACKEND_URL}/api/bookings/${bookingId}`, getHeaders());
+    const { data } = await apiClient.get(`/api/bookings/${bookingId}`);
     return data;
   },
 };

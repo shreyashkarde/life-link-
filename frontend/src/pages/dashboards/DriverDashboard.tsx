@@ -3,37 +3,18 @@ import { useApp } from '../../context/AppContext';
 import DashboardNavbar from '../../components/DashboardNavbar';
 import { LiveMap } from '../../features/maps/LiveMap';
 import { useLiveLocation } from '../../features/tracking/useLiveLocation';
-
+import { apiClient } from '../../services/apiClient';
 import { socketService } from '../../services/socket';
 
 export const DriverDashboard: React.FC = () => {
-  const { showToast, backendUrl } = useApp();
+  const { showToast, backendUrl, refreshVersion } = useApp();
   const apiBase = backendUrl || 'http://localhost:5000';
 
   const [isOnDuty, setIsOnDuty] = useState<boolean>(true);
   const [activeBooking, setActiveBooking] = useState<any>(null);
   const [incomingRequest, setIncomingRequest] = useState<any>(null);
   const [tripStatus, setTripStatus] = useState<'IDLE' | 'ASSIGNED' | 'EN_ROUTE_PICKUP' | 'PATIENT_ONBOARD' | 'COMPLETED'>('IDLE');
-  const [tripHistory, setTripHistory] = useState<any[]>([
-    {
-      id: 'SOS-108990',
-      patientName: 'Sarah Jenkins',
-      condition: 'Respiratory Distress',
-      pickup: 'Khar Danda Road, Mumbai',
-      destination: 'Lilavati Hospital Trauma Bay',
-      time: '08:45 AM Today',
-      status: 'COMPLETED',
-    },
-    {
-      id: 'SOS-108985',
-      patientName: 'Robert Vance',
-      condition: 'Hypoglycemic Shock',
-      pickup: 'Linking Road, Bandra West',
-      destination: 'Hinduja Hospital Emergency',
-      time: 'Yesterday 11:20 PM',
-      status: 'COMPLETED',
-    },
-  ]);
+  const [tripHistory, setTripHistory] = useState<any[]>([]);
 
   // 📍 Live Driver Location Telemetry Hook
   const { currentLocation, pickupLocation, updateLocation } = useLiveLocation({
@@ -47,13 +28,11 @@ export const DriverDashboard: React.FC = () => {
   // Fetch active trips assigned to driver
   const fetchDriverTrips = async () => {
     try {
-      const token = sessionStorage.getItem('token') || localStorage.getItem('token') || '';
-      const res = await fetch(`${apiBase}/api/bookings/driver-trips`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (data.success && data.trips && data.trips.length > 0) {
-        const active = data.trips.find((t: any) => t.status !== 'COMPLETED' && t.status !== 'CANCELLED');
+      const res = await apiClient.get('/api/bookings/driver-trips');
+      const data = res.data;
+      const rawList = data.trips || data.bookings || [];
+      if (data.success && Array.isArray(rawList)) {
+        const active = rawList.find((t: any) => t.status !== 'COMPLETED' && t.status !== 'CANCELLED');
         if (active) {
           setActiveBooking(active);
           setTripStatus(active.status || 'ASSIGNED');
@@ -62,7 +41,9 @@ export const DriverDashboard: React.FC = () => {
           setActiveBooking(null);
           setTripStatus('IDLE');
         }
-        setTripHistory(data.trips);
+        setTripHistory(rawList);
+      } else {
+        setTripHistory([]);
       }
     } catch (e) {
       // Standby mode
@@ -76,7 +57,7 @@ export const DriverDashboard: React.FC = () => {
     socketService.connect();
     socketService.joinDriver('driver_108');
 
-    socketService.onNewBooking((booking: any) => {
+    const unsubBooking = socketService.onNewBooking((booking: any) => {
       const pName = booking?.patientName || booking?.userData?.name || 'Emergency Patient';
       const cond = booking?.patientCondition || booking?.emergencyType || 'Emergency SOS';
       const pAddress = booking?.pickupLocation?.address || 'GPS Ping Location';
@@ -97,10 +78,28 @@ export const DriverDashboard: React.FC = () => {
       showToast(`🚨 New Emergency Dispatch Alert for ${pName}!`, 'error');
     });
 
+    const unsubCleared = socketService.onDataCleared(() => {
+      console.log('🧹 [DriverDashboard] DB Cleared event received. Resetting state...');
+      setActiveBooking(null);
+      setIncomingRequest(null);
+      setTripStatus('IDLE');
+      setTripHistory([]);
+      fetchDriverTrips();
+    });
+
+    const unsubRideStatus = socketService.onRideStatusUpdate((data: any) => {
+      if (data?.status) {
+        setTripStatus(data.status);
+      }
+      fetchDriverTrips();
+    });
+
     return () => {
-      // Cleanup
+      if (typeof unsubBooking === 'function') unsubBooking();
+      if (typeof unsubCleared === 'function') unsubCleared();
+      if (typeof unsubRideStatus === 'function') unsubRideStatus();
     };
-  }, [apiBase]);
+  }, [apiBase, refreshVersion]);
 
   // Duty Toggle
   const handleDutyToggle = async () => {
@@ -108,11 +107,7 @@ export const DriverDashboard: React.FC = () => {
     setIsOnDuty(nextStatus);
     showToast(`Duty Status: ${nextStatus ? 'ONLINE (GPS Streaming & Patrol Active)' : 'OFFLINE'}`, nextStatus ? 'success' : 'info');
     try {
-      await fetch(`${apiBase}/api/ambulance/duty-toggle`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isAvailable: nextStatus }),
-      });
+      await apiClient.post('/api/ambulance/duty-toggle', { isAvailable: nextStatus });
     } catch (e) {}
   };
 
@@ -144,12 +139,8 @@ export const DriverDashboard: React.FC = () => {
     showToast('✅ Emergency Dispatch Accepted! Green Corridor Active.', 'success');
 
     try {
-      const token = sessionStorage.getItem('token') || localStorage.getItem('token') || '';
-      await fetch(`${apiBase}/api/bookings/accept`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ bookingId: incomingRequest.bookingId }),
-      });
+      await apiClient.post('/api/bookings/accept', { bookingId: incomingRequest.bookingId });
+      fetchDriverTrips();
     } catch (e) {}
   };
 
@@ -171,31 +162,12 @@ export const DriverDashboard: React.FC = () => {
 
     const bookingId = activeBooking?._id || activeBooking?.bookingId || 'SOS-108992';
     try {
-      const token = sessionStorage.getItem('token') || localStorage.getItem('token') || '';
-      await fetch(`${apiBase}/api/bookings/status`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ bookingId, status }),
-      });
+      await apiClient.post('/api/bookings/status', { bookingId, status });
       if (status === 'COMPLETED') {
-        if (activeBooking) {
-          setTripHistory((prev) => [
-            {
-              id: activeBooking.bookingId || 'SOS-108992',
-              patientName: activeBooking.patientName || 'Emergency Patient',
-              condition: activeBooking.condition || 'Emergency SOS',
-              pickup: activeBooking.pickupAddress || 'Bandra West, Mumbai',
-              destination: activeBooking.destinationHospital || 'Lilavati Trauma Bay',
-              time: 'Just Now',
-              status: 'COMPLETED',
-            },
-            ...prev,
-          ]);
-        }
         setActiveBooking(null);
         setTripStatus('IDLE');
-        fetchDriverTrips();
       }
+      fetchDriverTrips();
     } catch (e) {}
   };
 

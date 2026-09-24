@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
 import { useApp } from '../../context/AppContext';
+import { apiClient } from '../../services/apiClient';
 
 export const DoctorProfile: React.FC = () => {
-  const { dToken, backendUrl, showToast } = useApp();
+  const { dToken, backendUrl, showToast, refreshVersion } = useApp();
   const [profileData, setProfileData] = useState<any>(null);
   const [isEdit, setIsEdit] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -11,9 +11,7 @@ export const DoctorProfile: React.FC = () => {
   const getProfileData = async () => {
     try {
       setLoading(true);
-      const { data } = await axios.get(`${backendUrl}/api/doctor/profile`, {
-        headers: { dtoken: dToken },
-      });
+      const { data } = await apiClient.get('/api/doctor/profile');
       if (data.success) {
         setProfileData(data.profileData);
       }
@@ -32,11 +30,7 @@ export const DoctorProfile: React.FC = () => {
         available: profileData.available,
       };
 
-      const { data } = await axios.post(
-        `${backendUrl}/api/doctor/update-profile`,
-        updateData,
-        { headers: { dtoken: dToken } }
-      );
+      const { data } = await apiClient.post('/api/doctor/update-profile', updateData);
 
       if (data.success) {
         showToast('Profile updated successfully!', 'success');
@@ -54,7 +48,7 @@ export const DoctorProfile: React.FC = () => {
     if (dToken) {
       getProfileData();
     }
-  }, [dToken]);
+  }, [dToken, refreshVersion]);
 
   if (loading && !profileData) {
     return (

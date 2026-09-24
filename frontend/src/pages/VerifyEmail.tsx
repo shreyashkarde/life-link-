@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
-import axios from 'axios';
 import { useApp } from '../context/AppContext';
+import { apiClient } from '../services/apiClient';
 
 /**
  * 📧 VerifyEmail.tsx
@@ -28,7 +28,7 @@ export const VerifyEmail: React.FC = () => {
 
     const performVerification = async () => {
       try {
-        const { data } = await axios.get(`${backendUrl}/api/auth/verify-email?token=${token}`);
+        const { data } = await apiClient.get(`/api/auth/verify-email?token=${token}`);
         if (data.success) {
           setStatus('success');
           if (data.token) {
@@ -57,7 +57,7 @@ export const VerifyEmail: React.FC = () => {
 
     try {
       setResendLoading(true);
-      const { data } = await axios.post(`${backendUrl}/api/auth/resend-verification`, {
+      const { data } = await apiClient.post('/api/auth/resend-verification', {
         email: resendEmail.trim().toLowerCase(),
       });
       if (data.success) {

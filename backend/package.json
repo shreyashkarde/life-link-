@@ -4,7 +4,7 @@
   "description": "Prescripto Full Stack Doctor Appointment Booking System Backend (MERN)",
   "main": "dist/server.js",
   "scripts": {
-    "dev": "ts-node src/server.ts",
+    "dev": "npx tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
     "seed": "ts-node src/scripts/seed.ts"

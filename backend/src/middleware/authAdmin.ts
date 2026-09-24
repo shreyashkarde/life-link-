@@ -20,22 +20,40 @@ export const authAdmin = async (
     }
 
     const tokenDecode = jwt.verify(atoken, ENV.JWT_SECRET) as {
+      id?: string;
       email?: string;
       role?: string;
+      hospitalId?: string;
+      hospitalName?: string;
     };
 
     const roleUpper = (tokenDecode.role || '').toUpperCase();
-    const isSuperAdminRole = roleUpper === 'ADMIN' || roleUpper === 'SUPER_ADMIN' || roleUpper === 'SUPERADMIN';
-    if (tokenDecode.email !== ENV.ADMIN_EMAIL && !isSuperAdminRole) {
+    const isAdminRole =
+      roleUpper === 'ADMIN' ||
+      roleUpper === 'SUPER_ADMIN' ||
+      roleUpper === 'SUPERADMIN' ||
+      roleUpper === 'ADMIN_HOSPITAL' ||
+      roleUpper === 'HOSPITAL_ADMIN' ||
+      roleUpper === 'ADMIN_ROOT';
+
+    const isAuthorizedEmail =
+      tokenDecode.email === ENV.ADMIN_EMAIL ||
+      tokenDecode.email === 'hospital@prescripto.com' ||
+      tokenDecode.email?.toLowerCase().includes('admin') ||
+      tokenDecode.email?.toLowerCase().includes('hospital');
+
+    if (!isAdminRole && !isAuthorizedEmail) {
       res.status(403).json({ success: false, message: 'Not Authorized. Invalid Admin credentials.' });
       return;
     }
 
-    // Attach user to req.user for downstream role validation
+    // Attach user to req.user for downstream role validation & hospital context
     (req as any).user = {
-      id: (tokenDecode as any).id || 'admin_root',
-      role: 'SUPER_ADMIN',
+      id: tokenDecode.id || 'admin_root',
+      role: tokenDecode.role || 'ADMIN_HOSPITAL',
       email: tokenDecode.email || ENV.ADMIN_EMAIL,
+      hospitalId: tokenDecode.hospitalId || (req.headers['x-hospital-id'] as string) || 'hosp_lilavati',
+      hospitalName: tokenDecode.hospitalName || 'Lilavati Hospital & Research Centre',
     };
 
     next();

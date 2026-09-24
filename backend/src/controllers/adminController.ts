@@ -7,9 +7,12 @@ import { Appointment } from '../models/Appointment';
 import { AmbulanceBooking } from '../models/AmbulanceBooking';
 import { Rating } from '../models/Rating';
 import { Notification } from '../models/Notification';
+import { Hospital } from '../models/Hospital';
+import { Ambulance } from '../models/Ambulance';
 import { ENV } from '../config/env';
 import { isMongoConnected } from '../config/db';
-import { prescriptoStore, clearEntireStore } from '../config/prescriptoStore';
+import { prescriptoStore, clearEntireStore, seedDefaultDoctorsToMongo } from '../config/prescriptoStore';
+import { getIO } from '../socket/socketHandler';
 
 // API for admin login
 export const loginAdmin = async (req: Request, res: Response): Promise<void> => {
@@ -76,6 +79,10 @@ export const addDoctor = async (req: Request, res: Response): Promise<void> => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
+    const authUser = (req as any).user;
+    const resolvedHospitalId = req.body.hospitalId || authUser?.hospitalId || 'hosp_lilavati';
+    const resolvedHospitalName = req.body.hospitalName || authUser?.hospitalName || 'Lilavati Hospital & Research Centre';
+
     const doctorData = {
       name,
       email,
@@ -92,6 +99,8 @@ export const addDoctor = async (req: Request, res: Response): Promise<void> => {
       date: Date.now(),
       available: true,
       slots_booked: {},
+      hospitalId: resolvedHospitalId,
+      hospitalName: resolvedHospitalName,
     };
 
     if (!isMongoConnected()) {
@@ -105,7 +114,14 @@ export const addDoctor = async (req: Request, res: Response): Promise<void> => {
         ...doctorData,
       };
       prescriptoStore.doctors.unshift(newDoc);
-      res.json({ success: true, message: 'Doctor Added Successfully' });
+
+      const io = getIO();
+      if (io) {
+        io.emit('doctorAdded', { id: newDoc._id, name, speciality, hospitalId: resolvedHospitalId });
+        io.to('admin_room').emit('doctorAdded', { id: newDoc._id, name, speciality, hospitalId: resolvedHospitalId });
+      }
+
+      res.json({ success: true, message: 'Doctor Added Successfully', doctor: newDoc });
       return;
     }
 
@@ -118,7 +134,13 @@ export const addDoctor = async (req: Request, res: Response): Promise<void> => {
     const newDoctor = new Doctor(doctorData);
     await newDoctor.save();
 
-    res.json({ success: true, message: 'Doctor Added Successfully' });
+    const io = getIO();
+    if (io) {
+      io.emit('doctorAdded', { id: newDoctor._id, name, speciality, hospitalId: resolvedHospitalId });
+      io.to('admin_room').emit('doctorAdded', { id: newDoctor._id, name, speciality, hospitalId: resolvedHospitalId });
+    }
+
+    res.json({ success: true, message: 'Doctor Added Successfully', doctor: newDoctor });
   } catch (error: any) {
     console.error('Add Doctor Error:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -133,6 +155,12 @@ export const allDoctors = async (_req: Request, res: Response): Promise<void> =>
       res.json({ success: true, doctors });
       return;
     }
+
+    const count = await Doctor.countDocuments({});
+    if (count < 15) {
+      await seedDefaultDoctorsToMongo();
+    }
+
     const doctors = await Doctor.find({}).select('-password').sort({ createdAt: -1 });
     res.json({ success: true, doctors });
   } catch (error: any) {
@@ -266,6 +294,11 @@ export const adminDashboard = async (_req: Request, res: Response): Promise<void
       return;
     }
 
+    const count = await Doctor.countDocuments({});
+    if (count < 15) {
+      await seedDefaultDoctorsToMongo();
+    }
+
     const doctorsCount = await Doctor.countDocuments({});
     const appointmentsCount = await Appointment.countDocuments({});
     const patientsCount = await User.countDocuments({});
@@ -291,6 +324,8 @@ export const adminDashboard = async (_req: Request, res: Response): Promise<void
 // API to completely wipe all dynamic transactional & test data
 export const clearAllData = async (_req: Request, res: Response): Promise<void> => {
   try {
+    console.log('🧹 [DB-Clear] Resetting dynamic database & in-memory transactional records...');
+
     // 1. Wipe in-memory store
     clearEntireStore();
 
@@ -300,7 +335,29 @@ export const clearAllData = async (_req: Request, res: Response): Promise<void> 
       await AmbulanceBooking.deleteMany({});
       await Rating.deleteMany({});
       await Notification.deleteMany({});
+      await Doctor.deleteMany({ email: { $ne: 'doc1@prescripto.com' } });
+      await Hospital.deleteMany({ adminEmail: { $ne: 'hospital@prescripto.com' } });
+      await Ambulance.deleteMany({ vehicleNumber: { $ne: 'MH-01-EQ-1108' } });
+      await User.deleteMany({ email: { $nin: ['patient@prescripto.com', 'hospital@prescripto.com', 'admin@prescripto.com'] } });
       await Doctor.updateMany({}, { $set: { slots_booked: {} } });
+      await seedDefaultDoctorsToMongo();
+      console.log('✓ [DB-Clear] MongoDB reset: exactly 1 Doctor, 1 Hospital, 1 Patient, 1 Driver, and 0 old appointments/trips.');
+    }
+
+    // 3. Emit real-time Socket.IO dataCleared event to all connected clients & rooms
+    const io = getIO();
+    if (io) {
+      console.log('📡 [Socket Engine] Broadcasting dataCleared event to all connected sockets & dashboard rooms');
+      const payload = {
+        timestamp: new Date().toISOString(),
+        clearedCollections: ['appointments', 'ambulanceBookings', 'ratings', 'notifications'],
+      };
+      io.emit('dataCleared', payload);
+      io.to('admin_room').emit('dataCleared', payload);
+      io.to('admin_emergency_room').emit('dataCleared', payload);
+      io.to('hospital_room').emit('dataCleared', payload);
+      io.to('doctor_room').emit('dataCleared', payload);
+      io.to('driver_room').emit('dataCleared', payload);
     }
 
     res.json({
