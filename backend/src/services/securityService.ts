@@ -66,24 +66,24 @@ export const hashToken = (token: string): string => {
 export const generateTokenPair = (id: string, role: string, email: string, hospitalId?: string): AuthTokens => {
   const tokenId = crypto.randomBytes(16).toString('hex');
 
-  // Short-lived Access Token: 15 minutes
+  // Long-lived Access Token: 7 days
   const accessToken = jwt.sign(
     { id, role, email, hospitalId, tokenId },
     ENV.JWT_SECRET,
-    { expiresIn: '15m' }
+    { expiresIn: '7d' }
   );
 
-  // Secure Refresh Token: 7 days
+  // Secure Refresh Token: 30 days
   const refreshToken = jwt.sign(
     { id, role, email, hospitalId, tokenId, type: 'refresh' },
     ENV.JWT_SECRET,
-    { expiresIn: '7d' }
+    { expiresIn: '30d' }
   );
 
   return {
     accessToken,
     refreshToken,
-    expiresIn: 15 * 60, // 900 seconds
+    expiresIn: 7 * 24 * 60 * 60, // 7 days in seconds
   };
 };
 
@@ -93,21 +93,21 @@ export const generateTokenPair = (id: string, role: string, email: string, hospi
 export const setAuthCookies = (res: Response, tokens: AuthTokens): void => {
   const isProd = process.env.NODE_ENV === 'production';
 
-  // Access Token Cookie (15 min)
+  // Access Token Cookie (7 days)
   res.cookie('accessToken', tokens.accessToken, {
     httpOnly: true,
     secure: isProd,
-    sameSite: 'lax',
-    maxAge: 15 * 60 * 1000, // 15 minutes
+    sameSite: isProd ? 'none' : 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
     path: '/',
   });
 
-  // Refresh Token Cookie (7 days)
+  // Refresh Token Cookie (30 days)
   res.cookie('refreshToken', tokens.refreshToken, {
     httpOnly: true,
     secure: isProd,
-    sameSite: 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    sameSite: isProd ? 'none' : 'lax',
+    maxAge: 30 * 24 * 60 * 60 * 1000,
     path: '/',
   });
 };

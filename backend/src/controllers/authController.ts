@@ -260,13 +260,14 @@ export const registerUser = async (req: Request, res: Response) => {
         return res.status(400).json({ success: false, message: 'An account with this email already exists' });
       }
 
+      const isAutoVerify = !ENV.SMTP_USER || !ENV.SMTP_PASS;
       const newUser = await User.create({
         name,
         email: cleanEmail,
         password: hashedPassword,
         role: role.toUpperCase(),
         phone: phone || '0000000000',
-        isVerified: false, // Must verify email
+        isVerified: isAutoVerify ? true : false,
         verificationToken: hashedVerificationToken,
         verificationTokenExpires: tokenExpires,
         loginAttempts: 0,
@@ -864,6 +865,12 @@ export const loginUser = async (req: Request, res: Response) => {
               user.isVerified = true;
             }
             await user.save();
+
+            // Auto-verify if SMTP credentials are not configured in environment
+            if (user.isVerified === false && (!ENV.SMTP_USER || !ENV.SMTP_PASS)) {
+              user.isVerified = true;
+              await user.save();
+            }
 
             // Check email verification status for patients
             if (user.isVerified === false && user.role === 'PATIENT' && cleanEmail !== 'patient@prescripto.com') {

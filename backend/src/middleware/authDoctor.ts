@@ -12,7 +12,9 @@ export const authDoctor = async (
       (req.headers.dtoken as string) ||
       (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')
         ? req.headers.authorization.split(' ')[1]
-        : (req.headers.token as string));
+        : (req.headers.token as string)) ||
+      req.cookies?.accessToken ||
+      req.cookies?.dToken;
 
     if (!dtoken) {
       res.status(401).json({ success: false, message: 'Not Authorized. Please login as Doctor.' });

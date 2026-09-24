@@ -12,7 +12,9 @@ export const authUser = async (
       (req.headers.token as string) ||
       (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')
         ? req.headers.authorization.split(' ')[1]
-        : undefined);
+        : undefined) ||
+      req.cookies?.accessToken ||
+      req.cookies?.token;
 
     if (!token) {
       res.status(401).json({ success: false, message: 'Not Authorized. Please login to your account.' });

@@ -19,14 +19,14 @@ export interface RefreshTokenPayload {
 const ACCESS_TOKEN_SECRET = ENV.JWT_SECRET || 'prescripto_jwt_secret_key_2026';
 const REFRESH_TOKEN_SECRET = (ENV.JWT_SECRET || 'prescripto_jwt_secret_key_2026') + '_refresh';
 
-// Access Token: 15 minutes (short-lived)
-const ACCESS_TOKEN_EXPIRY = '15m';
-// Refresh Token: 7 days (long-lived)
-const REFRESH_TOKEN_EXPIRY = '7d';
+// Access Token: 7 days
+const ACCESS_TOKEN_EXPIRY = '7d';
+// Refresh Token: 30 days
+const REFRESH_TOKEN_EXPIRY = '30d';
 
 /**
  * 🔑 Token Service
- * Issues short-lived access tokens and secure HTTP-only refresh tokens.
+ * Issues long-lived access tokens and secure HTTP-only refresh tokens.
  */
 export class TokenService {
   /**
@@ -87,22 +87,16 @@ export class TokenService {
    */
   static setRefreshTokenCookie(res: Response, refreshToken: string): void {
     const isProduction = process.env.NODE_ENV === 'production';
-    // Max Age: 7 days in milliseconds
-    const maxAgeMs = 7 * 24 * 60 * 60 * 1000;
+    // Max Age: 30 days in milliseconds
+    const maxAgeMs = 30 * 24 * 60 * 60 * 1000;
 
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true, // Prevents XSS script access
       secure: isProduction, // HTTPS only in production
-      sameSite: 'lax', // CSRF mitigation
+      sameSite: isProduction ? 'none' : 'lax',
       path: '/',
       maxAge: maxAgeMs,
     });
-
-    // Also set explicit header fallback for standard clients
-    res.setHeader(
-      'Set-Cookie',
-      `refreshToken=${refreshToken}; HttpOnly; Path=/; Max-Age=${maxAgeMs / 1000}; SameSite=Lax${isProduction ? '; Secure' : ''}`
-    );
   }
 
   /**
