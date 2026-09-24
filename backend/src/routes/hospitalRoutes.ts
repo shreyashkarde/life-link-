@@ -21,7 +21,7 @@ import {
   uploadHospitalsExcel,
 } from '../controllers/bulkUploadController';
 import { excelUpload, handleUploadError } from '../middleware/uploadMiddleware';
-import { authenticateJWT } from '../middleware/auth';
+import { authenticateJWT, authorizeRoles } from '../middleware/auth';
 import { loginUser } from '../controllers/authController';
 
 const router = express.Router();
@@ -29,26 +29,30 @@ const router = express.Router();
 // 🔑 Hospital Login Alias
 router.post('/login', loginUser);
 
-// 👑 SuperAdmin Hospital Management Routes
-router.post('/hospitals', createHospital);
+// 👑 SuperAdmin Hospital Management Routes (Protected)
+router.post('/hospitals', authenticateJWT, authorizeRoles('SUPER_ADMIN', 'ADMIN'), createHospital);
 router.get('/hospitals', getAllHospitals);
 router.get('/hospitals/:id', getHospitalById);
-router.put('/hospitals/:id', updateHospital);
-router.delete('/hospitals/:id', deleteHospital);
-router.get('/superadmin/overview', getSuperAdminOverview);
-router.get('/overview', getSuperAdminOverview);
+router.put('/hospitals/:id', authenticateJWT, authorizeRoles('SUPER_ADMIN', 'ADMIN'), updateHospital);
+router.delete('/hospitals/:id', authenticateJWT, authorizeRoles('SUPER_ADMIN', 'ADMIN'), deleteHospital);
+router.get('/superadmin/overview', authenticateJWT, authorizeRoles('SUPER_ADMIN', 'ADMIN'), getSuperAdminOverview);
+router.get('/overview', authenticateJWT, authorizeRoles('SUPER_ADMIN', 'ADMIN'), getSuperAdminOverview);
 router.get('/', getAllHospitals);
-router.post('/', createHospital);
+router.post('/', authenticateJWT, authorizeRoles('SUPER_ADMIN', 'ADMIN'), createHospital);
 
-// 📁 SuperAdmin Bulk Upload Hospitals
+// 📁 SuperAdmin Bulk Upload Hospitals (Protected)
 router.post(
   '/superadmin/upload/hospitals',
+  authenticateJWT,
+  authorizeRoles('SUPER_ADMIN', 'ADMIN'),
   excelUpload.single('file'),
   handleUploadError,
   uploadHospitalsExcel
 );
 router.post(
   '/hospitals/upload',
+  authenticateJWT,
+  authorizeRoles('SUPER_ADMIN', 'ADMIN'),
   excelUpload.single('file'),
   handleUploadError,
   uploadHospitalsExcel

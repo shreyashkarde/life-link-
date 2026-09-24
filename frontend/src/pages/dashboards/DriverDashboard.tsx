@@ -5,6 +5,7 @@ import { LiveMap } from '../../features/maps/LiveMap';
 import { useLiveLocation } from '../../features/tracking/useLiveLocation';
 import { apiClient } from '../../services/apiClient';
 import { socketService } from '../../services/socket';
+import soundService from '../../services/soundService';
 
 export const DriverDashboard: React.FC = () => {
   const { showToast, backendUrl, refreshVersion } = useApp();
@@ -15,6 +16,7 @@ export const DriverDashboard: React.FC = () => {
   const [incomingRequest, setIncomingRequest] = useState<any>(null);
   const [tripStatus, setTripStatus] = useState<'IDLE' | 'ASSIGNED' | 'EN_ROUTE_PICKUP' | 'PATIENT_ONBOARD' | 'COMPLETED'>('IDLE');
   const [tripHistory, setTripHistory] = useState<any[]>([]);
+  const [isSimulatingTransit, setIsSimulatingTransit] = useState<boolean>(false);
 
   // 📍 Live Driver Location Telemetry Hook
   const { currentLocation, pickupLocation, updateLocation } = useLiveLocation({
@@ -24,6 +26,37 @@ export const DriverDashboard: React.FC = () => {
     bookingId: activeBooking?.bookingId || activeBooking?._id || 'SOS-108992',
     autoWatchGps: true,
   });
+
+  // Dynamic simulation of ambulance driving along Bandra corridor to Lilavati Hospital
+  const handleSimulateLiveTransit = async () => {
+    setIsSimulatingTransit(true);
+    soundService.playEmergencySiren(1.5);
+    showToast('🚀 Simulating live ambulance motion along Bandra corridor...', 'info');
+
+    const waypoints = [
+      { lat: 19.0600, lng: 72.8340, speed: 42, note: 'Leaving base, entering S.V. Road' },
+      { lat: 19.0570, lng: 72.8320, speed: 52, note: 'Passing Bandra Junction' },
+      { lat: 19.0545, lng: 72.8305, speed: 48, note: 'Turning onto Reclamation flyover' },
+      { lat: 19.0528, lng: 72.8298, speed: 35, note: 'Entering Lilavati Hospital driveway' },
+      { lat: 19.0522, lng: 72.8295, speed: 0, note: 'Arrived at Lilavati Trauma Care!' },
+    ];
+
+    for (let i = 0; i < waypoints.length; i++) {
+      await new Promise((r) => setTimeout(r, 1000));
+      const wp = waypoints[i];
+      await updateLocation({
+        latitude: wp.lat,
+        longitude: wp.lng,
+        heading: 180,
+        speed: wp.speed,
+      });
+      showToast(`📍 [GPS Feed] ${wp.note} (${wp.speed} km/h)`, 'info');
+    }
+
+    soundService.playSuccessChime();
+    showToast('✓ Arrived at Lilavati Emergency Trauma Center!', 'success');
+    setIsSimulatingTransit(false);
+  };
 
   // Fetch active trips assigned to driver
   const fetchDriverTrips = async () => {
@@ -75,6 +108,7 @@ export const DriverDashboard: React.FC = () => {
         etaMinutes: booking.etaMinutes || 3,
       });
 
+      soundService.playDispatchAlert();
       showToast(`🚨 New Emergency Dispatch Alert for ${pName}!`, 'error');
     });
 
@@ -569,10 +603,20 @@ export const DriverDashboard: React.FC = () => {
               <p className="text-xs text-[#64748B]">Driver location stream broadcasted to patient tracking room</p>
             </div>
 
-            <span className="text-xs text-emerald-600 font-bold flex items-center gap-1.5 self-start sm:self-auto">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-              Socket Room Active: <strong>ride_SOS-108992</strong>
-            </span>
+            <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
+              <button
+                type="button"
+                disabled={isSimulatingTransit}
+                onClick={handleSimulateLiveTransit}
+                className="px-3.5 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <span>{isSimulatingTransit ? '🔄 Driving...' : '⚡ Simulate Live Route Motion'}</span>
+              </button>
+              <span className="text-xs text-emerald-600 font-bold flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                Socket Active
+              </span>
+            </div>
           </div>
 
           {/* Dynamic Map Component */}

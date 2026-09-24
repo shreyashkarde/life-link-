@@ -2,12 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { apiClient } from '../services/apiClient';
 import { socketService } from '../services/socket';
+import DigitalPrescriptionModal, { PrescriptionData } from '../components/DigitalPrescriptionModal';
 
 export const MyAppointments: React.FC = () => {
   const { backendUrl, token, showToast, getDoctorsData, refreshVersion } = useApp();
   const [appointments, setAppointments] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [payingApptId, setPayingApptId] = useState<string | null>(null);
+  const [prescriptionModalData, setPrescriptionModalData] = useState<PrescriptionData | null>(null);
 
   const getUserAppointments = async () => {
     try {
@@ -185,6 +187,29 @@ export const MyAppointments: React.FC = () => {
                     Completed ✓
                   </div>
                 )}
+
+                {/* 📄 Official Medical Pass & Prescription Slip Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrescriptionModalData({
+                      appointmentId: item._id,
+                      patientName: item.userData?.name || 'Edward Vincent',
+                      patientAge: 28,
+                      patientGender: 'Male',
+                      doctorName: item.docData?.name || 'Dr. Richard James',
+                      doctorSpeciality: item.docData?.speciality || 'General Physician',
+                      hospitalName: item.hospitalName || item.docData?.hospitalName || 'Lilavati Hospital & Research Centre',
+                      slotDate: item.slotDate?.replace(/_/g, ' / ') || 'Today',
+                      slotTime: item.slotTime || '10:00 am',
+                      fees: item.amount || 50,
+                    });
+                  }}
+                  className="w-full py-2 px-3 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 rounded-xl font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer border border-slate-200"
+                >
+                  <span>📄</span>
+                  <span>View Medical Pass & Rx</span>
+                </button>
               </div>
             </div>
           ))}
@@ -263,6 +288,13 @@ export const MyAppointments: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* 📄 Official Digital Prescription & Medical Pass Modal */}
+      <DigitalPrescriptionModal
+        isOpen={Boolean(prescriptionModalData)}
+        onClose={() => setPrescriptionModalData(null)}
+        data={prescriptionModalData}
+      />
     </div>
   );
 };

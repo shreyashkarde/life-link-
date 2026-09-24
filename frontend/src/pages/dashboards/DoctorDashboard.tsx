@@ -3,6 +3,8 @@ import apiClient from '../../services/apiClient';
 import { useApp } from '../../context/AppContext';
 import DashboardNavbar from '../../components/DashboardNavbar';
 import { socketService } from '../../services/socket';
+import soundService from '../../services/soundService';
+import DigitalPrescriptionModal, { PrescriptionData } from '../../components/DigitalPrescriptionModal';
 
 interface MedicineItem {
   id: string;
@@ -21,6 +23,7 @@ export const DoctorDashboard: React.FC = () => {
   const [consultations, setConsultations] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [filterStatus, setFilterStatus] = useState<'ALL' | 'SCHEDULED' | 'COMPLETED' | 'CANCELLED'>('ALL');
+  const [previewRxModal, setPreviewRxModal] = useState<PrescriptionData | null>(null);
 
   // Selected Patient for Active Chart & Rx
   const [selectedAppointment, setSelectedAppointment] = useState<any>(null);
@@ -222,6 +225,7 @@ export const DoctorDashboard: React.FC = () => {
     setIsSubmittingRx(true);
     setTimeout(() => {
       setIsSubmittingRx(false);
+      soundService.playSuccessChime();
       showToast('Digital Prescription signed & issued to Patient Record! ✓', 'success');
       if (selectedAppointment) {
         handleComplete(selectedAppointment._id || selectedAppointment.id);
@@ -776,19 +780,51 @@ export const DoctorDashboard: React.FC = () => {
                     <span>• Cryptographically signed by practitioner</span>
                   </div>
 
-                  <button
-                    type="submit"
-                    disabled={isSubmittingRx || !selectedAppointment}
-                    className="w-full sm:w-auto px-6 py-2.5 bg-[#2563EB] hover:bg-[#1D4ED8] disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-sm hover:shadow-blue-500/20 transition-all cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    <span>{isSubmittingRx ? 'Signing Rx...' : 'Sign & Issue Prescription ✓'}</span>
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPreviewRxModal({
+                          appointmentId: selectedAppointment?._id || 'RX-DEMO',
+                          patientName: selectedAppointment?.userData?.name || 'Edward Vincent',
+                          patientAge: 28,
+                          patientGender: selectedAppointment?.userData?.gender || 'Male',
+                          doctorName: doctorData?.name || 'Dr. Richard James',
+                          doctorSpeciality: doctorData?.speciality || 'General Physician',
+                          hospitalName: 'Lilavati Hospital & Research Centre',
+                          slotDate: selectedAppointment?.slotDate?.replace(/_/g, ' / ') || 'Today',
+                          slotTime: selectedAppointment?.slotTime || '10:00 am',
+                          diagnosis: diagnosis || 'Acute Upper Respiratory Tract Symptoms',
+                          medicines: medicines,
+                          instructions: clinicalNotes,
+                          fees: doctorData?.fees || 50,
+                        });
+                      }}
+                      className="px-4 py-2.5 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 transition-all cursor-pointer flex items-center gap-1.5"
+                    >
+                      <span>📄</span> Preview Slip
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSubmittingRx || !selectedAppointment}
+                      className="px-6 py-2.5 bg-[#2563EB] hover:bg-[#1D4ED8] disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-sm hover:shadow-blue-500/20 transition-all cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      <span>{isSubmittingRx ? 'Signing Rx...' : 'Sign & Issue Prescription ✓'}</span>
+                    </button>
+                  </div>
                 </div>
               </form>
             </div>
           </div>
         </div>
       </main>
+
+      {/* 📄 Official Digital Prescription & Medical Pass Modal */}
+      <DigitalPrescriptionModal
+        isOpen={Boolean(previewRxModal)}
+        onClose={() => setPreviewRxModal(null)}
+        data={previewRxModal}
+      />
     </div>
   );
 };

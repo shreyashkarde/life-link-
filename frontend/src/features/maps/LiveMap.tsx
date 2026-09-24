@@ -457,12 +457,12 @@ export const LiveMap: React.FC<LiveMapProps> = ({
             </div>
 
             {/* Bottom Status Overlay */}
-            <div className="absolute bottom-3 left-4 right-4 flex items-center justify-between bg-slate-900/90 backdrop-blur-md px-3.5 py-2 rounded-xl border border-slate-700 text-xs">
-              <div className="flex items-center gap-2">
+            <div className="absolute bottom-2 sm:bottom-3 left-2 sm:left-4 right-2 sm:right-4 flex flex-col sm:flex-row sm:items-center justify-between bg-slate-900/90 backdrop-blur-md px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl border border-slate-700 text-[10px] sm:text-xs gap-1">
+              <div className="flex items-center gap-1.5 sm:gap-2">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-                <span className="text-slate-300">Live Telemetry GPS Feed: <strong className="text-white">{driverPos.lat.toFixed(4)}, {driverPos.lng.toFixed(4)}</strong></span>
+                <span className="text-slate-300">GPS: <strong className="text-white">{driverPos.lat.toFixed(4)}, {driverPos.lng.toFixed(4)}</strong></span>
               </div>
-              <span className="text-blue-400 font-bold">ETA: {trafficEta} ({liveDistance})</span>
+              <span className="text-blue-400 font-bold self-end sm:self-auto">ETA: {trafficEta} ({liveDistance})</span>
             </div>
           </div>
         )}

@@ -118,9 +118,6 @@ export const Login: React.FC<LoginProps> = ({ embedded = false, initialMode = 'L
             'success'
           );
           // If in dev/fallback with a direct preview, toast a notification
-          if (data.verificationToken) {
-            console.log('Verification Token:', data.verificationToken);
-          }
           setState('Login');
         } else {
           showToast(data.message || 'Registration failed', 'error');

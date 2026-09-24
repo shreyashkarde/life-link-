@@ -8,6 +8,9 @@ import { useLiveLocation } from '../../features/tracking/useLiveLocation';
 import { EmergencySOSModal } from '../../components/EmergencySOSModal';
 import { DoctorItem } from '../../assets/assets';
 import { socketService } from '../../services/socket';
+import soundService from '../../services/soundService';
+import DigitalPrescriptionModal, { PrescriptionData } from '../../components/DigitalPrescriptionModal';
+import AiTriageModal from '../../features/triage/AiTriageModal';
 
 interface HospitalInfo {
   id: string;
@@ -41,6 +44,8 @@ export const PatientDashboard: React.FC = () => {
   const [selectedHospitalId, setSelectedHospitalId] = useState<string>('ALL');
   const [activeTab, setActiveTab] = useState<'consultations' | 'ambulance'>('consultations');
   const [isSOSModalOpen, setIsSOSModalOpen] = useState<boolean>(false);
+  const [isTriageOpen, setIsTriageOpen] = useState<boolean>(false);
+  const [prescriptionModalData, setPrescriptionModalData] = useState<PrescriptionData | null>(null);
   const [showNotifications, setShowNotifications] = useState<boolean>(false);
   const [driverAcceptedNotice, setDriverAcceptedNotice] = useState<string | null>(null);
   
@@ -329,6 +334,7 @@ export const PatientDashboard: React.FC = () => {
       });
 
       if (res.data?.success) {
+        soundService.playSuccessChime();
         showToast(`✓ Appointment with ${bookingDoc.name} booked successfully at ${activeHospital?.name || 'Lilavati Hospital'}!`, 'success');
         setBookingDoc(null);
         setSelectedSlotTime('');
@@ -390,7 +396,17 @@ export const PatientDashboard: React.FC = () => {
           </div>
 
           {/* Right Header Action Hub */}
-          <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end">
+          <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto justify-between md:justify-end">
+            {/* 🤖 Smart AI Symptom Triage CTA Button */}
+            <button
+              type="button"
+              onClick={() => setIsTriageOpen(true)}
+              className="px-4 py-2.5 bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 active:scale-98 text-white text-xs font-black rounded-xl shadow-sm hover:shadow-indigo-500/25 transition-all cursor-pointer flex items-center gap-1.5"
+            >
+              <span className="text-sm">🤖</span>
+              <span>AI Symptom Triage</span>
+            </button>
+
             {/* Notification Bell Button */}
             <div className="relative">
               <button
@@ -906,7 +922,7 @@ export const PatientDashboard: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                       <span className="text-xs font-bold text-slate-900">${item.amount || 50}</span>
                       <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
                         item.isCompleted
@@ -917,6 +933,28 @@ export const PatientDashboard: React.FC = () => {
                       }`}>
                         {item.isCompleted ? 'Completed ✓' : item.cancelled ? 'Cancelled' : 'Confirmed'}
                       </span>
+                      {/* 📄 View Medical Pass & Rx Button */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPrescriptionModalData({
+                            appointmentId: item._id || 'APT-' + idx,
+                            patientName: patientName,
+                            patientAge: 28,
+                            patientGender: 'Male',
+                            doctorName: item.docData?.name || 'Dr. Richard James',
+                            doctorSpeciality: item.docData?.speciality || 'General Physician',
+                            hospitalName: item.hospitalName || item.docData?.hospitalName || 'Lilavati Hospital & Research Centre',
+                            slotDate: item.slotDate?.replace(/_/g, ' / ') || 'Today',
+                            slotTime: item.slotTime || '10:00 am',
+                            fees: item.amount || 50,
+                          });
+                        }}
+                        className="px-2.5 py-1 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 text-[11px] font-bold rounded-lg border border-slate-200 transition-colors flex items-center gap-1 cursor-pointer"
+                        title="View & Print Official Medical Slip & Prescription"
+                      >
+                        <span>📄</span> Rx Pass
+                      </button>
                     </div>
                   </div>
                 ))
@@ -1142,6 +1180,27 @@ export const PatientDashboard: React.FC = () => {
           setIsSOSModalOpen(false);
           fetchDashboardData();
         }}
+      />
+
+      {/* 🤖 Smart AI Medical Triage Assistant Modal */}
+      <AiTriageModal
+        isOpen={isTriageOpen}
+        onClose={() => setIsTriageOpen(false)}
+        onTriggerSOS={() => {
+          setIsSOSModalOpen(true);
+        }}
+        onBookDoctor={(spec) => {
+          setSelectedSpeciality(spec);
+          const el = document.getElementById('hospital-selection-section');
+          el?.scrollIntoView({ behavior: 'smooth' });
+        }}
+      />
+
+      {/* 📄 Official Digital Prescription & Medical Pass Modal */}
+      <DigitalPrescriptionModal
+        isOpen={Boolean(prescriptionModalData)}
+        onClose={() => setPrescriptionModalData(null)}
+        data={prescriptionModalData}
       />
     </div>
   );

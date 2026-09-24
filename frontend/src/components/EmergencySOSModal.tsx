@@ -4,6 +4,8 @@ import socketService from '../services/socket';
 import ratingService from '../services/ratingService';
 import { useApp } from '../context/AppContext';
 
+import soundService from '../services/soundService';
+
 export const EmergencySOSModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
   const { userData, showToast } = useApp();
 
@@ -76,6 +78,7 @@ export const EmergencySOSModal: React.FC<{ isOpen: boolean; onClose: () => void 
       });
 
       if (res.success) {
+        soundService.playEmergencySiren(3.5);
         setActiveBooking(res.booking);
         showToast('🚨 Code Red SOS Active! Closest ambulance dispatched.', 'success');
       } else {
@@ -113,12 +116,12 @@ export const EmergencySOSModal: React.FC<{ isOpen: boolean; onClose: () => void 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 font-outfit animate-fade-in">
-      <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden border-2 border-primary/20 flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-[1000] bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 font-outfit animate-fade-in overflow-y-auto">
+      <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden border-2 border-primary/20 flex flex-col my-auto max-h-[90vh]">
         {/* Header */}
         <div className="bg-primary px-6 py-4 text-white flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <span className="text-2xl">🚑</span>
+            <span className="text-2xl animate-pulse">🚑</span>
             <div>
               <h2 className="text-lg font-black leading-tight">Emergency Ambulance Dispatch</h2>
               <p className="text-[11px] text-white/80 font-medium">Real-Time Telemetry & Nearest Driver Response</p>
