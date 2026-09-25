@@ -61,8 +61,8 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
       const normalizedAllowed = allowedRoles.map((r) => r.toUpperCase());
       const matchingToken = tokens.find((t) => {
         const payload = decodeJwtPayload(t);
-        if (!payload || !payload.role) return false;
-        const role = payload.role.toUpperCase();
+        if (!payload) return false;
+        const role = (payload.role || 'PATIENT').toUpperCase();
         return (
           normalizedAllowed.includes(role) ||
           ((role === 'SUPER_ADMIN' || role === 'ADMIN' || role === 'SUPERADMIN') &&

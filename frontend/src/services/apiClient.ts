@@ -1,6 +1,5 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
-
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+import { getBackendUrl } from '../config/backendUrl';
 
 /**
  * 🚀 Centralized Enterprise Axios API Client
@@ -11,17 +10,19 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
  * - Transparent debugging logs for API hits, status, and payload flow
  */
 export const apiClient: AxiosInstance = axios.create({
-  baseURL: BACKEND_URL,
+  baseURL: getBackendUrl(),
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 15000,
+  timeout: 20000,
 });
 
 // Request Interceptor: Injects authentication tokens & disables browser caching
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
+    // Dynamically guarantee latest resolved backend URL
+    config.baseURL = getBackendUrl();
     // 1. Extract tokens from sessionStorage (preferred) and localStorage (fallback)
     const token =
       sessionStorage.getItem('token') ||

@@ -54,10 +54,12 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
       };
       prescriptoStore.users.push(newUser);
 
-      const token = jwt.sign({ id: newUser._id }, ENV.JWT_SECRET, {
-        expiresIn: '7d',
-      });
-      res.json({ success: true, token, user: { name: newUser.name, email: newUser.email } });
+      const token = jwt.sign(
+        { id: newUser._id, role: 'PATIENT', email: newUser.email },
+        ENV.JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+      res.json({ success: true, token, user: { id: newUser._id, name: newUser.name, email: newUser.email, role: 'PATIENT' } });
       return;
     }
 
@@ -75,11 +77,13 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
 
     const user = await newUser.save();
 
-    const token = jwt.sign({ id: user._id }, ENV.JWT_SECRET, {
-      expiresIn: '7d',
-    });
+    const token = jwt.sign(
+      { id: user._id, role: 'PATIENT', email: user.email },
+      ENV.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
 
-    res.json({ success: true, token, user: { name: user.name, email: user.email } });
+    res.json({ success: true, token, user: { id: user._id, name: user.name, email: user.email, role: 'PATIENT' } });
   } catch (error: any) {
     console.error('Register User Error:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -102,10 +106,12 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
         res.status(400).json({ success: false, message: 'Invalid password' });
         return;
       }
-      const token = jwt.sign({ id: user._id }, ENV.JWT_SECRET, {
-        expiresIn: '7d',
-      });
-      res.json({ success: true, token, user: { name: user.name, email: user.email } });
+      const token = jwt.sign(
+        { id: user._id, role: 'PATIENT', email: user.email },
+        ENV.JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+      res.json({ success: true, token, user: { id: user._id, name: user.name, email: user.email, role: 'PATIENT' } });
       return;
     }
 
@@ -121,11 +127,13 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const token = jwt.sign({ id: user._id }, ENV.JWT_SECRET, {
-      expiresIn: '7d',
-    });
+    const token = jwt.sign(
+      { id: user._id, role: user.role || 'PATIENT', email: user.email },
+      ENV.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
 
-    res.json({ success: true, token, user: { name: user.name, email: user.email } });
+    res.json({ success: true, token, user: { id: user._id, name: user.name, email: user.email, role: user.role || 'PATIENT' } });
   } catch (error: any) {
     console.error('Login User Error:', error);
     res.status(500).json({ success: false, message: error.message });

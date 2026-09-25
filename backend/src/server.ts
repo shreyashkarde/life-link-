@@ -45,29 +45,37 @@ app.use(
   })
 );
 app.use(cookieParser());
-app.use(
-  cors({
-    origin: (_origin, callback) => callback(null, true),
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: [
-      'Content-Type',
-      'Authorization',
-      'token',
-      'aToken',
-      'atoken',
-      'dToken',
-      'dtoken',
-      'x-refresh-token',
-      'x-role',
-      'x-hospital-id',
-      'Cache-Control',
-      'Pragma',
-      'Expires',
-      'X-Requested-With',
-    ],
-  })
-);
+
+const corsOptions = {
+  origin: (_origin: any, callback: any) => callback(null, true),
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'token',
+    'aToken',
+    'atoken',
+    'dToken',
+    'dtoken',
+    'x-refresh-token',
+    'x-role',
+    'x-hospital-id',
+    'Cache-Control',
+    'Pragma',
+    'Expires',
+    'X-Requested-With',
+    'Accept',
+    'Origin',
+    'Accept-Language',
+  ],
+  exposedHeaders: ['Authorization', 'token', 'aToken', 'dToken'],
+  preflightContinue: false,
+  optionsSuccessStatus: 204,
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(hospitalContextMiddleware);

@@ -1,6 +1,5 @@
 import { io, Socket } from 'socket.io-client';
-
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+import { getBackendUrl } from '../config/backendUrl';
 
 export interface DriverLocationPayload {
   lat: number;
@@ -30,7 +29,7 @@ class SocketService {
         localStorage.getItem('token') ||
         '';
 
-      this.socket = io(BACKEND_URL, {
+      this.socket = io(getBackendUrl(), {
         transports: ['websocket', 'polling'],
         reconnection: true,
         reconnectionAttempts: 20,

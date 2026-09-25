@@ -2,6 +2,7 @@ import React, { createContext, useState, useEffect, useRef, ReactNode, useContex
 import apiClient from '../services/apiClient';
 import socketService from '../services/socket';
 import { DoctorItem } from '../assets/assets';
+import { getBackendUrl } from '../config/backendUrl';
 
 export interface AppContextType {
   doctors: DoctorItem[];
@@ -32,7 +33,7 @@ export const AppContext = createContext<AppContextType | null>(null);
 
 export const AppContextProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const currencySymbol = '$';
-  const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+  const backendUrl = getBackendUrl();
 
   const [doctors, setDoctors] = useState<DoctorItem[]>([]);
   const [token, setTokenState] = useState<string>(sessionStorage.getItem('token') || localStorage.getItem('token') || '');

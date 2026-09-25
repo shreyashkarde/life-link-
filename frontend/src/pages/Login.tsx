@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import ForgotPasswordModal from '../features/auth/ForgotPasswordModal';
 import GoogleLoginButton from '../features/auth/GoogleLoginButton';
 import { apiClient } from '../services/apiClient';
+import { getBackendUrl, setCustomBackendUrl } from '../config/backendUrl';
 
 export interface LoginProps {
   embedded?: boolean;
@@ -21,6 +22,8 @@ export const Login: React.FC<LoginProps> = ({ embedded = false, initialMode = 'L
   const [loading, setLoading] = useState(false);
   const [language, setLanguage] = useState('English (Ingles)');
   const [showSupportModal, setShowSupportModal] = useState(false);
+  const [showServerModal, setShowServerModal] = useState(false);
+  const [customApiUrl, setCustomApiUrl] = useState(getBackendUrl());
   const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
   const [resendingVerification, setResendingVerification] = useState(false);
 
@@ -141,6 +144,8 @@ export const Login: React.FC<LoginProps> = ({ embedded = false, initialMode = 'L
         const targetEmail = error.response.data.email || email;
         setUnverifiedEmail(targetEmail);
         showToast(error.response.data.message || 'Please verify your email before logging in.', 'error');
+      } else if (!error.response) {
+        showToast(`Cannot reach backend at ${getBackendUrl()}. Server may be booting up or check API URL.`, 'error');
       } else {
         showToast(error.response?.data?.message || 'Authentication error. Please check your credentials.', 'error');
       }
@@ -169,7 +174,11 @@ export const Login: React.FC<LoginProps> = ({ embedded = false, initialMode = 'L
         showToast(data.message || 'Login failed', 'error');
       }
     } catch (error: any) {
-      showToast(error.response?.data?.message || 'Authentication error. Please check your credentials.', 'error');
+      if (!error.response) {
+        showToast(`Cannot reach backend at ${getBackendUrl()}. Server may be booting up or check API URL.`, 'error');
+      } else {
+        showToast(error.response?.data?.message || 'Authentication error. Please check your credentials.', 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -508,17 +517,85 @@ export const Login: React.FC<LoginProps> = ({ embedded = false, initialMode = 'L
               </select>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setShowSupportModal(true)}
-              className="flex items-center gap-1.5 hover:text-blue-600 font-medium transition-colors"
-            >
-              <span>💬</span>
-              <span>Get Support</span>
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowServerModal(true)}
+                className="flex items-center gap-1.5 hover:text-blue-600 font-medium transition-colors"
+                title={`Connected to: ${getBackendUrl()}`}
+              >
+                <span>🌐</span>
+                <span>API Server</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowSupportModal(true)}
+                className="flex items-center gap-1.5 hover:text-blue-600 font-medium transition-colors"
+              >
+                <span>💬</span>
+                <span>Get Support</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Backend Server Settings Modal */}
+      {showServerModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-gray-900 flex items-center gap-1.5">
+                <span>⚙️</span> Backend Server Settings
+              </h3>
+              <button onClick={() => setShowServerModal(false)} className="text-gray-400 hover:text-gray-600 text-xs">
+                ✕
+              </button>
+            </div>
+            <p className="text-xs text-gray-600 leading-relaxed">
+              Configure the backend API URL for this session. Connect your deployed frontend to your Render/cloud backend seamlessly.
+            </p>
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-semibold text-gray-700">Active Backend URL</label>
+              <input
+                type="text"
+                value={customApiUrl}
+                onChange={(e) => setCustomApiUrl(e.target.value)}
+                placeholder="https://your-backend.onrender.com"
+                className="w-full px-3 py-2 border rounded-xl text-xs focus:outline-blue-500 font-mono"
+              />
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomBackendUrl(customApiUrl);
+                  setShowServerModal(false);
+                  showToast('Backend URL updated! Reconnecting...', 'success');
+                  setTimeout(() => window.location.reload(), 500);
+                }}
+                className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs"
+              >
+                Save & Connect
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomBackendUrl('');
+                  setCustomApiUrl(getBackendUrl());
+                  setShowServerModal(false);
+                  showToast('Backend URL reset to default', 'info');
+                  setTimeout(() => window.location.reload(), 500);
+                }}
+                className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-medium transition-colors"
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Support Modal */}
       {showSupportModal && (
