@@ -1,4 +1,6 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
+import jwt from 'jsonwebtoken';
+import { ENV } from '../config/env';
 import { prescriptoStore } from '../config/prescriptoStore';
 import { TokenService } from '../services/tokenService';
 
@@ -15,28 +17,53 @@ export const initSocket = (io: SocketIOServer) => {
       (socket.handshake.query?.token as string);
 
     if (token) {
-      const decoded = TokenService.verifyAccessToken(token);
+      let decoded: any = TokenService.verifyAccessToken(token);
+      if (!decoded) {
+        try {
+          decoded = jwt.verify(token, ENV.JWT_SECRET);
+        } catch {
+          // Token decode fallback suppression
+        }
+      }
+
       if (decoded) {
         socket.data.user = decoded;
+        const role = (decoded.role || '').toLowerCase();
+        const userId = decoded.id || decoded._id || '';
+
         // Auto-join isolated rooms based on authenticated role & tenant
-        if (decoded.role === 'admin' || decoded.role === 'SUPER_ADMIN') {
+        if (role === 'admin' || role === 'super_admin' || role === 'superadmin' || role === 'admin_root') {
           socket.join('admin_room');
           socket.join('admin_emergency_room');
-        } else if (decoded.role === 'doctor') {
-          socket.join(`doctor_${decoded.id}`);
-          const norm = decoded.id.includes('_') ? decoded.id.replace('_', '') : decoded.id.replace(/^doc(\d+)/, 'doc_$1');
-          socket.join(`doctor_${norm}`);
+        } else if (role === 'doctor') {
+          if (userId) {
+            socket.join(`doctor_${userId}`);
+            const norm = String(userId).includes('_') ? String(userId).replace('_', '') : String(userId).replace(/^doc(\d+)/, 'doc_$1');
+            socket.join(`doctor_${norm}`);
+          }
           if (decoded.hospitalId) {
             socket.join(`hospital_${decoded.hospitalId}`);
           }
-        } else if (decoded.role === 'driver') {
-          socket.join(`driver_${decoded.id}`);
+          socket.join('doctor_room');
+        } else if (role === 'driver') {
+          if (userId) {
+            socket.join(`driver_${userId}`);
+          }
           if (decoded.hospitalId) {
             socket.join(`hospital_${decoded.hospitalId}`);
           }
-        } else if (decoded.role === 'patient') {
-          socket.join(`user_${decoded.id}`);
-          socket.join(`patient_${decoded.id}`);
+          socket.join('driver_room');
+        } else if (role === 'patient' || role === 'user') {
+          if (userId) {
+            socket.join(`user_${userId}`);
+            socket.join(`patient_${userId}`);
+          }
+        } else if (role === 'admin_hospital' || role === 'hospital_admin' || role === 'hospital') {
+          if (decoded.hospitalId) {
+            socket.join(`hospital_${decoded.hospitalId}`);
+          }
+          socket.join('hospital_room');
+          socket.join('admin_room');
         }
         return next();
       }

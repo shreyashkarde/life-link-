@@ -81,8 +81,8 @@ export const DoctorDashboard: React.FC = () => {
         setDashData(data.dashData);
         if (Array.isArray(data.dashData.latestAppointments)) {
           setConsultations(data.dashData.latestAppointments);
-          if (data.dashData.latestAppointments.length > 0 && !selectedAppointment) {
-            setSelectedAppointment(data.dashData.latestAppointments[0]);
+          if (data.dashData.latestAppointments.length > 0) {
+            setSelectedAppointment((prev: any) => prev || data.dashData.latestAppointments[0]);
           }
         } else {
           setConsultations([]);
@@ -96,7 +96,7 @@ export const DoctorDashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [selectedAppointment]);
+  }, []);
 
   // 🔔 Socket.IO Real-Time Doctor Notifications
   useEffect(() => {
@@ -106,27 +106,34 @@ export const DoctorDashboard: React.FC = () => {
     socketService.connect();
     socketService.joinDoctor(docId);
 
-    socketService.onDataCleared(() => {
+    const unsubCleared = socketService.onDataCleared(() => {
       console.log('🧹 [Doctor Dashboard] dataCleared socket event received. Resetting state & refetching...');
       setConsultations([]);
       setSelectedAppointment(null);
       fetchDoctorDashboardData();
     });
 
-    socketService.onNewAppointment((appointment: any) => {
+    const unsubNewAppt = socketService.onNewAppointment((appointment: any) => {
       const patientName = appointment?.userData?.name || appointment?.patientName || 'A patient';
       const slot = `${appointment?.slotDate || 'today'} at ${appointment?.slotTime || ''}`;
       showToast(`🔔 New Appointment Alert: ${patientName} booked a consultation for ${slot}!`, 'info');
       fetchDoctorDashboardData();
     });
 
-    socketService.onAppointmentUpdated(() => {
+    const unsubUpdated = socketService.onAppointmentUpdated(() => {
       fetchDoctorDashboardData();
     });
 
-    socketService.onAppointmentCancelled(() => {
+    const unsubCancelled = socketService.onAppointmentCancelled(() => {
       fetchDoctorDashboardData();
     });
+
+    return () => {
+      if (typeof unsubCleared === 'function') unsubCleared();
+      if (typeof unsubNewAppt === 'function') unsubNewAppt();
+      if (typeof unsubUpdated === 'function') unsubUpdated();
+      if (typeof unsubCancelled === 'function') unsubCancelled();
+    };
   }, [dToken, doctorData?._id, refreshVersion, fetchDoctorDashboardData]);
 
   // Handle Availability Toggle

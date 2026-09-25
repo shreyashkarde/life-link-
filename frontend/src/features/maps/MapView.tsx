@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import apiClient from '../../services/apiClient';
 
 export interface LocationCoord {
   lat: number;
@@ -38,29 +39,25 @@ export const MapView: React.FC<MapViewProps> = ({
 
   // Load nearby ambulances, hospitals, and verified doctors
   useEffect(() => {
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
     const loadMapData = async () => {
       try {
         setLoading(true);
         // 1. Fetch nearby ambulances
-        const ambRes = await fetch(`${backendUrl}/api/ambulance/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}&radiusKm=25`);
-        const ambData = await ambRes.json();
-        if (ambData.success && ambData.ambulances) {
-          setAmbulances(ambData.ambulances);
+        const ambRes = await apiClient.get(`/api/ambulance/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}&radiusKm=25`);
+        if (ambRes.data?.success && ambRes.data.ambulances) {
+          setAmbulances(ambRes.data.ambulances);
         }
 
         // 2. Fetch nearby hospitals
-        const hospRes = await fetch(`${backendUrl}/api/hospitals/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}&radiusKm=25`);
-        const hospData = await hospRes.json();
-        if (hospData.success && hospData.hospitals) {
-          setHospitals(hospData.hospitals);
+        const hospRes = await apiClient.get(`/api/hospitals/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}&radiusKm=25`);
+        if (hospRes.data?.success && hospRes.data.hospitals) {
+          setHospitals(hospRes.data.hospitals);
         }
 
         // 3. Fetch certified physicians
-        const docRes = await fetch(`${backendUrl}/api/doctor/list`);
-        const docData = await docRes.json();
-        if (docData.success && docData.doctors) {
-          setDoctors(docData.doctors.slice(0, 6)); // Top nearby clinics
+        const docRes = await apiClient.get('/api/doctor/list');
+        if (docRes.data?.success && docRes.data.doctors) {
+          setDoctors(docRes.data.doctors.slice(0, 6)); // Top nearby clinics
         }
       } catch (err) {
         console.error('Failed to load map entities:', err);

@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import { AmbulanceBooking } from '../models/AmbulanceBooking';
 import { Ambulance } from '../models/Ambulance';
 import { Hospital } from '../models/Hospital';
@@ -44,9 +45,12 @@ export const createAmbulanceBooking = async (req: AuthRequest, res: Response) =>
 
     if (ambulanceId) {
       if (isMongoConnected()) {
-        assignedAmbulance = await Ambulance.findById(ambulanceId);
+        const isObjectId = mongoose.Types.ObjectId.isValid(ambulanceId);
+        assignedAmbulance = isObjectId
+          ? await Ambulance.findById(ambulanceId)
+          : await Ambulance.findOne({ $or: [{ _id: ambulanceId }, { driverId: ambulanceId }] });
       } else {
-        assignedAmbulance = prescriptoStore.ambulances.find((a) => a._id === ambulanceId || a.id === ambulanceId);
+        assignedAmbulance = prescriptoStore.ambulances.find((a) => a._id === ambulanceId || a.id === ambulanceId || a.driverId === ambulanceId);
       }
 
       // 🛡️ Cross-Hospital Mismatch Validation Rule
@@ -284,7 +288,11 @@ export const acceptBooking = async (req: AuthRequest, res: Response) => {
     const { bookingId, ambulanceId } = req.body;
 
     if (isMongoConnected()) {
-      const booking = await AmbulanceBooking.findById(bookingId);
+      const isObjectId = mongoose.Types.ObjectId.isValid(bookingId);
+      const booking = isObjectId
+        ? await AmbulanceBooking.findById(bookingId)
+        : await AmbulanceBooking.findOne({ $or: [{ _id: bookingId }, { bookingId }] });
+
       if (booking) {
         booking.status = 'ACCEPTED';
         booking.ambulanceId = ambulanceId || booking.ambulanceId;
@@ -341,7 +349,11 @@ export const rejectBooking = async (req: AuthRequest, res: Response) => {
     const { bookingId, reason } = req.body;
 
     if (isMongoConnected()) {
-      const booking = await AmbulanceBooking.findById(bookingId);
+      const isObjectId = mongoose.Types.ObjectId.isValid(bookingId);
+      const booking = isObjectId
+        ? await AmbulanceBooking.findById(bookingId)
+        : await AmbulanceBooking.findOne({ $or: [{ _id: bookingId }, { bookingId }] });
+
       if (booking) {
         booking.status = 'REJECTED';
         booking.timeline = booking.timeline || {};
@@ -399,7 +411,11 @@ export const updateBookingStatus = async (req: AuthRequest, res: Response) => {
     const { bookingId, status } = req.body;
 
     if (isMongoConnected()) {
-      const booking = await AmbulanceBooking.findById(bookingId);
+      const isObjectId = mongoose.Types.ObjectId.isValid(bookingId);
+      const booking = isObjectId
+        ? await AmbulanceBooking.findById(bookingId)
+        : await AmbulanceBooking.findOne({ $or: [{ _id: bookingId }, { bookingId }] });
+
       if (booking) {
         booking.status = status;
         booking.timeline = booking.timeline || {};
@@ -545,7 +561,7 @@ export const getBookingById = async (req: Request, res: Response) => {
   try {
     const { bookingId } = req.params;
 
-    if (isMongoConnected()) {
+    if (isMongoConnected() && mongoose.Types.ObjectId.isValid(bookingId)) {
       const booking = await AmbulanceBooking.findById(bookingId);
       if (booking) return res.json({ success: true, booking });
     }

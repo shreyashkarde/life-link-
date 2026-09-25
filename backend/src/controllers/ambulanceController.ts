@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import { Ambulance } from '../models/Ambulance';
 import { prescriptoStore } from '../config/prescriptoStore';
 import { isMongoConnected } from '../config/db';
@@ -97,7 +98,13 @@ export const toggleDriverDuty = async (req: AuthRequest, res: Response) => {
     const targetId = ambulanceId || req.user?.id;
 
     if (isMongoConnected()) {
-      const amb = await Ambulance.findById(targetId);
+      let amb: any = null;
+      if (targetId && mongoose.Types.ObjectId.isValid(targetId)) {
+        amb = await Ambulance.findById(targetId);
+      }
+      if (!amb && targetId) {
+        amb = await Ambulance.findOne({ $or: [{ driverId: targetId }, { vehicleNumber: targetId }] });
+      }
       if (amb) {
         amb.isAvailable = typeof isAvailable === 'boolean' ? isAvailable : !amb.isAvailable;
         await amb.save();
@@ -129,7 +136,13 @@ export const updateAmbulanceLocation = async (req: AuthRequest, res: Response) =
     }
 
     if (isMongoConnected()) {
-      const amb = await Ambulance.findById(targetId);
+      let amb: any = null;
+      if (targetId && mongoose.Types.ObjectId.isValid(targetId)) {
+        amb = await Ambulance.findById(targetId);
+      }
+      if (!amb && targetId) {
+        amb = await Ambulance.findOne({ $or: [{ driverId: targetId }, { vehicleNumber: targetId }] });
+      }
       if (amb) {
         amb.currentLocation = {
           lat,

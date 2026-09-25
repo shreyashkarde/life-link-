@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import apiClient from '../services/apiClient';
 import LiveTracking from './tracking/LiveTracking';
 import MapView from './maps/MapView';
 import NotificationService from './notifications/NotificationService';
@@ -16,13 +17,11 @@ export const LiveFeaturesShowcase: React.FC = () => {
 
   useEffect(() => {
     // Load nearby hospitals
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-    fetch(`${backendUrl}/api/hospitals/nearby?lat=19.0760&lng=72.8777`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success) setHospitals(data.hospitals);
+    apiClient.get('/api/hospitals/nearby?lat=19.0760&lng=72.8777')
+      .then((res) => {
+        if (res.data?.success) setHospitals(res.data.hospitals);
       })
-      .catch(console.error);
+      .catch(() => {});
 
     // Subscribe to notification updates
     const unsubscribe = NotificationService.subscribe((notif: any) => {

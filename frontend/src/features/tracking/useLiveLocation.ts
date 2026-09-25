@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import socketService, { DriverLocationPayload } from '../../services/socket';
+import apiClient from '../../services/apiClient';
 
 export interface LocationCoordinates {
   latitude: number;
@@ -93,18 +94,12 @@ export const useLiveLocation = ({
       });
       setLastUpdated(new Date());
 
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-
       // 1. Emit via WebSocket
       socketService.emitDriverLocation(payload);
 
       // 2. Persist via REST API
       try {
-        await fetch(`${backendUrl}/api/location/update`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
+        await apiClient.post('/api/location/update', payload);
       } catch (err) {
         // Non-blocking telemetry
       }
@@ -114,7 +109,6 @@ export const useLiveLocation = ({
 
   // Socket setup & room subscription
   useEffect(() => {
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
     const socket = socketService.connect();
 
     // 1. Join room based on role & identifiers
@@ -134,18 +128,17 @@ export const useLiveLocation = ({
 
     // 2. Initial fetch from dynamic API
     const targetUser = role === 'patient' ? driverId || 'driver_108' : userId || driverId || 'driver_108';
-    fetch(`${backendUrl}/api/location/${targetUser}`)
-      .then((r) => r.json())
+    apiClient.get(`/api/location/${targetUser}`)
       .then((res) => {
-        if (res.success && res.location) {
+        if (res.data?.success && res.data.location) {
           setCurrentLocation({
-            latitude: res.location.latitude,
-            longitude: res.location.longitude,
-            lat: res.location.latitude,
-            lng: res.location.longitude,
-            heading: res.location.heading || 0,
-            speed: res.location.speed || 0,
-            updatedAt: new Date(res.location.updatedAt),
+            latitude: res.data.location.latitude,
+            longitude: res.data.location.longitude,
+            lat: res.data.location.latitude,
+            lng: res.data.location.longitude,
+            heading: res.data.location.heading || 0,
+            speed: res.data.location.speed || 0,
+            updatedAt: new Date(res.data.location.updatedAt),
           });
           setTrackingStatus('TRACKING_ACTIVE');
         }
@@ -154,11 +147,10 @@ export const useLiveLocation = ({
 
     // Fetch trip pickup if bookingId provided
     if (bookingId) {
-      fetch(`${backendUrl}/api/location/trip/${bookingId}`)
-        .then((r) => r.json())
+      apiClient.get(`/api/location/trip/${bookingId}`)
         .then((res) => {
-          if (res.success && res.pickup) {
-            setPickupLocation(res.pickup);
+          if (res.data?.success && res.data.pickup) {
+            setPickupLocation(res.data.pickup);
           }
         })
         .catch(() => {});
