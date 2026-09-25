@@ -29,6 +29,12 @@ if (typeof window !== 'undefined') {
         fullText.includes('background-liveness') ||
         fullText.includes('orphaned data') ||
         fullText.includes('google.maps.Marker is deprecated') ||
+        fullText.includes('google.maps.DirectionsService is deprecated') ||
+        fullText.includes('Directions Service: You’re calling a legacy API') ||
+        fullText.includes('Directions Service: You\'re calling a legacy API') ||
+        fullText.includes('DIRECTIONS_ROUTE: REQUEST_DENIED') ||
+        fullText.includes('LegacyApiNotActivatedMapError') ||
+        fullText.includes('MapsRequestError: DIRECTIONS_ROUTE') ||
         fullText.includes('Google Maps JavaScript API has been loaded directly') ||
         fullText.includes('contentscript.js') ||
         fullText.includes('chrome-extension://')

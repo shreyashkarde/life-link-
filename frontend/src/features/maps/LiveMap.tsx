@@ -157,28 +157,36 @@ export const LiveMap: React.FC<LiveMapProps> = ({
     };
   }, [bookingId, hospitalId, patientId]);
 
+  // Ref to track if Google Directions API is denied/disabled for this project key
+  const directionsUnavailableRef = useRef<boolean>(false);
+
+  // Fallback distance and ETA calculation via Haversine distance
+  const calculateFallbackRoute = useCallback(() => {
+    const distKm = calculateDistanceKm(driverPos.lat, driverPos.lng, pickupPos.lat, pickupPos.lng);
+    const estMinutes = Math.max(2, Math.round(distKm * 2.4 + 1));
+    const distStr = `${distKm} km`;
+    const etaStr = `${estMinutes} mins`;
+    setLiveDistance(distStr);
+    setTrafficEta(etaStr);
+    setTrafficCondition(distKm > 3 ? 'MODERATE' : 'SMOOTH');
+    if (onEtaUpdate) onEtaUpdate(etaStr, distStr);
+  }, [driverPos.lat, driverPos.lng, pickupPos.lat, pickupPos.lng, onEtaUpdate]);
+
   /**
    * 🚀 DYNAMIC ETA (LIVE TRAFFIC)
    * Calculates real-time driving route using Google Directions API with drivingOptions:
    *  - departureTime: new Date()
    *  - trafficModel: 'bestguess'
    * Extracts duration_in_traffic as the FINAL ETA.
+   * If Directions API is denied or unavailable, falls back gracefully to direct corridor telemetry.
    */
   const calculateLiveTrafficRoute = useCallback(() => {
-    if (!isLoaded || loadError || !window.google?.maps?.DirectionsService) {
-      // Fallback calculation via Haversine distance
-      const distKm = calculateDistanceKm(driverPos.lat, driverPos.lng, pickupPos.lat, pickupPos.lng);
-      const estMinutes = Math.max(2, Math.round(distKm * 2.4 + 1));
-      const distStr = `${distKm} km`;
-      const etaStr = `${estMinutes} mins`;
-      setLiveDistance(distStr);
-      setTrafficEta(etaStr);
-      setTrafficCondition(distKm > 3 ? 'MODERATE' : 'SMOOTH');
-      if (onEtaUpdate) onEtaUpdate(etaStr, distStr);
+    if (!isLoaded || loadError || !window.google?.maps?.DirectionsService || directionsUnavailableRef.current) {
+      calculateFallbackRoute();
       return;
     }
 
-    // Throttle route API calls to every 3-5 seconds or when moved > 25 meters
+    // Throttle route API calls to every 3.5 seconds
     const now = Date.now();
     if (now - lastRouteRequestTime < 3500) {
       return;
@@ -191,67 +199,80 @@ export const LiveMap: React.FC<LiveMapProps> = ({
         lastRequestedOriginRef.current.lat,
         lastRequestedOriginRef.current.lng
       );
-      if (movedDist < 0.025 && directionsResult) {
+      if (movedDist < 0.025) {
         return; // Don't re-query if moved less than 25 meters
       }
     }
 
-    const directionsService = new window.google.maps.DirectionsService();
+    try {
+      const directionsService = new window.google.maps.DirectionsService();
 
-    directionsService.route(
-      {
-        origin: new window.google.maps.LatLng(driverPos.lat, driverPos.lng),
-        destination: new window.google.maps.LatLng(pickupPos.lat, pickupPos.lng),
-        travelMode: window.google.maps.TravelMode.DRIVING,
-        drivingOptions: {
-          departureTime: new Date(),
-          trafficModel: window.google.maps.TrafficModel.BEST_GUESS,
+      directionsService.route(
+        {
+          origin: new window.google.maps.LatLng(driverPos.lat, driverPos.lng),
+          destination: new window.google.maps.LatLng(pickupPos.lat, pickupPos.lng),
+          travelMode: window.google.maps.TravelMode.DRIVING,
+          drivingOptions: {
+            departureTime: new Date(),
+            trafficModel: window.google.maps.TrafficModel.BEST_GUESS,
+          },
         },
-      },
-      (result, status) => {
-        setLastRouteRequestTime(now);
-        lastRequestedOriginRef.current = { lat: driverPos.lat, lng: driverPos.lng };
+        (result, status) => {
+          setLastRouteRequestTime(now);
+          lastRequestedOriginRef.current = { lat: driverPos.lat, lng: driverPos.lng };
 
-        if (status === window.google.maps.DirectionsStatus.OK && result) {
-          setDirectionsResult(result);
+          if (status === window.google.maps.DirectionsStatus.OK && result) {
+            setDirectionsResult(result);
 
-          const routeLeg = result.routes[0]?.legs[0];
-          if (routeLeg) {
-            const distance = routeLeg.distance?.text || '1.8 km';
-            const duration = routeLeg.duration?.text || '5 mins';
-            const duration_in_traffic = routeLeg.duration_in_traffic?.text || duration;
+            const routeLeg = result.routes[0]?.legs[0];
+            if (routeLeg) {
+              const distance = routeLeg.distance?.text || '1.8 km';
+              const duration = routeLeg.duration?.text || '5 mins';
+              const duration_in_traffic = routeLeg.duration_in_traffic?.text || duration;
 
-            // 👉 Use duration_in_traffic as FINAL ETA
-            setTrafficEta(duration_in_traffic);
-            setLiveDistance(distance);
+              // 👉 Use duration_in_traffic as FINAL ETA
+              setTrafficEta(duration_in_traffic);
+              setLiveDistance(distance);
 
-            // Estimate traffic congestion level
-            if (routeLeg.duration_in_traffic && routeLeg.duration) {
-              const diffSec = routeLeg.duration_in_traffic.value - routeLeg.duration.value;
-              if (diffSec > 180) {
-                setTrafficCondition('HEAVY');
-              } else if (diffSec > 60) {
-                setTrafficCondition('MODERATE');
-              } else {
-                setTrafficCondition('SMOOTH');
+              // Estimate traffic congestion level
+              if (routeLeg.duration_in_traffic && routeLeg.duration) {
+                const diffSec = routeLeg.duration_in_traffic.value - routeLeg.duration.value;
+                if (diffSec > 180) {
+                  setTrafficCondition('HEAVY');
+                } else if (diffSec > 60) {
+                  setTrafficCondition('MODERATE');
+                } else {
+                  setTrafficCondition('SMOOTH');
+                }
+              }
+
+              if (onEtaUpdate) {
+                onEtaUpdate(duration_in_traffic, distance);
               }
             }
-
-            if (onEtaUpdate) {
-              onEtaUpdate(duration_in_traffic, distance);
-            }
+          } else {
+            // Any non-OK status (e.g. REQUEST_DENIED, OVER_QUERY_LIMIT, LegacyApiNotActivatedMapError)
+            directionsUnavailableRef.current = true;
+            // Fallback calculation via Haversine distance
+            calculateFallbackRoute();
           }
-        } else {
-          // Fallback on API query failure
-          const distKm = calculateDistanceKm(driverPos.lat, driverPos.lng, pickupPos.lat, pickupPos.lng);
-          const estMinutes = Math.max(2, Math.round(distKm * 2.4 + 1));
-          setLiveDistance(`${distKm} km`);
-          setTrafficEta(`${estMinutes} mins`);
-          if (onEtaUpdate) onEtaUpdate(`${estMinutes} mins`, `${distKm} km`);
         }
-      }
-    );
-  }, [driverPos, pickupPos, isLoaded, loadError, lastRouteRequestTime, directionsResult, onEtaUpdate]);
+      );
+    } catch {
+      directionsUnavailableRef.current = true;
+      calculateFallbackRoute();
+    }
+  }, [
+    driverPos.lat,
+    driverPos.lng,
+    pickupPos.lat,
+    pickupPos.lng,
+    isLoaded,
+    loadError,
+    lastRouteRequestTime,
+    onEtaUpdate,
+    calculateFallbackRoute,
+  ]);
 
   useEffect(() => {
     calculateLiveTrafficRoute();
@@ -358,8 +379,8 @@ export const LiveMap: React.FC<LiveMapProps> = ({
             options={defaultMapOptions}
             onLoad={onMapLoad}
           >
-            {/* Real-time Directions Route Line */}
-            {directionsResult && (
+            {/* Real-time Directions Route Line or Resilient Polyline Corridor */}
+            {directionsResult ? (
               <DirectionsRenderer
                 directions={directionsResult}
                 options={{
@@ -369,6 +390,16 @@ export const LiveMap: React.FC<LiveMapProps> = ({
                     strokeWeight: 5,
                     strokeOpacity: 0.85,
                   },
+                }}
+              />
+            ) : (
+              <Polyline
+                path={[driverPos, pickupPos]}
+                options={{
+                  strokeColor: '#2563EB',
+                  strokeWeight: 4,
+                  strokeOpacity: 0.8,
+                  geodesic: true,
                 }}
               />
             )}

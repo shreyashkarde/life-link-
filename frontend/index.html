@@ -34,6 +34,12 @@
             text.indexOf('background-liveness') !== -1 ||
             text.indexOf('orphaned data') !== -1 ||
             text.indexOf('google.maps.Marker is deprecated') !== -1 ||
+            text.indexOf('google.maps.DirectionsService is deprecated') !== -1 ||
+            text.indexOf('Directions Service: You’re calling a legacy API') !== -1 ||
+            text.indexOf('Directions Service: You\'re calling a legacy API') !== -1 ||
+            text.indexOf('DIRECTIONS_ROUTE: REQUEST_DENIED') !== -1 ||
+            text.indexOf('LegacyApiNotActivatedMapError') !== -1 ||
+            text.indexOf('MapsRequestError: DIRECTIONS_ROUTE') !== -1 ||
             text.indexOf('Google Maps JavaScript API has been loaded directly') !== -1 ||
             text.indexOf('contentscript.js') !== -1 ||
             text.indexOf('chrome-extension://') !== -1
