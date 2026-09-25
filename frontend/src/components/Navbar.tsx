@@ -8,19 +8,17 @@ export const Navbar: React.FC = () => {
   const { token, aToken, dToken, userData, doctorData, logoutAll } = useApp();
   const [showMenu, setShowMenu] = useState(false);
 
-  const isAuth = Boolean(token || dToken || aToken);
-  const userRole = dToken ? 'DOCTOR' : aToken ? 'HOSPITAL' : (sessionStorage.getItem('role') || 'PATIENT');
+  const isAuth = Boolean(token || dToken);
+  const userRole = dToken ? 'DOCTOR' : (sessionStorage.getItem('role') || 'PATIENT');
 
   const getDashboardPath = () => {
     if (dToken) return '/doctor/dashboard';
-    if (aToken) return '/hospital/dashboard';
     if (userRole === 'DRIVER') return '/driver/dashboard';
     return '/patient/dashboard';
   };
 
   const getDashboardLabel = () => {
     if (dToken) return 'DOCTOR WORKSPACE';
-    if (aToken) return 'HOSPITAL ADMIN';
     if (userRole === 'DRIVER') return 'AMBULANCE DESK';
     return 'PATIENT DASHBOARD';
   };
@@ -58,6 +56,9 @@ export const Navbar: React.FC = () => {
         )}
         <NavLink to="/doctors" className={({ isActive }) => `py-1 transition-colors ${isActive ? 'text-primary font-bold' : 'hover:text-primary'}`}>
           <li>ALL DOCTORS</li>
+        </NavLink>
+        <NavLink to="/nearby-hospitals" className={({ isActive }) => `py-1 transition-colors ${isActive ? 'text-primary font-bold' : 'hover:text-primary'}`}>
+          <li>NEARBY HOSPITALS</li>
         </NavLink>
         {token && (
           <NavLink to="/my-appointments" className={({ isActive }) => `py-1 transition-colors ${isActive ? 'text-primary font-bold' : 'hover:text-primary'}`}>
@@ -186,6 +187,9 @@ export const Navbar: React.FC = () => {
               )}
               <NavLink onClick={() => setShowMenu(false)} to="/doctors">
                 <p className="px-4 py-2 hover:bg-gray-50 rounded-xl">ALL DOCTORS</p>
+              </NavLink>
+              <NavLink onClick={() => setShowMenu(false)} to="/nearby-hospitals">
+                <p className="px-4 py-2 hover:bg-gray-50 rounded-xl">NEARBY HOSPITALS</p>
               </NavLink>
               {token && (
                 <NavLink onClick={() => setShowMenu(false)} to="/my-appointments">

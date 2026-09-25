@@ -55,7 +55,9 @@ export const PatientDashboard: React.FC = () => {
   const [isLocating, setIsLocating] = useState<boolean>(false);
   const [nearestHospital, setNearestHospital] = useState<HospitalInfo | null>(null);
 
-  // Quick In-Dashboard Appointment Booking Modal State
+  const [activeSection, setActiveSection] = useState<'hospitals' | 'doctors' | 'appointments' | 'emergency'>('hospitals');
+  const [profileDoc, setProfileDoc] = useState<DoctorItem | null>(null);
+  const [doctorSearchQuery, setDoctorSearchQuery] = useState<string>('');
   const [bookingDoc, setBookingDoc] = useState<DoctorItem | null>(null);
   const [selectedSlotIndex, setSelectedSlotIndex] = useState<number>(0);
   const [selectedSlotTime, setSelectedSlotTime] = useState<string>('');
@@ -286,7 +288,7 @@ export const PatientDashboard: React.FC = () => {
     return hospitals.find((h) => (h.id === selectedHospitalId || h._id === selectedHospitalId));
   }, [hospitals, selectedHospitalId]);
 
-  // Filter doctors by selected speciality AND selected hospital
+  // Filter doctors by selected speciality, search query AND selected hospital
   const filteredDoctors = useMemo(() => {
     return doctors.filter((doc) => {
       // 1. Specialty filter
@@ -294,7 +296,16 @@ export const PatientDashboard: React.FC = () => {
         selectedSpeciality === 'All' ||
         doc.speciality?.toLowerCase() === selectedSpeciality.toLowerCase();
 
-      // 2. Hospital filter
+      // 2. Search query filter
+      const q = doctorSearchQuery.toLowerCase().trim();
+      const matchesSearch =
+        !q ||
+        doc.name?.toLowerCase().includes(q) ||
+        doc.speciality?.toLowerCase().includes(q) ||
+        (doc as any).hospitalName?.toLowerCase().includes(q) ||
+        doc.degree?.toLowerCase().includes(q);
+
+      // 3. Hospital filter
       let matchesHospital = true;
       if (selectedHospitalId !== 'ALL') {
         const docHospId = (doc as any).hospitalId || 'hosp_lilavati';
@@ -304,9 +315,9 @@ export const PatientDashboard: React.FC = () => {
           (activeHospital?.name && doc.name && true);
       }
 
-      return matchesSpeciality && matchesHospital;
+      return matchesSpeciality && matchesSearch && matchesHospital;
     });
-  }, [doctors, selectedSpeciality, selectedHospitalId, activeHospital]);
+  }, [doctors, selectedSpeciality, doctorSearchQuery, selectedHospitalId, activeHospital]);
 
   // Handle In-Dashboard Direct Doctor Booking
   const handleConfirmAppointment = async (e: React.FormEvent) => {
@@ -445,532 +456,678 @@ export const PatientDashboard: React.FC = () => {
                 </div>
               )}
             </div>
-
-            {/* Quick Consultation CTA */}
-            <button
-              onClick={() => {
-                const el = document.getElementById('hospital-selection-section');
-                el?.scrollIntoView({ behavior: 'smooth' });
-              }}
-              className="px-4 sm:px-5 py-2.5 bg-[#2563EB] hover:bg-[#1D4ED8] active:scale-98 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow-blue-500/20 transition-all cursor-pointer flex items-center gap-2"
-            >
-              <span>🏥 Choose Hospital & Doctor</span>
-              <span className="text-sm">↓</span>
-            </button>
           </div>
         </section>
 
         {/* ========================================================================= */}
-        {/* 2. QUICK ACTION CARDS (MAIN HERO SECTION)                                */}
+        {/* 2. PRIMARY PATIENT NAVIGATION TABS (Dedicated Portal Tabs)                */}
         {/* ========================================================================= */}
-        <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-[#0F172A] uppercase tracking-wider flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-blue-600"></span>
-              Quick Medical Actions
-            </h2>
-            <span className="text-xs text-[#64748B]">Instant Access</span>
-          </div>
+        <div className="bg-white rounded-2xl p-1.5 border border-slate-200 shadow-xs flex items-center gap-1.5 overflow-x-auto select-none">
+          <button
+            type="button"
+            onClick={() => setActiveSection('hospitals')}
+            className={`flex-1 min-w-[170px] py-3 px-4 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-2 ${
+              activeSection === 'hospitals'
+                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+            }`}
+          >
+            <span className="text-base">🏥</span>
+            <span>Hospitals & GPS Map</span>
+            <span
+              className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+                activeSection === 'hospitals' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              {hospitals.length || 7}
+            </span>
+          </button>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            {/* Card 1: Book Doctor */}
-            <div
-              onClick={() => {
-                const el = document.getElementById('hospital-selection-section');
-                el?.scrollIntoView({ behavior: 'smooth' });
+          <button
+            type="button"
+            onClick={() => setActiveSection('doctors')}
+            className={`flex-1 min-w-[170px] py-3 px-4 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-2 ${
+              activeSection === 'doctors'
+                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+            }`}
+          >
+            <span className="text-base">👨‍⚕️</span>
+            <span>Verified Specialists</span>
+            <span
+              className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+                activeSection === 'doctors' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              {filteredDoctors.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSection('appointments')}
+            className={`flex-1 min-w-[170px] py-3 px-4 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-2 ${
+              activeSection === 'appointments'
+                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+            }`}
+          >
+            <span className="text-base">📋</span>
+            <span>My Consultations</span>
+            <span
+              className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+                activeSection === 'appointments' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              {appointments.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSection('emergency')}
+            className={`flex-1 min-w-[170px] py-3 px-4 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-2 ${
+              activeSection === 'emergency'
+                ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-md shadow-red-500/20'
+                : 'text-slate-600 hover:text-red-600 hover:bg-red-50/50'
+            }`}
+          >
+            <span className="text-base animate-pulse">🚨</span>
+            <span>Emergency SOS 108</span>
+            <span
+              className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                activeSection === 'emergency' ? 'bg-white/20 text-white' : 'bg-red-50 text-red-700'
+              }`}
+            >
+              LIVE
+            </span>
+          </button>
+        </div>
+
+        {/* ========================================================================= */}
+        {/* TAB 1: 🏥 SMART HOSPITALS & LIVE ROUTE NAVIGATION (Google Maps + Radar)   */}
+        {/* ========================================================================= */}
+        {activeSection === 'hospitals' && (
+          <section id="hospital-selection-section" className="space-y-4 animate-in fade-in duration-200">
+            <SmartHospitalSearchBooking
+              initialHospitalId={selectedHospitalId !== 'ALL' ? selectedHospitalId : undefined}
+              onAppointmentBooked={() => {
+                fetchDashboardData();
+                getDoctorsData();
               }}
-              className="group relative bg-white hover:bg-gradient-to-br hover:from-white hover:to-blue-50/40 p-6 rounded-2xl border border-slate-200/80 hover:border-blue-300 shadow-xs hover:shadow-md transition-all duration-300 cursor-pointer flex flex-col justify-between"
-            >
-              <div className="space-y-4">
-                <div className="w-14 h-14 rounded-2xl bg-blue-50 group-hover:bg-blue-600 text-blue-600 group-hover:text-white border border-blue-100 flex items-center justify-center text-2xl transition-all duration-300 shadow-xs">
-                  👨‍⚕️
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-[#0F172A] group-hover:text-blue-600 transition-colors">
-                    Find Doctors By Hospital
-                  </h3>
-                  <p className="text-xs text-[#64748B] mt-1 line-clamp-2">
-                    Pick your nearest hospital and book verified specialist doctors with instant slot scheduling.
-                  </p>
-                </div>
-              </div>
+            />
+          </section>
+        )}
 
-              <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-blue-600">
-                <span>View Hospital Specialists</span>
-                <span className="text-base group-hover:translate-x-1 transition-transform">→</span>
-              </div>
-            </div>
-
-            {/* Card 2: Emergency SOS */}
-            <div
-              onClick={() => setIsSOSModalOpen(true)}
-              className="group relative bg-gradient-to-br from-red-500 to-rose-600 text-white p-6 rounded-2xl shadow-lg shadow-red-500/20 hover:shadow-xl hover:shadow-red-500/30 transition-all duration-300 cursor-pointer flex flex-col justify-between"
-            >
-              <div className="space-y-4">
-                <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur border border-white/30 flex items-center justify-center text-3xl animate-bounce">
-                  🚨
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-lg font-extrabold tracking-tight">
-                      Emergency SOS 108
-                    </h3>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white text-red-700">
-                      LIVE
+        {/* ========================================================================= */}
+        {/* TAB 2: 👨‍⚕️ VERIFIED SPECIALISTS ROSTER & POPUP BOOKING                    */}
+        {/* ========================================================================= */}
+        {activeSection === 'doctors' && (
+          <section className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-100 shadow-sm space-y-6 animate-in fade-in duration-200">
+            {/* Header with Search */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+              <div>
+                <h2 className="text-lg sm:text-xl font-extrabold text-[#0F172A] tracking-tight flex items-center gap-2">
+                  <span>👨‍⚕️</span> Verified Medical Specialists
+                  {activeHospital && (
+                    <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
+                      at {activeHospital.name.split(' ')[0]}
                     </span>
-                  </div>
-                  <p className="text-xs text-red-100 mt-1">
-                    1-Tap GPS ambulance dispatch with real-time route tracking and paramedic telemetry.
-                  </p>
-                </div>
+                  )}
+                </h2>
+                <p className="text-xs text-[#64748B] mt-0.5">
+                  Book instant online or in-clinic doctor consultations at your selected partner hospital.
+                </p>
               </div>
 
-              <div className="mt-5 pt-4 border-t border-white/20 flex items-center justify-between text-xs font-bold">
+              {/* Search input box */}
+              <div className="flex items-center gap-2.5 w-full md:w-auto">
+                <div className="relative flex-1 md:w-64">
+                  <input
+                    type="text"
+                    value={doctorSearchQuery}
+                    onChange={(e) => setDoctorSearchQuery(e.target.value)}
+                    placeholder="Search doctor, specialty..."
+                    className="w-full text-xs pl-9 pr-8 py-2.5 rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                  />
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
+                  {doctorSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setDoctorSearchQuery('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
                 <button
                   type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowLiveTracking((prev) => !prev);
+                  onClick={() => {
+                    setSelectedSpeciality('All');
+                    setDoctorSearchQuery('');
                   }}
-                  className="hover:underline bg-white/20 hover:bg-white/30 px-2.5 py-1 rounded-lg cursor-pointer transition-colors"
+                  className="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer shrink-0"
                 >
-                  {showLiveTracking ? 'Hide Live Radar ✕' : '📡 View 108 Live Radar'}
+                  Reset
                 </button>
-                <span className="flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
-                  <span>Trigger SOS</span>
-                  <span className="text-base">→</span>
-                </span>
               </div>
             </div>
 
-            {/* Card 3: Health Records & Appointments */}
-            <div
-              onClick={() => navigate('/my-appointments')}
-              className="group relative bg-white hover:bg-gradient-to-br hover:from-white hover:to-indigo-50/40 p-6 rounded-2xl border border-slate-200/80 hover:border-indigo-300 shadow-xs hover:shadow-md transition-all duration-300 cursor-pointer flex flex-col justify-between"
-            >
-              <div className="space-y-4">
-                <div className="w-14 h-14 rounded-2xl bg-indigo-50 group-hover:bg-indigo-600 text-indigo-600 group-hover:text-white border border-indigo-100 flex items-center justify-center text-2xl transition-all duration-300 shadow-xs">
-                  📋
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-[#0F172A] group-hover:text-indigo-600 transition-colors">
-                    My Consultations
-                  </h3>
-                  <p className="text-xs text-[#64748B] mt-1 line-clamp-2">
-                    {appointments.length > 0
-                      ? `${appointments.length} appointment(s) booked. Check status, invoices, and slot timings.`
-                      : 'View your scheduled doctor visits, cancellations, and past medical history.'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-indigo-600">
-                <span>Manage My Schedule</span>
-                <span className="text-base group-hover:translate-x-1 transition-transform">→</span>
-              </div>
+            {/* Specialty Filter Pills */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none select-none">
+              {specialities.map((spec) => (
+                <button
+                  key={spec}
+                  onClick={() => setSelectedSpeciality(spec)}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                    selectedSpeciality === spec
+                      ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25 scale-102'
+                      : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200/80'
+                  }`}
+                >
+                  {spec}
+                </button>
+              ))}
             </div>
-          </div>
-        </section>
 
-        {/* ========================================================================= */}
-        {/* 2B. LIVE AMBULANCE TRACKING (UBER/PORTER 60FPS LIVE GPS STREAM)           */}
-        {/* ========================================================================= */}
-        {(activeAmbulance || showLiveTracking) && (
-          <section className="bg-white rounded-2xl p-6 sm:p-8 border border-red-200 shadow-sm space-y-4 animate-in fade-in duration-300">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-red-100 pb-3">
-              <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-red-600 to-rose-700 text-white flex items-center justify-center text-xl font-bold shadow-md shadow-red-500/20">
-                  🚑
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-base font-extrabold text-[#0F172A]">
-                      Live Ambulance GPS Tracking (Porter/Uber Mode)
-                    </h2>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200 uppercase">
-                      {activeAmbulance?.status || 'EN ROUTE TO PICKUP'}
-                    </span>
+            {/* Doctors Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              {loading ? (
+                Array.from({ length: 3 }).map((_, idx) => (
+                  <div key={idx} className="p-5 rounded-2xl border border-slate-100 bg-slate-50/50 animate-pulse space-y-4">
+                    <div className="w-full h-40 bg-slate-200 rounded-xl"></div>
+                    <div className="h-4 bg-slate-200 rounded w-3/4"></div>
+                    <div className="h-3 bg-slate-200 rounded w-1/2"></div>
+                    <div className="h-9 bg-slate-200 rounded-xl"></div>
                   </div>
-                  <p className="text-xs text-[#64748B]">
-                    Paramedic: <strong className="text-slate-800">{activeAmbulance?.driverName || 'Rajesh Kumar'}</strong> ({activeAmbulance?.driverPhone || '+91 98201 10800'}) • Unit: <span className="font-mono font-bold text-red-600">{activeAmbulance?.vehicleNumber || 'MH-01-EQ-1108'}</span>
-                  </p>
-                </div>
-              </div>
+                ))
+              ) : filteredDoctors.length > 0 ? (
+                filteredDoctors.map((doc: DoctorItem) => (
+                  <div
+                    key={doc._id}
+                    className="group bg-white rounded-2xl border border-slate-200/80 hover:border-blue-300 p-5 shadow-xs hover:shadow-lg transition-all duration-300 flex flex-col justify-between"
+                  >
+                    <div className="space-y-3.5">
+                      {/* Doctor Image Container */}
+                      <div
+                        onClick={() => setProfileDoc(doc)}
+                        className="relative h-48 rounded-xl overflow-hidden bg-gradient-to-b from-blue-50 to-indigo-50/60 border border-slate-100 cursor-pointer"
+                      >
+                        <img
+                          src={doc.image}
+                          alt={doc.name}
+                          className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-300"
+                        />
+                        <span className="absolute top-2.5 right-2.5 bg-white/95 backdrop-blur px-2.5 py-1 rounded-full text-xs font-black text-slate-800 shadow-xs border border-slate-100">
+                          ${doc.fees}
+                        </span>
+                        <span className="absolute bottom-2.5 left-2.5 bg-emerald-500/90 backdrop-blur text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xs">
+                          <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
+                          Available
+                        </span>
+                      </div>
 
-              <div className="flex items-center gap-2 self-start sm:self-auto">
-                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-                  60fps Telemetry (No Jump)
-                </span>
-                {!activeAmbulance && (
+                      {/* Doctor Details */}
+                      <div>
+                        <div className="flex items-center justify-between gap-1">
+                          <h3
+                            onClick={() => setProfileDoc(doc)}
+                            className="text-base font-bold text-[#0F172A] group-hover:text-blue-600 transition-colors cursor-pointer"
+                          >
+                            {doc.name}
+                          </h3>
+                        </div>
+
+                        <p className="text-xs font-semibold text-blue-600 mt-0.5">
+                          {doc.speciality} • {doc.degree || 'MBBS, MD'}
+                        </p>
+
+                        {/* Hospital Affiliation Badge */}
+                        <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 text-[11px] font-medium text-slate-700 max-w-full">
+                          <span>🏥</span>
+                          <span className="line-clamp-1">{doc.hospitalName || 'Lilavati Hospital & Research Centre'}</span>
+                        </div>
+
+                        <p className="text-[11px] text-[#64748B] mt-1.5 line-clamp-2">
+                          {doc.about || `${doc.experience} of clinical excellence in patient healthcare.`}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Booking & Profile Action Buttons */}
+                    <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                      <div className="text-[11px] text-[#64748B]">
+                        <span className="text-amber-500 font-bold">4.9 ★</span> • {doc.experience}
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBookingDoc(doc);
+                            setSelectedSlotIndex(0);
+                            setSelectedSlotTime(timeOptions[0]);
+                          }}
+                          className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
+                        >
+                          <span>Appoint</span>
+                          <span>📅</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setProfileDoc(doc)}
+                          className="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                          title="View Doctor Profile & Bio Popup"
+                        >
+                          →
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="col-span-full py-12 text-center text-[#64748B] bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 space-y-2">
+                  <span className="text-3xl block">👨‍⚕️</span>
+                  <p className="text-sm font-semibold text-[#0F172A]">No specialists found in this category.</p>
+                  <p className="text-xs text-[#64748B]">Try selecting "All" or reset your search filters.</p>
                   <button
                     type="button"
-                    onClick={() => setShowLiveTracking(false)}
-                    className="text-xs text-slate-400 hover:text-slate-600 px-2 py-1 rounded-lg border border-slate-200 cursor-pointer"
+                    onClick={() => {
+                      setSelectedSpeciality('All');
+                      setDoctorSearchQuery('');
+                      setSelectedHospitalId('ALL');
+                    }}
+                    className="mt-2 px-4 py-1.5 bg-blue-50 text-blue-700 font-bold text-xs rounded-xl border border-blue-200 hover:bg-blue-100 transition-colors cursor-pointer"
                   >
-                    Close ✕
+                    Reset All Filters
                   </button>
-                )}
-              </div>
-            </div>
-
-            {/* Dynamic Map Component */}
-            <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-xs">
-              <LiveMap
-                latitude={driverLocation?.latitude || activeAmbulance?.currentLocation?.lat || 19.0522}
-                longitude={driverLocation?.longitude || activeAmbulance?.currentLocation?.lng || 72.8295}
-                pickupLat={userCoords.lat || 19.0600}
-                pickupLng={userCoords.lng || 72.8340}
-                bookingId={activeAmbulance?._id || activeAmbulance?.bookingId || 'SOS-108'}
-                patientId={userData?._id || 'user_edward_101'}
-                vehicleNumber={activeAmbulance?.vehicleNumber || 'MH-01-EQ-1108'}
-                driverName={activeAmbulance?.driverName || 'Rajesh Kumar'}
-                driverPhone={activeAmbulance?.driverPhone || '+91 98201 10800'}
-                status={activeAmbulance?.status || 'EN ROUTE TO PICKUP'}
-                height="300px"
-              />
+                </div>
+              )}
             </div>
           </section>
         )}
 
         {/* ========================================================================= */}
-        {/* 3. HOSPITAL SELECTION & NEAREST HOSPITAL SECTION                         */}
+        {/* TAB 3: 📋 RECENT ACTIVITY (Consultation History & Ambulance Logs)         */}
         {/* ========================================================================= */}
-        {/* ========================================================================= */}
-        {/* 3. SMART HOSPITAL SEARCH + DOCTOR BOOKING + DIRECTION SYSTEM (Google Maps + Practo) */}
-        {/* ========================================================================= */}
-        <section id="hospital-selection-section" className="space-y-4">
-          <SmartHospitalSearchBooking
-            initialHospitalId={selectedHospitalId !== 'ALL' ? selectedHospitalId : undefined}
-            onAppointmentBooked={() => {
-              fetchDashboardData();
-              getDoctorsData();
-            }}
-          />
-        </section>
+        {activeSection === 'appointments' && (
+          <section className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-100 shadow-sm space-y-5 animate-in fade-in duration-200">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+              <div>
+                <h2 className="text-lg font-bold text-[#0F172A] tracking-tight flex items-center gap-2">
+                  <span>📋</span> My Consultations & History
+                </h2>
+                <p className="text-xs text-[#64748B]">Review your scheduled doctor appointments and emergency ambulance logs</p>
+              </div>
 
-        {/* ========================================================================= */}
-        {/* 4. DOCTOR SECTION (Verified Specialists & Filtered Cards)                */}
-        {/* ========================================================================= */}
-        <section className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-100 shadow-xs space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
-            <div>
-              <h2 className="text-lg font-bold text-[#0F172A] tracking-tight flex items-center gap-2">
-                <span>👨‍⚕️</span> Verified Medical Specialists
-                {activeHospital && (
-                  <span className="text-xs font-normal text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
-                    at {activeHospital.name.split(' ')[0]}
-                  </span>
-                )}
-              </h2>
-              <p className="text-xs text-[#64748B]">Book instant online or in-clinic doctor consultations at your selected hospital</p>
-            </div>
-
-            <button
-              onClick={() => navigate('/doctors')}
-              className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors self-start sm:self-auto"
-            >
-              View Full Doctor Roster ({doctors.length}) →
-            </button>
-          </div>
-
-          {/* Specialty Filter Pills */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-            {specialities.map((spec) => (
-              <button
-                key={spec}
-                onClick={() => setSelectedSpeciality(spec)}
-                className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                  selectedSpeciality === spec
-                    ? 'bg-[#2563EB] text-white shadow-sm'
-                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200/80'
-                }`}
-              >
-                {spec}
-              </button>
-            ))}
-          </div>
-
-          {/* Doctors Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {loading ? (
-              Array.from({ length: 3 }).map((_, idx) => (
-                <div key={idx} className="p-5 rounded-2xl border border-slate-100 bg-slate-50/50 animate-pulse space-y-4">
-                  <div className="w-full h-36 bg-slate-200 rounded-xl"></div>
-                  <div className="h-4 bg-slate-200 rounded w-3/4"></div>
-                  <div className="h-3 bg-slate-200 rounded w-1/2"></div>
-                  <div className="h-9 bg-slate-200 rounded-xl"></div>
-                </div>
-              ))
-            ) : filteredDoctors.length > 0 ? (
-              filteredDoctors.slice(0, 9).map((doc: DoctorItem) => (
-                <div
-                  key={doc._id}
-                  className="group bg-white rounded-2xl border border-slate-200/80 hover:border-blue-300 p-5 shadow-xs hover:shadow-md transition-all duration-300 flex flex-col justify-between"
-                >
-                  <div className="space-y-3.5">
-                    {/* Doctor Image Container */}
-                    <div className="relative h-44 rounded-xl overflow-hidden bg-gradient-to-b from-blue-50 to-indigo-50/60 border border-slate-100">
-                      <img
-                        src={doc.image}
-                        alt={doc.name}
-                        className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-300"
-                      />
-                      <span className="absolute top-2.5 right-2.5 bg-white/90 backdrop-blur px-2.5 py-1 rounded-full text-xs font-extrabold text-slate-800 shadow-xs">
-                        ${doc.fees}
-                      </span>
-                      <span className="absolute bottom-2.5 left-2.5 bg-emerald-500/90 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xs">
-                        <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
-                        Available
-                      </span>
-                    </div>
-
-                    {/* Doctor Details */}
-                    <div>
-                      <div className="flex items-center justify-between gap-1">
-                        <h3 className="text-base font-bold text-[#0F172A] group-hover:text-blue-600 transition-colors">
-                          {doc.name}
-                        </h3>
-                      </div>
-                      
-                      <p className="text-xs font-semibold text-blue-600 mt-0.5">
-                        {doc.speciality} • {doc.degree || 'MBBS, MD'}
-                      </p>
-
-                      {/* Hospital Affiliation Badge */}
-                      <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 text-[11px] font-medium text-slate-700">
-                        <span>🏥</span>
-                        <span className="line-clamp-1">{doc.hospitalName || 'Lilavati Hospital & Research Centre'}</span>
-                      </div>
-
-                      <p className="text-[11px] text-[#64748B] mt-1.5 line-clamp-2">
-                        {doc.about || `${doc.experience} experience in delivering comprehensive healthcare.`}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Booking Action */}
-                  <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                    <div className="text-[11px] text-[#64748B]">
-                      <span className="text-amber-500 font-bold">4.9 ★</span> • {doc.experience}
-                    </div>
-                    
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => {
-                          setBookingDoc(doc);
-                          setSelectedSlotIndex(0);
-                          setSelectedSlotTime(timeOptions[0]);
-                        }}
-                        className="px-3.5 py-2 bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1 active:scale-95"
-                      >
-                        <span>Appoint</span>
-                        <span>📅</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          navigate(`/appointment/${doc._id}`);
-                          window.scrollTo(0, 0);
-                        }}
-                        className="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
-                        title="View Full Profile"
-                      >
-                        →
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="col-span-full py-12 text-center text-[#64748B] bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 space-y-2">
-                <span className="text-3xl block">👨‍⚕️</span>
-                <p className="text-sm font-semibold text-[#0F172A]">No specialists found in this category.</p>
-                <p className="text-xs text-[#64748B]">Try selecting "All Partner Hospitals" or reset specialty filter.</p>
+              {/* Sub-Tab Switcher */}
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
                 <button
-                  onClick={() => {
-                    setSelectedSpeciality('All');
-                    setSelectedHospitalId('ALL');
-                  }}
-                  className="mt-2 px-4 py-1.5 bg-blue-50 text-blue-700 font-bold text-xs rounded-xl border border-blue-200 hover:bg-blue-100 transition-colors"
+                  type="button"
+                  onClick={() => setActiveTab('consultations')}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    activeTab === 'consultations'
+                      ? 'bg-white text-[#0F172A] shadow-xs'
+                      : 'text-[#64748B] hover:text-[#0F172A]'
+                  }`}
                 >
-                  Reset All Filters
+                  Doctor Consultations ({appointments.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('ambulance')}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    activeTab === 'ambulance'
+                      ? 'bg-white text-[#0F172A] shadow-xs'
+                      : 'text-[#64748B] hover:text-[#0F172A]'
+                  }`}
+                >
+                  Ambulance Runs ({ambulanceBookings.length})
                 </button>
               </div>
-            )}
-          </div>
-        </section>
-
-        {/* ========================================================================= */}
-        {/* 5. RECENT ACTIVITY SECTION (Consultation & Ambulance History Tabs)        */}
-        {/* ========================================================================= */}
-        <section className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-100 shadow-xs space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-3">
-            <div>
-              <h2 className="text-base font-bold text-[#0F172A] tracking-tight flex items-center gap-2">
-                <span>📋</span> Recent Activity & History
-              </h2>
-              <p className="text-xs text-[#64748B]">Review your past clinic consultations and emergency ambulance logs</p>
             </div>
 
-            {/* Tab Switcher */}
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
-              <button
-                onClick={() => setActiveTab('consultations')}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === 'consultations'
-                    ? 'bg-white text-[#0F172A] shadow-xs'
-                    : 'text-[#64748B] hover:text-[#0F172A]'
-                }`}
-              >
-                Doctor Consultations ({appointments.length})
-              </button>
-              <button
-                onClick={() => setActiveTab('ambulance')}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === 'ambulance'
-                    ? 'bg-white text-[#0F172A] shadow-xs'
-                    : 'text-[#64748B] hover:text-[#0F172A]'
-                }`}
-              >
-                Ambulance Runs ({ambulanceBookings.length})
-              </button>
-            </div>
-          </div>
-
-          {/* Tab 1: Doctor Consultations History */}
-          {activeTab === 'consultations' && (
-            <div className="divide-y divide-slate-100">
-              {appointments && appointments.length > 0 ? (
-                appointments.map((item: any, idx: number) => (
-                  <div key={item._id || idx} className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <img
-                        src={item.docData?.image || 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=300'}
-                        alt={item.docData?.name || 'Doctor'}
-                        className="w-11 h-11 rounded-xl object-cover border border-slate-200"
-                      />
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-bold text-[#0F172A]">{item.docData?.name || 'Doctor'}</p>
-                          <span className="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200 font-semibold">
-                            🏥 {item.hospitalName || item.docData?.hospitalName || 'Lilavati Hospital'}
-                          </span>
+            {/* Tab 1: Doctor Consultations History */}
+            {activeTab === 'consultations' && (
+              <div className="divide-y divide-slate-100">
+                {appointments && appointments.length > 0 ? (
+                  appointments.map((item: any, idx: number) => (
+                    <div key={item._id || idx} className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <img
+                          src={item.docData?.image || 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=300'}
+                          alt={item.docData?.name || 'Doctor'}
+                          className="w-12 h-12 rounded-2xl object-cover border border-slate-200"
+                        />
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-bold text-[#0F172A]">{item.docData?.name || 'Doctor'}</p>
+                            <span className="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200 font-semibold">
+                              🏥 {item.hospitalName || item.docData?.hospitalName || 'Lilavati Hospital'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-[#64748B]">
+                            {item.docData?.speciality} • Slot: <span className="text-blue-700 font-semibold">{item.slotDate?.replace(/_/g, ' / ')} at {item.slotTime}</span>
+                          </p>
                         </div>
-                        <p className="text-xs text-[#64748B]">
-                          {item.docData?.speciality} • Slot: <span className="text-blue-700 font-semibold">{item.slotDate?.replace(/_/g, ' / ')} at {item.slotTime}</span>
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-                      <span className="text-xs font-bold text-slate-900">${item.amount || 50}</span>
-                      <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
-                        item.isCompleted
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          : item.cancelled
-                          ? 'bg-rose-50 text-rose-700 border-rose-200'
-                          : 'bg-blue-50 text-blue-700 border-blue-200'
-                      }`}>
-                        {item.isCompleted ? 'Completed ✓' : item.cancelled ? 'Cancelled' : 'Confirmed'}
-                      </span>
-                      {/* 📄 View Medical Pass & Rx Button */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPrescriptionModalData({
-                            appointmentId: item._id || 'APT-' + idx,
-                            patientName: patientName,
-                            patientAge: 28,
-                            patientGender: 'Male',
-                            doctorName: item.docData?.name || 'Dr. Richard James',
-                            doctorSpeciality: item.docData?.speciality || 'General Physician',
-                            hospitalName: item.hospitalName || item.docData?.hospitalName || 'Lilavati Hospital & Research Centre',
-                            slotDate: item.slotDate?.replace(/_/g, ' / ') || 'Today',
-                            slotTime: item.slotTime || '10:00 am',
-                            fees: item.amount || 50,
-                          });
-                        }}
-                        className="px-2.5 py-1 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 text-[11px] font-bold rounded-lg border border-slate-200 transition-colors flex items-center gap-1 cursor-pointer"
-                        title="View & Print Official Medical Slip & Prescription"
-                      >
-                        <span>📄</span> Rx Pass
-                      </button>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="py-10 text-center text-[#64748B] space-y-1">
-                  <p className="text-xs font-semibold text-[#0F172A]">No consultation history recorded yet.</p>
-                  <p className="text-[11px] text-[#64748B]">Your completed doctor appointments will be logged here.</p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Tab 2: Ambulance Dispatch History */}
-          {activeTab === 'ambulance' && (
-            <div className="divide-y divide-slate-100">
-              {ambulanceBookings && ambulanceBookings.length > 0 ? (
-                ambulanceBookings.map((trip: any, idx: number) => (
-                  <div key={trip._id || idx} className="py-4 space-y-3">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-mono font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded border border-red-200">
-                            {trip.vehicleNumber || 'MH-01-EQ-1108'}
-                          </span>
-                          <h4 className="text-sm font-bold text-[#0F172A]">
-                            {trip.destinationHospital?.name || (typeof trip.destinationHospital === 'string' ? trip.destinationHospital : trip.hospitalName || 'Lilavati Hospital Trauma Center')}
-                          </h4>
-                        </div>
-                        <p className="text-xs text-[#64748B]">
-                          Paramedic: {trip.driverName || 'Rajesh Kumar'} • Condition: {trip.patientCondition || 'Emergency SOS'}
-                        </p>
                       </div>
 
-                      <div className="flex items-center gap-2.5">
+                      <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                        <span className="text-xs font-bold text-slate-900">${item.amount || 50}</span>
+                        <span
+                          className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                            item.isCompleted
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : item.cancelled
+                              ? 'bg-rose-50 text-rose-700 border-rose-200'
+                              : 'bg-blue-50 text-blue-700 border-blue-200'
+                          }`}
+                        >
+                          {item.isCompleted ? 'Completed ✓' : item.cancelled ? 'Cancelled' : 'Confirmed'}
+                        </span>
+                        {/* 📄 View Medical Pass & Rx Button */}
                         <button
                           type="button"
-                          onClick={() => setExpandedTripId(expandedTripId === (trip._id || idx) ? null : (trip._id || idx))}
-                          className="px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-lg border border-blue-200 transition-colors cursor-pointer flex items-center gap-1"
+                          onClick={() => {
+                            setPrescriptionModalData({
+                              appointmentId: item._id || 'APT-' + idx,
+                              patientName: patientName,
+                              patientAge: 28,
+                              patientGender: 'Male',
+                              doctorName: item.docData?.name || 'Dr. Richard James',
+                              doctorSpeciality: item.docData?.speciality || 'General Physician',
+                              hospitalName: item.hospitalName || item.docData?.hospitalName || 'Lilavati Hospital & Research Centre',
+                              slotDate: item.slotDate?.replace(/_/g, ' / ') || 'Today',
+                              slotTime: item.slotTime || '10:00 am',
+                              fees: item.amount || 50,
+                            });
+                          }}
+                          className="px-3 py-1.5 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 transition-colors flex items-center gap-1 cursor-pointer"
+                          title="View & Print Official Medical Slip & Prescription"
                         >
-                          <span>🗺️ {expandedTripId === (trip._id || idx) ? 'Hide Telemetry' : 'Track Route'}</span>
+                          <span>📄</span> Rx Pass
                         </button>
-
-                        <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-800 border border-slate-200">
-                          {trip.status || 'COMPLETED'}
-                        </span>
                       </div>
                     </div>
-
-                    {expandedTripId === (trip._id || idx) && (
-                      <div className="mt-2 rounded-xl overflow-hidden border border-slate-200 shadow-xs animate-in fade-in duration-200">
-                        <LiveMap
-                          latitude={trip.currentLocation?.lat || 19.0522}
-                          longitude={trip.currentLocation?.lng || 72.8295}
-                          pickupLat={trip.pickupLocation?.lat || 19.0600}
-                          pickupLng={trip.pickupLocation?.lng || 72.8340}
-                          bookingId={trip._id || trip.bookingId || 'SOS-108'}
-                          patientId={userData?._id || 'user_edward_101'}
-                          vehicleNumber={trip.vehicleNumber || 'MH-01-EQ-1108'}
-                          driverName={trip.driverName || 'Rajesh Kumar'}
-                          status={trip.status || 'COMPLETED'}
-                          height="240px"
-                        />
-                      </div>
-                    )}
+                  ))
+                ) : (
+                  <div className="py-12 text-center text-[#64748B] space-y-2">
+                    <span className="text-3xl block">📋</span>
+                    <p className="text-xs font-semibold text-[#0F172A]">No consultation history recorded yet.</p>
+                    <p className="text-[11px] text-[#64748B]">Your completed doctor appointments will be logged here.</p>
+                    <button
+                      type="button"
+                      onClick={() => setActiveSection('doctors')}
+                      className="mt-2 px-4 py-2 bg-blue-600 text-white font-bold text-xs rounded-xl shadow-xs hover:bg-blue-700 cursor-pointer transition-colors"
+                    >
+                      Book A Consultation →
+                    </button>
                   </div>
-                ))
-              ) : (
-                <div className="py-10 text-center text-[#64748B] space-y-1">
-                  <p className="text-xs font-semibold text-[#0F172A]">No ambulance dispatch history recorded.</p>
-                  <p className="text-[11px] text-[#64748B]">Emergency 108 trips and transit logs will appear here.</p>
+                )}
+              </div>
+            )}
+
+            {/* Tab 2: Ambulance Dispatch History */}
+            {activeTab === 'ambulance' && (
+              <div className="divide-y divide-slate-100">
+                {ambulanceBookings && ambulanceBookings.length > 0 ? (
+                  ambulanceBookings.map((trip: any, idx: number) => (
+                    <div key={trip._id || idx} className="py-4 space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-mono font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded border border-red-200">
+                              {trip.vehicleNumber || 'MH-01-EQ-1108'}
+                            </span>
+                            <h4 className="text-sm font-bold text-[#0F172A]">
+                              {trip.destinationHospital?.name || (typeof trip.destinationHospital === 'string' ? trip.destinationHospital : trip.hospitalName || 'Lilavati Hospital Trauma Center')}
+                            </h4>
+                          </div>
+                          <p className="text-xs text-[#64748B]">
+                            Paramedic: {trip.driverName || 'Rajesh Kumar'} • Condition: {trip.patientCondition || 'Emergency SOS'}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2.5">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedTripId(expandedTripId === (trip._id || idx) ? null : (trip._id || idx))}
+                            className="px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-lg border border-blue-200 transition-colors cursor-pointer flex items-center gap-1"
+                          >
+                            <span>🗺️ {expandedTripId === (trip._id || idx) ? 'Hide Telemetry' : 'Track Route'}</span>
+                          </button>
+
+                          <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-800 border border-slate-200">
+                            {trip.status || 'COMPLETED'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {expandedTripId === (trip._id || idx) && (
+                        <div className="mt-2 rounded-xl overflow-hidden border border-slate-200 shadow-xs animate-in fade-in duration-200">
+                          <LiveMap
+                            latitude={trip.currentLocation?.lat || 19.0522}
+                            longitude={trip.currentLocation?.lng || 72.8295}
+                            pickupLat={trip.pickupLocation?.lat || 19.0600}
+                            pickupLng={trip.pickupLocation?.lng || 72.8340}
+                            bookingId={trip._id || trip.bookingId || 'SOS-108'}
+                            patientId={userData?._id || 'user_edward_101'}
+                            vehicleNumber={trip.vehicleNumber || 'MH-01-EQ-1108'}
+                            driverName={trip.driverName || 'Rajesh Kumar'}
+                            status={trip.status || 'COMPLETED'}
+                            height="240px"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <div className="py-12 text-center text-[#64748B] space-y-2">
+                    <span className="text-3xl block">🚑</span>
+                    <p className="text-xs font-semibold text-[#0F172A]">No ambulance dispatch history recorded.</p>
+                    <p className="text-[11px] text-[#64748B]">Emergency 108 trips and transit logs will appear here.</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 4: 🚨 EMERGENCY SOS 108 & LIVE GPS TELEMETRY MAP                      */}
+        {/* ========================================================================= */}
+        {activeSection === 'emergency' && (
+          <section className="space-y-6 animate-in fade-in duration-200">
+            {/* SOS Dispatch Action Card */}
+            <div className="bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white rounded-3xl p-6 sm:p-8 shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
+              <div className="space-y-2 text-center md:text-left">
+                <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur px-3 py-1 rounded-full text-xs font-extrabold">
+                  <span className="w-2 h-2 rounded-full bg-white animate-ping"></span>
+                  <span>24/7 Apex Emergency Command Active</span>
                 </div>
-              )}
+                <h3 className="text-2xl font-black">1-Tap GPS Emergency Ambulance Dispatch</h3>
+                <p className="text-xs text-red-100 max-w-xl">
+                  Dispatches closest ALS/BLS ambulance equipped with ICU ventilators and paramedic staff directly to your live GPS coordinates.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsSOSModalOpen(true)}
+                className="px-6 py-3.5 bg-white text-red-700 hover:bg-red-50 active:scale-95 text-sm font-black rounded-2xl shadow-xl transition-all cursor-pointer flex items-center gap-2 shrink-0"
+              >
+                <span className="text-xl">🚨</span>
+                <span>Trigger Emergency SOS</span>
+              </button>
             </div>
-          )}
-        </section>
+
+            {/* Live GPS Telemetry Radar Map */}
+            <div className="bg-white rounded-3xl p-6 sm:p-8 border border-red-200 shadow-sm space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-red-100 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-red-600 to-rose-700 text-white flex items-center justify-center text-2xl font-bold shadow-md shadow-red-500/20">
+                    🚑
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-extrabold text-[#0F172A]">
+                        Live Ambulance GPS Radar Telemetry (Uber/Porter Mode)
+                      </h3>
+                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200 uppercase">
+                        {activeAmbulance?.status || 'EN ROUTE TO PICKUP'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#64748B] mt-0.5">
+                      Paramedic: <strong className="text-slate-800">{activeAmbulance?.driverName || 'Rajesh Kumar'}</strong> ({activeAmbulance?.driverPhone || '+91 98201 10800'}) • Unit: <span className="font-mono font-bold text-red-600">{activeAmbulance?.vehicleNumber || 'MH-01-EQ-1108'}</span>
+                    </p>
+                  </div>
+                </div>
+
+                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 flex items-center gap-1.5 self-start sm:self-auto">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                  60fps Live Telemetry (Zero Jump)
+                </span>
+              </div>
+
+              {/* Dynamic Map */}
+              <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-xs">
+                <LiveMap
+                  latitude={driverLocation?.latitude || activeAmbulance?.currentLocation?.lat || 19.0522}
+                  longitude={driverLocation?.longitude || activeAmbulance?.currentLocation?.lng || 72.8295}
+                  pickupLat={userCoords.lat || 19.0600}
+                  pickupLng={userCoords.lng || 72.8340}
+                  bookingId={activeAmbulance?._id || activeAmbulance?.bookingId || 'SOS-108'}
+                  patientId={userData?._id || 'user_edward_101'}
+                  vehicleNumber={activeAmbulance?.vehicleNumber || 'MH-01-EQ-1108'}
+                  driverName={activeAmbulance?.driverName || 'Rajesh Kumar'}
+                  driverPhone={activeAmbulance?.driverPhone || '+91 98201 10800'}
+                  status={activeAmbulance?.status || 'EN ROUTE TO PICKUP'}
+                  height="360px"
+                />
+              </div>
+            </div>
+          </section>
+        )}
       </main>
+
+      {/* ========================================================================= */}
+      {/* 5B. DOCTOR PROFILE & CREDENTIALS DETAILS POPUP MODAL                      */}
+      {/* ========================================================================= */}
+      {profileDoc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Header with Doctor Picture & Verified Badge */}
+            <div className="p-6 bg-gradient-to-br from-blue-700 via-indigo-700 to-blue-900 text-white flex items-start justify-between relative">
+              <div className="flex items-start gap-4">
+                <div className="relative">
+                  <img
+                    src={profileDoc.image}
+                    alt={profileDoc.name}
+                    className="w-16 h-16 rounded-2xl object-cover border-2 border-white/60 shadow-lg"
+                  />
+                  <span className="absolute -bottom-1 -right-1 bg-emerald-500 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full border border-white">
+                    VERIFIED ✓
+                  </span>
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-lg font-black text-white">{profileDoc.name}</h3>
+                  <p className="text-xs text-blue-200 font-semibold">{profileDoc.speciality} • {profileDoc.degree || 'MBBS, MD'}</p>
+                  <div className="flex items-center gap-2 pt-0.5">
+                    <span className="text-xs font-bold text-amber-300">★ 4.9</span>
+                    <span className="text-blue-300 text-xs">•</span>
+                    <span className="text-xs text-blue-100">{profileDoc.experience || '4+ Years Experience'}</span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setProfileDoc(null)}
+                className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center cursor-pointer transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-5 text-xs text-slate-700">
+              {/* Key Indicators Bar */}
+              <div className="grid grid-cols-3 gap-2.5 text-center">
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                  <p className="text-[10px] text-slate-400 font-bold uppercase">Consult Fee</p>
+                  <p className="text-sm font-black text-blue-600 mt-0.5">${profileDoc.fees || 50}</p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                  <p className="text-[10px] text-slate-400 font-bold uppercase">Patients</p>
+                  <p className="text-sm font-black text-emerald-600 mt-0.5">1,200+</p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                  <p className="text-[10px] text-slate-400 font-bold uppercase">Status</p>
+                  <p className="text-sm font-black text-emerald-700 mt-0.5">Available</p>
+                </div>
+              </div>
+
+              {/* Hospital Affiliation Info */}
+              <div className="p-3.5 rounded-2xl bg-blue-50/60 border border-blue-100 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-extrabold text-blue-900 text-xs">🏥 Partner Hospital Wing</span>
+                  <span className="text-[10px] bg-white text-blue-700 font-bold px-2 py-0.5 rounded-full border border-blue-200">
+                    Apex Center
+                  </span>
+                </div>
+                <p className="text-xs font-bold text-slate-800">
+                  {profileDoc.hospitalName || activeHospital?.name || 'Lilavati Hospital & Research Centre'}
+                </p>
+                <p className="text-[11px] text-slate-600">
+                  {activeHospital?.address || 'Bandra Reclamation, Bandra West, Mumbai 400050'}
+                </p>
+              </div>
+
+              {/* About & Clinical Focus */}
+              <div className="space-y-1.5">
+                <h4 className="font-extrabold text-slate-900 text-xs uppercase tracking-wider">About Doctor & Clinical Focus</h4>
+                <p className="text-xs text-slate-600 leading-relaxed bg-slate-50/70 p-3.5 rounded-2xl border border-slate-100">
+                  {profileDoc.about ||
+                    `${profileDoc.name} is a certified medical specialist in ${profileDoc.speciality} with extensive hospital practice in patient care, diagnostic analysis, and preventive healthcare.`}
+                </p>
+              </div>
+
+              {/* Registration and Compliance */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100 text-[11px] text-slate-500">
+                <span>Medical Council Reg: <strong className="text-slate-800">#MCI-{(profileDoc._id || '98231').slice(-6).toUpperCase()}</strong></span>
+                <span className="text-emerald-700 font-bold">Verified Practitioner ✓</span>
+              </div>
+            </div>
+
+            {/* Modal Footer CTA */}
+            <div className="p-5 border-t border-slate-100 bg-slate-50/50 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setProfileDoc(null)}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-100 cursor-pointer transition-colors"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const doc = profileDoc;
+                  setProfileDoc(null);
+                  setBookingDoc(doc);
+                  setSelectedSlotIndex(0);
+                  setSelectedSlotTime(timeOptions[0]);
+                }}
+                className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-black shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <span>Book Consultation</span>
+                <span>📅 →</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* 6. QUICK IN-DASHBOARD APPOINTMENT BOOKING MODAL                          */}

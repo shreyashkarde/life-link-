@@ -90,10 +90,17 @@ export const initSocket = (io: SocketIOServer) => {
       }
     });
 
-    // 🚑 Specific Room Joins
+    // 🚑 Universal Room Joins
     socket.on('join_driver', (driverId: string) => {
       if (driverId) {
         socket.join(`driver_${driverId}`);
+        socket.join('driver_room');
+      }
+    });
+    socket.on('joinDriver', (driverId: string) => {
+      if (driverId) {
+        socket.join(`driver_${driverId}`);
+        socket.join('driver_room');
       }
     });
 
@@ -102,8 +109,18 @@ export const initSocket = (io: SocketIOServer) => {
         socket.join(`hospital_${hospitalId}`);
       }
     });
+    socket.on('joinHospital', (hospitalId: string) => {
+      if (hospitalId) {
+        socket.join(`hospital_${hospitalId}`);
+      }
+    });
 
     socket.on('join_ride', (bookingId: string) => {
+      if (bookingId) {
+        socket.join(`ride_${bookingId}`);
+      }
+    });
+    socket.on('joinRide', (bookingId: string) => {
       if (bookingId) {
         socket.join(`ride_${bookingId}`);
       }
@@ -115,11 +132,18 @@ export const initSocket = (io: SocketIOServer) => {
         socket.join(`user_${patientId}`);
       }
     });
+    socket.on('joinPatient', (patientId: string) => {
+      if (patientId) {
+        socket.join(`patient_${patientId}`);
+        socket.join(`user_${patientId}`);
+      }
+    });
 
     // 🚑 Driver connected event
     socket.on('driverConnected', (data: { driverId: string; hospitalId?: string; vehicleNumber?: string; lat?: number; lng?: number }) => {
       if (data?.driverId) {
         socket.join(`driver_${data.driverId}`);
+        socket.join('driver_room');
         if (data.hospitalId) {
           socket.join(`hospital_${data.hospitalId}`);
         }
@@ -145,7 +169,7 @@ export const initSocket = (io: SocketIOServer) => {
       socket.emit('trackingStarted', { success: true, bookingId: data?.bookingId });
     });
 
-    // 📡 Real-time Driver Location Broadcast ("driverLocation" & alias "locationUpdate")
+    // 📡 Real-time Driver Location Broadcast ("driverLocation" & "locationUpdate")
     const handleDriverLocation = (payload: any) => {
       if (!payload) return;
       const lat = payload.latitude ?? payload.lat;
@@ -211,45 +235,80 @@ export const initSocket = (io: SocketIOServer) => {
     socket.on('driverLocation', handleDriverLocation);
     socket.on('locationUpdate', handleDriverLocation);
 
-    // 🎯 Driver accepts booking ("rideAccepted" & "bookingAccepted")
-    const handleRideAccepted = (payload: { bookingId: string; driverInfo?: any; hospitalId?: string; patientId?: string }) => {
+    // 🚨 Emergency Ambulance Request from Patient -> Multi-Driver Pool
+    socket.on('ambulanceRequest', (payload: any) => {
+      emitAmbulanceRequest([], payload);
+    });
+
+    // 🎯 Driver accepts booking ("acceptRide", "rideAccepted", "bookingAccepted")
+    const handleRideAccepted = (payload: { bookingId: string; driverInfo?: any; hospitalId?: string; patientId?: string; [key: string]: any }) => {
       if (!payload?.bookingId) return;
       const rideRoom = `ride_${payload.bookingId}`;
       socket.to(rideRoom).emit('rideAccepted', payload);
       socket.to(rideRoom).emit('bookingAccepted', payload);
+      socket.to(rideRoom).emit('statusUpdate', { ...payload, bookingId: payload.bookingId, status: 'ACCEPTED' });
+      socket.to(rideRoom).emit('rideStatusUpdate', { ...payload, bookingId: payload.bookingId, status: 'ACCEPTED' });
       if (payload.patientId) {
         socket.to(`patient_${payload.patientId}`).emit('rideAccepted', payload);
+        socket.to(`patient_${payload.patientId}`).emit('bookingAccepted', payload);
+        socket.to(`patient_${payload.patientId}`).emit('statusUpdate', { ...payload, bookingId: payload.bookingId, status: 'ACCEPTED' });
+        socket.to(`user_${payload.patientId}`).emit('rideAccepted', payload);
       }
       if (payload.hospitalId) {
         socket.to(`hospital_${payload.hospitalId}`).emit('rideAccepted', payload);
       }
       io.to('admin_emergency_room').emit('rideAccepted', payload);
+      io.to('admin_emergency_room').emit('statusUpdate', { ...payload, bookingId: payload.bookingId, status: 'ACCEPTED' });
     };
 
+
+    socket.on('acceptRide', handleRideAccepted);
     socket.on('rideAccepted', handleRideAccepted);
     socket.on('bookingAccepted', handleRideAccepted);
 
-    // 🔄 Ride Status Update ("rideStatusUpdate")
-    socket.on('rideStatusUpdate', (payload: { bookingId: string; status: string; patientId?: string; hospitalId?: string; details?: any }) => {
-      if (!payload?.bookingId) return;
-      const rideRoom = `ride_${payload.bookingId}`;
-      socket.to(rideRoom).emit('rideStatusUpdate', payload);
-      if (payload.patientId) {
-        socket.to(`patient_${payload.patientId}`).emit('rideStatusUpdate', payload);
+    // ❌ Driver rejects request
+    socket.on('rejectRide', (payload: any) => {
+      if (payload?.bookingId) {
+        socket.to(`ride_${payload.bookingId}`).emit('rideRejected', payload);
       }
-      if (payload.hospitalId) {
-        socket.to(`hospital_${payload.hospitalId}`).emit('rideStatusUpdate', payload);
-      }
-      io.to('admin_emergency_room').emit('rideStatusUpdate', payload);
     });
 
+    // 🔄 Ride Status Update ("statusUpdate" & "rideStatusUpdate")
+    const handleStatusUpdate = (payload: { bookingId: string; status: string; patientId?: string; hospitalId?: string; details?: any; [key: string]: any }) => {
+      if (!payload?.bookingId) return;
+      const rideRoom = `ride_${payload.bookingId}`;
+      socket.to(rideRoom).emit('statusUpdate', payload);
+      socket.to(rideRoom).emit('rideStatusUpdate', payload);
+      if (payload.patientId) {
+        socket.to(`patient_${payload.patientId}`).emit('statusUpdate', payload);
+        socket.to(`patient_${payload.patientId}`).emit('rideStatusUpdate', payload);
+        socket.to(`user_${payload.patientId}`).emit('statusUpdate', payload);
+        socket.to(`user_${payload.patientId}`).emit('rideStatusUpdate', payload);
+      }
+      if (payload.hospitalId) {
+        socket.to(`hospital_${payload.hospitalId}`).emit('statusUpdate', payload);
+        socket.to(`hospital_${payload.hospitalId}`).emit('rideStatusUpdate', payload);
+      }
+      io.to('admin_emergency_room').emit('statusUpdate', payload);
+      io.to('admin_emergency_room').emit('rideStatusUpdate', payload);
+
+      if (payload.status === 'COMPLETED') {
+        socket.to(rideRoom).emit('rideCompleted', payload);
+      }
+    };
+
+    socket.on('statusUpdate', handleStatusUpdate);
+    socket.on('rideStatusUpdate', handleStatusUpdate);
+
     // Ride completed event
-    socket.on('rideCompleted', (payload: { bookingId: string; summary?: any }) => {
+    socket.on('rideCompleted', (payload: { bookingId: string; summary?: any; [key: string]: any }) => {
       if (!payload?.bookingId) return;
       const rideRoom = `ride_${payload.bookingId}`;
       socket.to(rideRoom).emit('rideCompleted', payload);
+      socket.to(rideRoom).emit('statusUpdate', { bookingId: payload.bookingId, status: 'COMPLETED', summary: payload.summary });
       socket.to(rideRoom).emit('rideStatusUpdate', { bookingId: payload.bookingId, status: 'COMPLETED', summary: payload.summary });
     });
+
 
     // --- Real-Time Appointment Engine (Room-Based Architecture) ---
     socket.on('join_user', (userId: string) => {
@@ -294,73 +353,117 @@ export const initSocket = (io: SocketIOServer) => {
 // Programmatic emitters for controllers & features
 export const getIO = (): SocketIOServer | null => ioInstance;
 
+// 🚨 Broadcast Emergency Ambulance Request to Multiple Nearby Drivers
+export const emitAmbulanceRequest = (targetDriverIds: string[] = [], booking: any) => {
+  if (ioInstance && booking) {
+    const payload = {
+      bookingId: booking._id || booking.bookingId || 'SOS-' + Date.now(),
+      patientId: booking.patientId || 'patient_1',
+      patientName: booking.patientName || 'Emergency Patient',
+      patientPhone: booking.patientPhone || '+91 98200 99999',
+      pickupLocation: booking.pickupLocation || { address: 'GPS Emergency Pin', lat: 19.0760, lng: 72.8777 },
+      destinationHospital: booking.destinationHospital || { name: 'Lilavati Hospital Trauma Care', address: 'Bandra West' },
+      hospitalId: booking.hospitalId || 'hosp_lilavati',
+      hospitalName: booking.hospitalName || 'Lilavati Hospital & Research Centre',
+      emergencyType: booking.patientCondition || booking.emergencyType || 'CRITICAL_CODE_RED',
+      severity: booking.emergencySeverity || 'CRITICAL_CODE_RED',
+      fare: booking.fare || 150,
+      distanceKm: booking.distanceKm || 1.4,
+      etaMinutes: booking.etaMinutes || 3,
+      createdAt: booking.createdAt || new Date().toISOString(),
+      ...booking,
+    };
+
+    // 1. Emit to specific drivers if provided
+    if (Array.isArray(targetDriverIds) && targetDriverIds.length > 0) {
+      targetDriverIds.forEach((driverId) => {
+        if (driverId) {
+          ioInstance?.to(`driver_${driverId}`).emit('ambulanceRequest', payload);
+          ioInstance?.to(`driver_${driverId}`).emit('newBooking', payload);
+          ioInstance?.to(`driver_${driverId}`).emit('emergencyAlert', payload);
+        }
+      });
+    }
+
+    // 2. Emit to universal drivers room and hospital room
+    ioInstance.to('driver_room').emit('ambulanceRequest', payload);
+    ioInstance.to('driver_room').emit('newBooking', payload);
+    if (payload.hospitalId) {
+      ioInstance.to(`hospital_${payload.hospitalId}`).emit('ambulanceRequest', payload);
+      ioInstance.to(`hospital_${payload.hospitalId}`).emit('newBooking', payload);
+    }
+    ioInstance.to('admin_emergency_room').emit('ambulanceRequest', payload);
+    ioInstance.to('admin_emergency_room').emit('newBooking', payload);
+    ioInstance.to('admin_emergency_room').emit('emergencyAlert', payload);
+
+    // 3. Global broadcast so all online active drivers are notified in real-time
+    ioInstance.emit('ambulanceRequest', payload);
+    ioInstance.emit('newBooking', payload);
+    ioInstance.emit('emergencyAlert', payload);
+  }
+};
+
 export const emitNewBookingToDriver = (driverId: string, booking: any) => {
   if (ioInstance) {
-    ioInstance.to(`driver_${driverId}`).emit('newBooking', booking);
-    if (booking?.hospitalId) {
-      ioInstance.to(`hospital_${booking.hospitalId}`).emit('newBooking', booking);
-    }
-    if (booking?.patientId) {
-      ioInstance.to(`patient_${booking.patientId}`).emit('newBooking', booking);
-      ioInstance.to(`user_${booking.patientId}`).emit('newBooking', booking);
-    }
-    ioInstance.to('admin_room').emit('newBooking', booking);
-    ioInstance.to('admin_emergency_room').emit('newBooking', booking);
-    ioInstance.emit('newBooking', booking);
+    emitAmbulanceRequest(driverId ? [driverId] : [], booking);
   }
 };
 
 export const emitRideAcceptedToPatient = (bookingId: string, rideData: any) => {
   if (ioInstance) {
-    ioInstance.to(`ride_${bookingId}`).emit('rideAccepted', rideData);
-    ioInstance.to(`ride_${bookingId}`).emit('bookingAccepted', rideData);
+    const payload = { bookingId, status: 'ACCEPTED', ...rideData };
+    ioInstance.to(`ride_${bookingId}`).emit('rideAccepted', payload);
+    ioInstance.to(`ride_${bookingId}`).emit('bookingAccepted', payload);
+    ioInstance.to(`ride_${bookingId}`).emit('statusUpdate', payload);
+    ioInstance.to(`ride_${bookingId}`).emit('rideStatusUpdate', payload);
     if (rideData?.patientId) {
-      ioInstance.to(`patient_${rideData.patientId}`).emit('rideAccepted', rideData);
-      ioInstance.to(`user_${rideData.patientId}`).emit('rideAccepted', rideData);
+      ioInstance.to(`patient_${rideData.patientId}`).emit('rideAccepted', payload);
+      ioInstance.to(`patient_${rideData.patientId}`).emit('bookingAccepted', payload);
+      ioInstance.to(`patient_${rideData.patientId}`).emit('statusUpdate', payload);
+      ioInstance.to(`user_${rideData.patientId}`).emit('rideAccepted', payload);
+      ioInstance.to(`user_${rideData.patientId}`).emit('statusUpdate', payload);
     }
     if (rideData?.hospitalId) {
-      ioInstance.to(`hospital_${rideData.hospitalId}`).emit('rideAccepted', rideData);
+      ioInstance.to(`hospital_${rideData.hospitalId}`).emit('rideAccepted', payload);
+      ioInstance.to(`hospital_${rideData.hospitalId}`).emit('statusUpdate', payload);
     }
-    ioInstance.to('admin_room').emit('rideAccepted', rideData);
-    ioInstance.to('admin_emergency_room').emit('rideAccepted', rideData);
+    ioInstance.to('driver_room').emit('rideAccepted', payload);
+    ioInstance.to('admin_room').emit('rideAccepted', payload);
+    ioInstance.to('admin_emergency_room').emit('rideAccepted', payload);
   }
 };
 
 export const emitRideStatusUpdate = (bookingId: string, statusPayload: any) => {
   if (ioInstance) {
-    ioInstance.to(`ride_${bookingId}`).emit('rideStatusUpdate', statusPayload);
+    const payload = { bookingId, ...statusPayload };
+    ioInstance.to(`ride_${bookingId}`).emit('statusUpdate', payload);
+    ioInstance.to(`ride_${bookingId}`).emit('rideStatusUpdate', payload);
+    if (statusPayload?.status === 'COMPLETED') {
+      ioInstance.to(`ride_${bookingId}`).emit('rideCompleted', payload);
+    }
     if (statusPayload?.patientId) {
-      ioInstance.to(`patient_${statusPayload.patientId}`).emit('rideStatusUpdate', statusPayload);
-      ioInstance.to(`user_${statusPayload.patientId}`).emit('rideStatusUpdate', statusPayload);
+      ioInstance.to(`patient_${statusPayload.patientId}`).emit('statusUpdate', payload);
+      ioInstance.to(`patient_${statusPayload.patientId}`).emit('rideStatusUpdate', payload);
+      ioInstance.to(`user_${statusPayload.patientId}`).emit('statusUpdate', payload);
+      ioInstance.to(`user_${statusPayload.patientId}`).emit('rideStatusUpdate', payload);
     }
     if (statusPayload?.hospitalId) {
-      ioInstance.to(`hospital_${statusPayload.hospitalId}`).emit('rideStatusUpdate', statusPayload);
+      ioInstance.to(`hospital_${statusPayload.hospitalId}`).emit('statusUpdate', payload);
+      ioInstance.to(`hospital_${statusPayload.hospitalId}`).emit('rideStatusUpdate', payload);
     }
-    ioInstance.to('admin_room').emit('rideStatusUpdate', statusPayload);
-    ioInstance.to('admin_emergency_room').emit('rideStatusUpdate', statusPayload);
+    ioInstance.to('driver_room').emit('statusUpdate', payload);
+    ioInstance.to('driver_room').emit('rideStatusUpdate', payload);
+    ioInstance.to('admin_room').emit('statusUpdate', payload);
+    ioInstance.to('admin_emergency_room').emit('statusUpdate', payload);
   }
 };
 
 export const emitEmergencyAlert = (emergencyPayload: any) => {
   if (ioInstance) {
-    ioInstance.to('admin_emergency_room').emit('emergencyAlert', emergencyPayload);
-    ioInstance.to('admin_room').emit('emergencyAlert', emergencyPayload);
-    if (emergencyPayload.assignedDriverId) {
-      ioInstance.to(`driver_${emergencyPayload.assignedDriverId}`).emit('emergencyAlert', emergencyPayload);
-      ioInstance.to(`driver_${emergencyPayload.assignedDriverId}`).emit('newBooking', emergencyPayload);
-    }
-    if (emergencyPayload.hospitalId) {
-      ioInstance.to(`hospital_${emergencyPayload.hospitalId}`).emit('emergencyAlert', emergencyPayload);
-      ioInstance.to(`hospital_${emergencyPayload.hospitalId}`).emit('newBooking', emergencyPayload);
-    }
-    if (emergencyPayload.patientId) {
-      ioInstance.to(`patient_${emergencyPayload.patientId}`).emit('emergencyAlert', emergencyPayload);
-      ioInstance.to(`user_${emergencyPayload.patientId}`).emit('emergencyAlert', emergencyPayload);
-    }
-    ioInstance.emit('newBooking', emergencyPayload);
-    ioInstance.emit('emergencyAlert', emergencyPayload);
+    emitAmbulanceRequest(emergencyPayload.assignedDriverId ? [emergencyPayload.assignedDriverId] : [], emergencyPayload);
   }
 };
+
 
 /**
  * 🔴 Room-Based Appointment Event Dispatchers (Data Isolation & Privacy)

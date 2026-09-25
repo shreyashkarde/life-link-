@@ -18,26 +18,16 @@ import Contact from './pages/Contact';
 import ResetPassword from './pages/ResetPassword';
 import VerifyEmail from './pages/VerifyEmail';
 
-// Admin & Doctor Pages
-import AdminLayout from './pages/admin/AdminLayout';
-import AdminDashboard from './pages/admin/AdminDashboard';
-import AllAppointments from './pages/admin/AllAppointments';
-import AddDoctor from './pages/admin/AddDoctor';
-import DoctorsList from './pages/admin/DoctorsList';
-import DoctorDashboard from './pages/admin/DoctorDashboard';
-import DoctorAppointments from './pages/admin/DoctorAppointments';
-import DoctorProfile from './pages/admin/DoctorProfile';
-
 import EmergencySOSButton from './components/EmergencySOSButton';
 import NotificationToast from './features/notifications/NotificationToast';
 
-// 5 Role Dedicated Dashboards
+// 3 Core Role Dedicated Dashboards
 import PatientDashboard from './pages/dashboards/PatientDashboard';
 import DoctorPanelDashboard from './pages/dashboards/DoctorDashboard';
-import HospitalAdminDashboard from './pages/dashboards/HospitalAdminDashboard';
 import DriverDashboard from './pages/dashboards/DriverDashboard';
-import SuperAdminDashboard from './pages/dashboards/SuperAdminDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
+import TrackingPage from './modules/patient/TrackingPage';
+import HybridHospitalMap from './modules/hospitals/HybridHospitalMap';
 
 // Patient Layout wrapper
 const PatientLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -52,24 +42,12 @@ const PatientLayout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   );
 };
 
-// Admin route index resolver
-const AdminIndex: React.FC = () => {
-  const { aToken, dToken } = useApp();
-  if (aToken) {
-    return <Navigate to="/admin/dashboard" replace />;
-  }
-  if (dToken) {
-    return <Navigate to="/admin/doctor-dashboard" replace />;
-  }
-  return <AdminDashboard />;
-};
-
 export const App: React.FC = () => {
   return (
     <AppContextProvider>
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
-          {/* Primary Portal Entry: Unified 5-Role Login Page */}
+          {/* Primary Portal Entry: Secure Authentication Login Page */}
           <Route path="/" element={<Login />} />
           <Route path="/login" element={<Login />} />
           <Route path="/reset-password" element={<ResetPassword />} />
@@ -131,16 +109,31 @@ export const App: React.FC = () => {
               </PatientLayout>
             }
           />
+          {/* Hybrid Hospital Discovery (Google Places Live GPS) */}
+          <Route
+            path="/nearby-hospitals"
+            element={
+              <PatientLayout>
+                <div className="py-6">
+                  <HybridHospitalMap />
+                </div>
+              </PatientLayout>
+            }
+          />
+          {/* Live Patient Ambulance Tracking Page (Uber/Porter Style) */}
+          <Route path="/tracking/:bookingId" element={<TrackingPage />} />
+          <Route path="/tracking" element={<TrackingPage />} />
 
-          {/* 5 Dedicated Role Dashboards (Protected by Role) */}
+          {/* 3 Dedicated Role Dashboards (Strictly Protected by Role) */}
           <Route
             path="/patient/dashboard"
             element={
-              <ProtectedRoute allowedRoles={['PATIENT', 'USER']}>
+              <ProtectedRoute allowedRoles={['PATIENT']}>
                 <PatientDashboard />
               </ProtectedRoute>
             }
           />
+
           <Route
             path="/doctor/dashboard"
             element={
@@ -149,14 +142,7 @@ export const App: React.FC = () => {
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/hospital/dashboard"
-            element={
-              <ProtectedRoute allowedRoles={['HOSPITAL_ADMIN', 'ADMIN_HOSPITAL', 'ADMIN', 'SUPER_ADMIN']}>
-                <HospitalAdminDashboard />
-              </ProtectedRoute>
-            }
-          />
+
           <Route
             path="/driver/dashboard"
             element={
@@ -165,82 +151,6 @@ export const App: React.FC = () => {
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/super-admin/dashboard"
-            element={
-              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'ADMIN', 'SUPERADMIN']}>
-                <SuperAdminDashboard />
-              </ProtectedRoute>
-            }
-          />
-
-          {/* Admin & Doctor Panel Routes (Protected) */}
-          <Route
-            path="/admin"
-            element={
-              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'ADMIN', 'SUPERADMIN', 'DOCTOR']}>
-                <AdminLayout />
-              </ProtectedRoute>
-            }
-          >
-            <Route index element={<AdminIndex />} />
-            <Route
-              path="dashboard"
-              element={
-                <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'ADMIN', 'SUPERADMIN']}>
-                  <AdminDashboard />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="all-appointments"
-              element={
-                <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'ADMIN', 'SUPERADMIN']}>
-                  <AllAppointments />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="add-doctor"
-              element={
-                <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'ADMIN', 'SUPERADMIN']}>
-                  <AddDoctor />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="doctor-list"
-              element={
-                <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'ADMIN', 'SUPERADMIN']}>
-                  <DoctorsList />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="doctor-dashboard"
-              element={
-                <ProtectedRoute allowedRoles={['DOCTOR']}>
-                  <DoctorDashboard />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="doctor-appointments"
-              element={
-                <ProtectedRoute allowedRoles={['DOCTOR']}>
-                  <DoctorAppointments />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="doctor-profile"
-              element={
-                <ProtectedRoute allowedRoles={['DOCTOR']}>
-                  <DoctorProfile />
-                </ProtectedRoute>
-              }
-            />
-          </Route>
 
           {/* Catch-all Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />

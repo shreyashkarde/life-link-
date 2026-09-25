@@ -32,6 +32,8 @@ const io = new SocketIOServer(server, {
   },
 });
 initSocket(io);
+import { initDeliverySocket } from './modules/socket/deliverySocket';
+initDeliverySocket(io);
 
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';

@@ -23,8 +23,20 @@ import {
 import { excelUpload, handleUploadError } from '../middleware/uploadMiddleware';
 import { authenticateJWT, authorizeRoles } from '../middleware/auth';
 import { loginUser } from '../controllers/authController';
+import { getNearbyHospitals } from '../features/hospitals/hospitalController';
+import { getGoogleNearbyHospitals } from '../controllers/googleNearbyHospitalController';
+import { getHybridHospitals } from '../controllers/hybridHospitalController';
 
 const router = express.Router();
+
+// 🚀 Hybrid Hospital Discovery API (Database Priority + Google Places Live)
+router.get('/hybrid', getHybridHospitals);
+
+// 🌍 Google Places API Live Nearby Hospitals Search (GPS Based)
+router.get('/nearby-google', getGoogleNearbyHospitals);
+
+// 🌍 Real GPS Nearby Hospitals API (MongoDB Geospatial 2dsphere $near)
+router.get('/nearby', getNearbyHospitals);
 
 // 🔑 Hospital Login Alias
 router.post('/login', loginUser);
@@ -39,6 +51,7 @@ router.get('/superadmin/overview', authenticateJWT, authorizeRoles('SUPER_ADMIN'
 router.get('/overview', authenticateJWT, authorizeRoles('SUPER_ADMIN', 'ADMIN'), getSuperAdminOverview);
 router.get('/', getAllHospitals);
 router.post('/', authenticateJWT, authorizeRoles('SUPER_ADMIN', 'ADMIN'), createHospital);
+
 
 // 📁 SuperAdmin Bulk Upload Hospitals (Protected)
 router.post(

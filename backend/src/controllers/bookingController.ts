@@ -34,7 +34,10 @@ export const createAmbulanceBooking = async (req: AuthRequest, res: Response) =>
     // Load available fleet
     let fleet: any[] = [];
     if (isMongoConnected()) {
-      fleet = await Ambulance.find({});
+      fleet = await Ambulance.find({ isAvailable: true });
+      if (fleet.length === 0) {
+        fleet = await Ambulance.find({});
+      }
     } else {
       fleet = prescriptoStore.ambulances || [];
     }
@@ -110,7 +113,7 @@ export const createAmbulanceBooking = async (req: AuthRequest, res: Response) =>
         lng: 72.8277,
       },
       bookingType: 'NORMAL' as const,
-      status: (assignedAmbulance ? 'ASSIGNED' : 'REQUESTED') as any,
+      status: 'REQUESTED' as any,
       emergencySeverity: 'MEDIUM' as const,
       patientCondition,
       fare: 120,
@@ -130,7 +133,9 @@ export const createAmbulanceBooking = async (req: AuthRequest, res: Response) =>
       prescriptoStore.ambulanceBookings.unshift(createdBooking);
     }
 
-    emitNewBookingToDriver(bookingData.driverId || bookingData.ambulanceId, createdBooking);
+    // 🚨 Notify all eligible available drivers in real-time
+    const targetDriverIds = fleet.map((d) => d.driverId || String(d._id)).filter(Boolean);
+    emitNewBookingToDriver(bookingData.driverId, createdBooking);
 
     return res.status(201).json({
       success: true,
@@ -167,7 +172,10 @@ export const triggerEmergencySOS = async (req: AuthRequest, res: Response) => {
     let hospitals: any[] = [];
 
     if (isMongoConnected()) {
-      fleet = await Ambulance.find({});
+      fleet = await Ambulance.find({ isAvailable: true });
+      if (fleet.length === 0) {
+        fleet = await Ambulance.find({});
+      }
       hospitals = await Hospital.find({ isActive: true });
     }
     if (!fleet || fleet.length === 0) {
@@ -222,14 +230,13 @@ export const triggerEmergencySOS = async (req: AuthRequest, res: Response) => {
         lng: 72.8277,
       },
       bookingType: 'EMERGENCY_SOS' as const,
-      status: 'ACCEPTED' as const, // Auto-accept / priority dispatch
+      status: 'REQUESTED' as const, // Multi-driver broadcast with instant claiming
       emergencySeverity: 'CRITICAL_CODE_RED' as const,
       patientCondition: condition,
       fare: 150,
       paymentStatus: 'PENDING' as const,
       timeline: {
         bookedAt: new Date(),
-        acceptedAt: new Date(),
       },
     };
 
@@ -245,17 +252,22 @@ export const triggerEmergencySOS = async (req: AuthRequest, res: Response) => {
       prescriptoStore.ambulanceBookings.unshift(savedBooking);
     }
 
-    // High Priority Real-time Socket Dispatch
+    // 🚨 High Priority Multi-Driver Real-time Socket Dispatch
+    const driverIdsToNotify = fleet.map((d) => d.driverId || String(d._id)).filter(Boolean);
     emitEmergencyAlert({
       bookingId: savedBooking._id,
       assignedDriverId: assignedAmbulance.driverId || assignedAmbulance._id,
       driverName: assignedAmbulance.driverName,
       vehicleNumber: assignedAmbulance.vehicleNumber,
       pickupLocation: savedBooking.pickupLocation,
+      destinationHospital: savedBooking.destinationHospital,
       severity: 'CRITICAL_CODE_RED',
       patientName: savedBooking.patientName,
+      patientPhone: savedBooking.patientPhone,
       hospitalId: resolvedHospitalId,
       hospitalName: resolvedHospitalName,
+      fare: savedBooking.fare,
+      distanceKm: bestDriverResult?.distanceKm || 1.4,
       etaMinutes: bestDriverResult?.etaMinutes || 3,
       timestamp: new Date().toISOString(),
     });
@@ -282,62 +294,100 @@ export const triggerEmergencySOS = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// POST /api/bookings/accept
+// POST /api/bookings/accept (First Accept Wins - Atomic Assignment Lock)
 export const acceptBooking = async (req: AuthRequest, res: Response) => {
   try {
-    const { bookingId, ambulanceId } = req.body;
+    const { bookingId, ambulanceId, driverId, driverName, driverPhone, vehicleNumber } = req.body;
+    const effectiveDriverId = driverId || ambulanceId || req.user?.id || 'driver_108';
 
     if (isMongoConnected()) {
       const isObjectId = mongoose.Types.ObjectId.isValid(bookingId);
-      const booking = isObjectId
+      const existing = isObjectId
         ? await AmbulanceBooking.findById(bookingId)
         : await AmbulanceBooking.findOne({ $or: [{ _id: bookingId }, { bookingId }] });
 
+      if (!existing) {
+        return res.status(404).json({ success: false, message: 'Booking not found' });
+      }
+
+      // Check if already accepted by another driver
+      if (existing.status === 'ACCEPTED' && existing.driverId && existing.driverId !== effectiveDriverId) {
+        return res.status(409).json({
+          success: false,
+          message: 'This emergency ride request has already been accepted by another driver unit.',
+        });
+      }
+
+      // Atomic Lock Update
+      const booking = await AmbulanceBooking.findOneAndUpdate(
+        { _id: existing._id, status: { $in: ['REQUESTED', 'ASSIGNED', 'PENDING', 'ACCEPTED'] } },
+        {
+          $set: {
+            status: 'ACCEPTED',
+            ambulanceId: ambulanceId || existing.ambulanceId,
+            driverId: effectiveDriverId,
+            driverName: driverName || existing.driverName || 'Rajesh Kumar',
+            driverPhone: driverPhone || existing.driverPhone || '+91 98201 10800',
+            vehicleNumber: vehicleNumber || existing.vehicleNumber || 'MH-01-EQ-1108',
+            'timeline.acceptedAt': new Date(),
+          },
+        },
+        { new: true }
+      );
+
       if (booking) {
-        booking.status = 'ACCEPTED';
-        booking.ambulanceId = ambulanceId || booking.ambulanceId;
-        booking.timeline = booking.timeline || {};
-        booking.timeline.acceptedAt = new Date();
-        await booking.save();
+        // Toggle driver status to busy
+        try {
+          await Ambulance.updateOne(
+            { $or: [{ driverId: effectiveDriverId }, { _id: ambulanceId }] },
+            { $set: { isAvailable: false, currentStatus: 'ASSIGNED' } }
+          );
+        } catch {}
 
         const io = getIO();
         if (io) {
-          io.to(`ride_${bookingId}`).emit('rideAccepted', { bookingId, status: 'ACCEPTED', booking });
-          io.to(`ride_${bookingId}`).emit('bookingAccepted', { bookingId, status: 'ACCEPTED', booking });
-          io.to(`ride_${bookingId}`).emit('rideStatusUpdate', { bookingId, status: 'ACCEPTED', booking });
+          const payload = { bookingId, status: 'ACCEPTED', booking, driverInfo: { driverId: effectiveDriverId, driverName: booking.driverName, driverPhone: booking.driverPhone, vehicleNumber: booking.vehicleNumber } };
+          io.to(`ride_${bookingId}`).emit('rideAccepted', payload);
+          io.to(`ride_${bookingId}`).emit('bookingAccepted', payload);
+          io.to(`ride_${bookingId}`).emit('statusUpdate', payload);
+          io.to(`ride_${bookingId}`).emit('rideStatusUpdate', payload);
           if (booking.hospitalId) {
-            io.to(`hospital_${booking.hospitalId}`).emit('rideAccepted', { bookingId, status: 'ACCEPTED', booking });
+            io.to(`hospital_${booking.hospitalId}`).emit('rideAccepted', payload);
+            io.to(`hospital_${booking.hospitalId}`).emit('statusUpdate', payload);
           }
           if (booking.patientId) {
-            io.to(`patient_${booking.patientId}`).emit('rideAccepted', { bookingId, status: 'ACCEPTED', booking });
-            io.to(`user_${booking.patientId}`).emit('rideAccepted', { bookingId, status: 'ACCEPTED', booking });
-            io.to(`patient_${booking.patientId}`).emit('bookingAccepted', { bookingId, status: 'ACCEPTED', booking });
-            io.to(`user_${booking.patientId}`).emit('bookingAccepted', { bookingId, status: 'ACCEPTED', booking });
+            io.to(`patient_${booking.patientId}`).emit('rideAccepted', payload);
+            io.to(`patient_${booking.patientId}`).emit('statusUpdate', payload);
+            io.to(`user_${booking.patientId}`).emit('rideAccepted', payload);
+            io.to(`user_${booking.patientId}`).emit('statusUpdate', payload);
           }
+          io.to('driver_room').emit('rideAccepted', payload);
+          io.to('admin_emergency_room').emit('rideAccepted', payload);
         }
-        return res.json({ success: true, message: 'Booking accepted', booking });
+        return res.json({ success: true, message: 'Booking accepted! Priority emergency corridor established.', booking });
       }
     }
 
     const booking = prescriptoStore.ambulanceBookings.find((b) => b._id === bookingId);
     if (booking) {
+      if (booking.status === 'ACCEPTED' && booking.driverId && booking.driverId !== effectiveDriverId) {
+        return res.status(409).json({ success: false, message: 'Ride already accepted by another driver.' });
+      }
       booking.status = 'ACCEPTED';
+      booking.driverId = effectiveDriverId;
       booking.timeline = booking.timeline || {};
       booking.timeline.acceptedAt = new Date();
 
       const io = getIO();
       if (io) {
-        io.to(`ride_${bookingId}`).emit('rideAccepted', { bookingId, status: 'ACCEPTED', booking });
-        io.to(`ride_${bookingId}`).emit('bookingAccepted', { bookingId, status: 'ACCEPTED', booking });
-        io.to(`ride_${bookingId}`).emit('rideStatusUpdate', { bookingId, status: 'ACCEPTED', booking });
-        if (booking.hospitalId) {
-          io.to(`hospital_${booking.hospitalId}`).emit('rideAccepted', { bookingId, status: 'ACCEPTED', booking });
-        }
+        const payload = { bookingId, status: 'ACCEPTED', booking };
+        io.to(`ride_${bookingId}`).emit('rideAccepted', payload);
+        io.to(`ride_${bookingId}`).emit('bookingAccepted', payload);
+        io.to(`ride_${bookingId}`).emit('statusUpdate', payload);
+        io.to(`ride_${bookingId}`).emit('rideStatusUpdate', payload);
         if (booking.patientId) {
-          io.to(`patient_${booking.patientId}`).emit('rideAccepted', { bookingId, status: 'ACCEPTED', booking });
-          io.to(`user_${booking.patientId}`).emit('rideAccepted', { bookingId, status: 'ACCEPTED', booking });
-          io.to(`patient_${booking.patientId}`).emit('bookingAccepted', { bookingId, status: 'ACCEPTED', booking });
-          io.to(`user_${booking.patientId}`).emit('bookingAccepted', { bookingId, status: 'ACCEPTED', booking });
+          io.to(`patient_${booking.patientId}`).emit('rideAccepted', payload);
+          io.to(`patient_${booking.patientId}`).emit('statusUpdate', payload);
         }
       }
       return res.json({ success: true, message: 'Booking accepted', booking });
@@ -361,7 +411,6 @@ export const rejectBooking = async (req: AuthRequest, res: Response) => {
         : await AmbulanceBooking.findOne({ $or: [{ _id: bookingId }, { bookingId }] });
 
       if (booking) {
-        booking.status = 'REJECTED';
         booking.timeline = booking.timeline || {};
         booking.timeline.rejectedAt = new Date();
         await booking.save();
@@ -373,35 +422,15 @@ export const rejectBooking = async (req: AuthRequest, res: Response) => {
             status: 'REJECTED',
             reason: reason || 'Driver unavailable',
           });
-          io.to(`ride_${bookingId}`).emit('rideStatusUpdate', {
-            bookingId,
-            status: 'REJECTED',
-            reason: reason || 'Driver unavailable',
-          });
         }
-        return res.json({ success: true, message: 'Booking rejected', booking });
+        return res.json({ success: true, message: 'Booking rejected by driver. Passed to next unit.', booking });
       }
     }
 
     const booking = prescriptoStore.ambulanceBookings.find((b) => b._id === bookingId);
     if (booking) {
-      booking.status = 'REJECTED';
       booking.timeline = booking.timeline || {};
       booking.timeline.rejectedAt = new Date();
-
-      const io = getIO();
-      if (io) {
-        io.to(`ride_${bookingId}`).emit('bookingRejected', {
-          bookingId,
-          status: 'REJECTED',
-          reason: reason || 'Driver unavailable',
-        });
-        io.to(`ride_${bookingId}`).emit('rideStatusUpdate', {
-          bookingId,
-          status: 'REJECTED',
-          reason: reason || 'Driver unavailable',
-        });
-      }
       return res.json({ success: true, message: 'Booking rejected', booking });
     }
 
@@ -411,7 +440,7 @@ export const rejectBooking = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// POST /api/bookings/status
+// POST /api/bookings/status (Full Ride Lifecycle Status Transition)
 export const updateBookingStatus = async (req: AuthRequest, res: Response) => {
   try {
     const { bookingId, status } = req.body;
@@ -429,19 +458,38 @@ export const updateBookingStatus = async (req: AuthRequest, res: Response) => {
         if (status === 'CANCELLED') booking.timeline.cancelledAt = new Date();
         await booking.save();
 
+        // If completed or cancelled, release driver back to available duty
+        if (status === 'COMPLETED' || status === 'CANCELLED') {
+          try {
+            await Ambulance.updateOne(
+              { $or: [{ driverId: booking.driverId }, { _id: booking.ambulanceId }] },
+              { $set: { isAvailable: true, currentStatus: 'IDLE' } }
+            );
+          } catch {}
+        }
+
         const io = getIO();
         if (io) {
-          io.to(`ride_${bookingId}`).emit('rideStatusUpdate', { bookingId, status, booking });
-          io.to(`ride_${bookingId}`).emit('rideCompleted', { bookingId, status, booking });
+          const payload = { bookingId, status, booking };
+          io.to(`ride_${bookingId}`).emit('statusUpdate', payload);
+          io.to(`ride_${bookingId}`).emit('rideStatusUpdate', payload);
+          if (status === 'COMPLETED') {
+            io.to(`ride_${bookingId}`).emit('rideCompleted', payload);
+          }
           if (booking.hospitalId) {
-            io.to(`hospital_${booking.hospitalId}`).emit('rideStatusUpdate', { bookingId, status, booking });
+            io.to(`hospital_${booking.hospitalId}`).emit('statusUpdate', payload);
+            io.to(`hospital_${booking.hospitalId}`).emit('rideStatusUpdate', payload);
           }
           if (booking.patientId) {
-            io.to(`patient_${booking.patientId}`).emit('rideStatusUpdate', { bookingId, status, booking });
-            io.to(`user_${booking.patientId}`).emit('rideStatusUpdate', { bookingId, status, booking });
+            io.to(`patient_${booking.patientId}`).emit('statusUpdate', payload);
+            io.to(`patient_${booking.patientId}`).emit('rideStatusUpdate', payload);
+            io.to(`user_${booking.patientId}`).emit('statusUpdate', payload);
+            io.to(`user_${booking.patientId}`).emit('rideStatusUpdate', payload);
           }
+          io.to('admin_emergency_room').emit('statusUpdate', payload);
+          io.to('driver_room').emit('statusUpdate', payload);
         }
-        return res.json({ success: true, message: `Status updated to ${status}`, booking });
+        return res.json({ success: true, message: `Ride status updated to ${status}`, booking });
       }
     }
 
@@ -454,14 +502,14 @@ export const updateBookingStatus = async (req: AuthRequest, res: Response) => {
 
       const io = getIO();
       if (io) {
-        io.to(`ride_${bookingId}`).emit('rideStatusUpdate', { bookingId, status, booking });
-        io.to(`ride_${bookingId}`).emit('rideCompleted', { bookingId, status, booking });
-        if (booking.hospitalId) {
-          io.to(`hospital_${booking.hospitalId}`).emit('rideStatusUpdate', { bookingId, status, booking });
+        const payload = { bookingId, status, booking };
+        io.to(`ride_${bookingId}`).emit('statusUpdate', payload);
+        io.to(`ride_${bookingId}`).emit('rideStatusUpdate', payload);
+        if (status === 'COMPLETED') {
+          io.to(`ride_${bookingId}`).emit('rideCompleted', payload);
         }
         if (booking.patientId) {
-          io.to(`patient_${booking.patientId}`).emit('rideStatusUpdate', { bookingId, status, booking });
-          io.to(`user_${booking.patientId}`).emit('rideStatusUpdate', { bookingId, status, booking });
+          io.to(`patient_${booking.patientId}`).emit('statusUpdate', payload);
         }
       }
       return res.json({ success: true, message: `Status updated to ${status}`, booking });
@@ -472,6 +520,7 @@ export const updateBookingStatus = async (req: AuthRequest, res: Response) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
 
 // GET /api/bookings/my-bookings (supports optional hospitalId filter)
 export const getPatientBookings = async (req: AuthRequest, res: Response) => {

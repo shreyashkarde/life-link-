@@ -30,7 +30,7 @@ export const Login: React.FC<LoginProps> = ({ embedded = false, initialMode = 'L
   const navigate = useNavigate();
   const { backendUrl, setToken, setDToken, setAToken, showToast } = useApp();
 
-  // Role-based automatic redirect helper
+  // Role-based automatic redirect helper (Strict 3-Role System: Patient, Doctor, Driver)
   const handleRoleRouting = (role: string, targetToken: string) => {
     const normalizedRole = (role || 'PATIENT').toUpperCase();
 
@@ -49,27 +49,11 @@ export const Login: React.FC<LoginProps> = ({ embedded = false, initialMode = 'L
         navigate('/doctor/dashboard', { replace: true });
         break;
 
-      case 'ADMIN_HOSPITAL':
-      case 'HOSPITAL_ADMIN':
-        setAToken(targetToken);
-        sessionStorage.setItem('aToken', targetToken);
-        showToast('Welcome, Hospital Administrator! Redirecting to Hospital Desk...', 'success');
-        navigate('/hospital/dashboard', { replace: true });
-        break;
-
       case 'DRIVER':
         setToken(targetToken);
         sessionStorage.setItem('token', targetToken);
         showToast('Welcome, Paramedic Driver! Redirecting to Ambulance Dashboard...', 'success');
         navigate('/driver/dashboard', { replace: true });
-        break;
-
-      case 'SUPER_ADMIN':
-      case 'ADMIN':
-        setAToken(targetToken);
-        sessionStorage.setItem('aToken', targetToken);
-        showToast('Welcome, Super Administrator! Redirecting to Master Console...', 'success');
-        navigate('/super-admin/dashboard', { replace: true });
         break;
 
       case 'PATIENT':
@@ -120,13 +104,12 @@ export const Login: React.FC<LoginProps> = ({ embedded = false, initialMode = 'L
             'Registration successful! Please check your email inbox to verify your account.',
             'success'
           );
-          // If in dev/fallback with a direct preview, toast a notification
           setState('Login');
         } else {
           showToast(data.message || 'Registration failed', 'error');
         }
       } else {
-        // Unified single login for all 5 roles
+        // Secure email + password authentication
         const { data } = await apiClient.post('/api/auth/login', {
           email: email.trim().toLowerCase(),
           password,
@@ -152,40 +135,6 @@ export const Login: React.FC<LoginProps> = ({ embedded = false, initialMode = 'L
     } finally {
       setLoading(false);
     }
-  };
-
-  // 1-Click Fast Direct Role Login
-  const handleInstantLogin = async (targetEmail: string, targetPass: string) => {
-    setEmail(targetEmail);
-    setPassword(targetPass);
-    setState('Login');
-    setLoading(true);
-    setUnverifiedEmail(null);
-
-    try {
-      const { data } = await apiClient.post('/api/auth/login', {
-        email: targetEmail.trim().toLowerCase(),
-        password: targetPass,
-      });
-
-      if (data.success) {
-        handleRoleRouting(data.user?.role || 'PATIENT', data.token);
-      } else {
-        showToast(data.message || 'Login failed', 'error');
-      }
-    } catch (error: any) {
-      if (!error.response) {
-        showToast(`Cannot reach backend at ${getBackendUrl()}. Server may be booting up or check API URL.`, 'error');
-      } else {
-        showToast(error.response?.data?.message || 'Authentication error. Please check your credentials.', 'error');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fillRoleCredentials = (targetEmail: string, targetPass: string) => {
-    handleInstantLogin(targetEmail, targetPass);
   };
 
   return (
@@ -411,54 +360,6 @@ export const Login: React.FC<LoginProps> = ({ embedded = false, initialMode = 'L
                 )}
               </div>
             </form>
-
-            {/* 1-Click Fast 5-Role Credentials Switcher */}
-            <div className="max-w-sm mx-auto w-full pt-1">
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-black text-gray-500 uppercase tracking-wider flex items-center gap-1">
-                    <span>⚡</span> 1-Click Fast Test Logins (5 Roles):
-                  </p>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-[11px]">
-                  <button
-                    type="button"
-                    onClick={() => fillRoleCredentials('patient@prescripto.com', 'password123')}
-                    className="p-1.5 bg-white hover:bg-blue-50 hover:text-blue-700 rounded-lg border border-gray-200 font-semibold text-gray-700 text-left transition-colors flex items-center gap-1"
-                  >
-                    <span>👤</span> Patient
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => fillRoleCredentials('doc1@prescripto.com', 'doc123')}
-                    className="p-1.5 bg-white hover:bg-indigo-50 hover:text-indigo-700 rounded-lg border border-gray-200 font-semibold text-gray-700 text-left transition-colors flex items-center gap-1"
-                  >
-                    <span>👨‍⚕️</span> Doctor
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => fillRoleCredentials('hospital@prescripto.com', 'hospital123')}
-                    className="p-1.5 bg-white hover:bg-emerald-50 hover:text-emerald-700 rounded-lg border border-gray-200 font-semibold text-gray-700 text-left transition-colors flex items-center gap-1"
-                  >
-                    <span>🏥</span> Hospital
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => fillRoleCredentials('driver1@prescripto.com', 'driver123')}
-                    className="p-1.5 bg-white hover:bg-red-50 hover:text-red-700 rounded-lg border border-gray-200 font-semibold text-gray-700 text-left transition-colors flex items-center gap-1"
-                  >
-                    <span>🚑</span> Driver
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => fillRoleCredentials('admin@prescripto.com', 'admin123')}
-                    className="p-1.5 bg-white hover:bg-purple-50 hover:text-purple-700 rounded-lg border border-gray-200 font-semibold text-gray-700 text-left transition-colors flex items-center gap-1 sm:col-span-2"
-                  >
-                    <span>👑</span> Super Admin
-                  </button>
-                </div>
-              </div>
-            </div>
 
             {/* App Store & Google Play Badges */}
             <div className="max-w-sm mx-auto w-full pt-1">

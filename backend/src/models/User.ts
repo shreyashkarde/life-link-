@@ -1,6 +1,6 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
-export type UserRole = 'PATIENT' | 'DOCTOR' | 'DRIVER' | 'ADMIN_HOSPITAL' | 'SUPER_ADMIN';
+export type UserRole = 'PATIENT' | 'DOCTOR' | 'DRIVER';
 
 export interface IUserAddress {
   line1: string;
@@ -31,8 +31,6 @@ export interface IUser extends Document {
   loginAttempts?: number;
   lockUntil?: Date;
   refreshTokenHash?: string;
-  hospitalId?: string;
-  hospitalName?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -44,7 +42,7 @@ const userSchema = new Schema<IUser>(
     password: { type: String, required: false },
     role: {
       type: String,
-      enum: ['PATIENT', 'DOCTOR', 'DRIVER', 'ADMIN_HOSPITAL', 'SUPER_ADMIN'],
+      enum: ['PATIENT', 'DOCTOR', 'DRIVER'],
       default: 'PATIENT',
     },
     image: {
@@ -67,8 +65,6 @@ const userSchema = new Schema<IUser>(
     loginAttempts: { type: Number, default: 0 },
     lockUntil: { type: Date, required: false },
     refreshTokenHash: { type: String, required: false },
-    hospitalId: { type: String, default: 'hosp_lilavati', ref: 'Hospital' },
-    hospitalName: { type: String, default: 'Lilavati Hospital & Research Centre' },
   },
   { timestamps: true, minimize: false }
 );

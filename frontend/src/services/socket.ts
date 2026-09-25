@@ -229,21 +229,57 @@ class SocketService {
     return this.onDriverLocation(callback);
   }
 
-  // 📥 Listen to incoming dispatch bookings for drivers
-  public onNewBooking(callback: (booking: any) => void): () => void {
+  // 📥 Listen to incoming dispatch bookings for drivers (ambulanceRequest & newBooking)
+  public onAmbulanceRequest(callback: (booking: any) => void): () => void {
     const s = this.getSocket();
     if (s) {
+      s.off('ambulanceRequest');
       s.off('newBooking');
+      s.off('emergencyAlert');
       const handler = (booking: any) => {
-        console.log('🚑 [Socket.IO] Received newBooking event:', booking);
+        console.log('🚑 [Socket.IO] Received ambulanceRequest / newBooking event:', booking);
         callback(booking);
       };
+      s.on('ambulanceRequest', handler);
       s.on('newBooking', handler);
+      s.on('emergencyAlert', handler);
       return () => {
+        s.off('ambulanceRequest', handler);
         s.off('newBooking', handler);
+        s.off('emergencyAlert', handler);
       };
     }
     return () => {};
+  }
+
+  public onNewBooking(callback: (booking: any) => void): () => void {
+    return this.onAmbulanceRequest(callback);
+  }
+
+  // 🎯 Driver emits acceptRide
+  public acceptRide(payload: { bookingId: string; driverId?: string; driverName?: string; vehicleNumber?: string; [key: string]: any }): void {
+    const s = this.getSocket();
+    if (s) {
+      s.emit('acceptRide', payload);
+      s.emit('rideAccepted', payload);
+    }
+  }
+
+  // ❌ Driver emits rejectRide
+  public rejectRide(payload: { bookingId: string; reason?: string; [key: string]: any }): void {
+    const s = this.getSocket();
+    if (s) {
+      s.emit('rejectRide', payload);
+    }
+  }
+
+  // 🔄 Update Ride Status (EN_ROUTE, PATIENT_PICKED, COMPLETED, etc.)
+  public updateRideStatus(payload: { bookingId: string; status: string; patientId?: string; [key: string]: any }): void {
+    const s = this.getSocket();
+    if (s) {
+      s.emit('statusUpdate', payload);
+      s.emit('rideStatusUpdate', payload);
+    }
   }
 
   // 📥 Listen to ride accepted confirmation
@@ -270,21 +306,28 @@ class SocketService {
     return this.onRideAccepted(callback);
   }
 
-  // 📥 Listen to ride status lifecycle (ACCEPTED, EN_ROUTE_PICKUP, PATIENT_ONBOARD, COMPLETED, CANCELLED)
-  public onRideStatusUpdate(callback: (data: { bookingId: string; status: string; booking?: any }) => void): () => void {
+  // 📥 Listen to ride status lifecycle (REQUESTED, ASSIGNED, ACCEPTED, EN_ROUTE, PATIENT_PICKED, COMPLETED)
+  public onStatusUpdate(callback: (data: { bookingId: string; status: string; booking?: any }) => void): () => void {
     const s = this.getSocket();
     if (s) {
+      s.off('statusUpdate');
       s.off('rideStatusUpdate');
       const handler = (data: any) => {
-        console.log('🔄 [Socket.IO] Received rideStatusUpdate event:', data);
+        console.log('🔄 [Socket.IO] Received statusUpdate event:', data);
         callback(data);
       };
+      s.on('statusUpdate', handler);
       s.on('rideStatusUpdate', handler);
       return () => {
+        s.off('statusUpdate', handler);
         s.off('rideStatusUpdate', handler);
       };
     }
     return () => {};
+  }
+
+  public onRideStatusUpdate(callback: (data: { bookingId: string; status: string; booking?: any }) => void): () => void {
+    return this.onStatusUpdate(callback);
   }
 
   public onEmergencyAlert(callback: (data: any) => void): () => void {
@@ -318,6 +361,7 @@ class SocketService {
     }
     return () => {};
   }
+
 
   /**
    * 📱 Start continuous browser Geolocation watchPosition stream

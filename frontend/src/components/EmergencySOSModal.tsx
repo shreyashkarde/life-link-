@@ -42,25 +42,66 @@ export const EmergencySOSModal: React.FC<{ isOpen: boolean; onClose: () => void 
 
   // Socket room listener when a booking is active
   useEffect(() => {
-    if (activeBooking?._id) {
-      const room = `ride_${activeBooking._id}`;
+    if (activeBooking?._id || activeBooking?.bookingId) {
+      const bId = activeBooking._id || activeBooking.bookingId;
+      const room = `ride_${bId}`;
       socketService.joinRoom(room);
+      if (userData?._id) {
+        socketService.joinPatient(userData._id);
+      }
 
-      socketService.onLocationUpdate((payload) => {
-        setLiveLocation({ lat: payload.lat, lng: payload.lng, heading: payload.heading });
+      const unsubLocation = socketService.onLocationUpdate((payload) => {
+        setLiveLocation({ lat: payload.lat || payload.latitude, lng: payload.lng || payload.longitude, heading: payload.heading });
       });
 
-      socketService.onRideCompleted((payload) => {
-        showToast('Ambulance mission completed! Patient arrived at Hospital.', 'success');
+      const unsubAccepted = socketService.onRideAccepted((payload) => {
+        showToast('🚑 Driver accepted emergency dispatch! En route to pickup.', 'success');
+        setActiveBooking((prev: any) => ({
+          ...prev,
+          status: 'ACCEPTED',
+          driverName: payload.driverName || payload.driverInfo?.driverName || prev?.driverName,
+          driverPhone: payload.driverPhone || payload.driverInfo?.driverPhone || prev?.driverPhone,
+          vehicleNumber: payload.vehicleNumber || payload.driverInfo?.vehicleNumber || prev?.vehicleNumber,
+        }));
+      });
+
+      const unsubStatus = socketService.onStatusUpdate((payload) => {
+        if (payload?.status) {
+          setActiveBooking((prev: any) => ({
+            ...prev,
+            status: payload.status,
+            ...(payload.booking || {}),
+          }));
+          const messages: Record<string, string> = {
+            ACCEPTED: 'Ambulance dispatch accepted by paramedic team.',
+            EN_ROUTE: 'Ambulance is rushing to your pickup location with priority sirens.',
+            EN_ROUTE_PICKUP: 'Ambulance is rushing to your pickup location with priority sirens.',
+            PATIENT_PICKED: 'Patient safely onboard. Transit to trauma center in progress.',
+            PATIENT_ONBOARD: 'Patient safely onboard. Transit to trauma center in progress.',
+            COMPLETED: 'Arrived safely at hospital trauma resuscitation bay.',
+          };
+          if (messages[payload.status]) {
+            showToast(`🚑 ${messages[payload.status]}`, 'info');
+          }
+        }
+      });
+
+      const unsubCompleted = socketService.onRideCompleted((payload) => {
+        showToast('✓ Ambulance mission completed! Patient arrived at Hospital.', 'success');
         setActiveBooking((prev: any) => ({ ...prev, status: 'COMPLETED' }));
         setShowRating(true);
       });
 
       return () => {
         socketService.leaveRoom(room);
+        if (typeof unsubLocation === 'function') unsubLocation();
+        if (typeof unsubAccepted === 'function') unsubAccepted();
+        if (typeof unsubStatus === 'function') unsubStatus();
+        if (typeof unsubCompleted === 'function') unsubCompleted();
       };
     }
-  }, [activeBooking?._id]);
+  }, [activeBooking?._id, activeBooking?.bookingId, userData?._id]);
+
 
   // One-Click Emergency SOS Action
   const handleTriggerSOS = async () => {

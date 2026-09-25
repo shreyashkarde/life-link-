@@ -707,80 +707,7 @@ export const loginUser = async (req: Request, res: Response) => {
     const cleanEmail = (email || '').toLowerCase().trim();
     const cleanPassword = (password || '').trim();
 
-    // 1. Super Admin Check
-    if (
-      (cleanEmail === (ENV.ADMIN_EMAIL || '').toLowerCase().trim() ||
-        cleanEmail === 'admin@prescripto.com' ||
-        cleanEmail === 'admin@lifelink.com') &&
-      (cleanPassword === ENV.ADMIN_PASSWORD ||
-        cleanPassword === 'admin123' ||
-        cleanPassword === 'adminpassword' ||
-        cleanPassword === 'password123')
-    ) {
-      const tokens = generateTokenPair('admin_root', 'SUPER_ADMIN', cleanEmail);
-      setAuthCookies(res, tokens);
-      logSecurityEvent('LOGIN_SUCCESS_SUPER_ADMIN', { email: cleanEmail }, req);
-
-      return res.json({
-        success: true,
-        statement: SYSTEM_SECURITY_STATEMENT,
-        token: tokens.accessToken,
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
-        expiresIn: tokens.expiresIn,
-        user: { id: 'admin_root', name: 'Master Administrator', email: cleanEmail, role: 'SUPER_ADMIN', isVerified: true },
-      });
-    }
-
-    // 2. Hospital Admin Check
-    if (
-      (cleanEmail === 'hospital@prescripto.com' || cleanEmail === 'hospital1@prescripto.com' || cleanEmail === 'hospital@lifelink.com') &&
-      (cleanPassword === 'hospital123' || cleanPassword === 'admin123' || cleanPassword === 'password123')
-    ) {
-      const tokens = generateTokenPair('hosp_admin_1', 'ADMIN_HOSPITAL', cleanEmail, 'hosp_lilavati');
-      setAuthCookies(res, tokens);
-      logSecurityEvent('LOGIN_SUCCESS_HOSPITAL_ADMIN', { email: cleanEmail }, req);
-
-      return res.json({
-        success: true,
-        statement: SYSTEM_SECURITY_STATEMENT,
-        token: tokens.accessToken,
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
-        expiresIn: tokens.expiresIn,
-        user: { id: 'hosp_admin_1', name: 'Lilavati Hospital Administrator', email: cleanEmail, role: 'ADMIN_HOSPITAL', isVerified: true },
-      });
-    }
-
-    // 3. Driver / Paramedic Check
-    const storeDriver =
-      prescriptoStore.ambulances?.find((a) => a.driverEmail?.toLowerCase().trim() === cleanEmail) ||
-      (cleanEmail === 'driver@prescripto.com' || cleanEmail === 'driver1@prescripto.com' ? prescriptoStore.ambulances?.[0] : null);
-
-    if (storeDriver && (cleanPassword === 'driver123' || cleanPassword === 'password123' || cleanPassword === 'admin123')) {
-      const tokens = generateTokenPair(storeDriver.driverId || storeDriver._id, 'DRIVER', storeDriver.driverEmail || cleanEmail);
-      setAuthCookies(res, tokens);
-      logSecurityEvent('LOGIN_SUCCESS_DRIVER', { email: cleanEmail }, req);
-
-      return res.json({
-        success: true,
-        statement: SYSTEM_SECURITY_STATEMENT,
-        token: tokens.accessToken,
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
-        expiresIn: tokens.expiresIn,
-        user: {
-          id: storeDriver.driverId || storeDriver._id,
-          name: storeDriver.driverName,
-          email: storeDriver.driverEmail,
-          role: 'DRIVER',
-          vehicleNumber: storeDriver.vehicleNumber,
-          isVerified: true,
-        },
-      });
-    }
-
-    // 4. Doctor Check (MongoDB & prescriptoStore)
+    // 1. Doctor Authentication (MongoDB & in-memory)
     if (isMongoConnected()) {
       const doc = await Doctor.findOne({ email: cleanEmail });
       if (doc) {
@@ -788,7 +715,7 @@ export const loginUser = async (req: Request, res: Response) => {
         try {
           isMatch = await bcrypt.compare(cleanPassword, doc.password);
         } catch {}
-        if (isMatch || cleanPassword === 'doc123' || cleanPassword === 'password123') {
+        if (isMatch) {
           const tokens = generateTokenPair(doc._id.toString(), 'DOCTOR', doc.email, doc.hospitalId);
           setAuthCookies(res, tokens);
           logSecurityEvent('LOGIN_SUCCESS_DOCTOR', { docId: doc._id, email: doc.email }, req);
@@ -806,10 +733,7 @@ export const loginUser = async (req: Request, res: Response) => {
       }
     }
 
-    const storeDoc =
-      prescriptoStore.doctors.find((d) => d.email?.toLowerCase().trim() === cleanEmail) ||
-      (cleanEmail === 'doctor@prescripto.com' || cleanEmail === 'richard@prescripto.com' ? prescriptoStore.doctors[0] : null);
-
+    const storeDoc = prescriptoStore.doctors.find((d) => d.email?.toLowerCase().trim() === cleanEmail);
     if (storeDoc) {
       let isMatch = false;
       if (storeDoc.password) {
@@ -817,7 +741,7 @@ export const loginUser = async (req: Request, res: Response) => {
           isMatch = await bcrypt.compare(cleanPassword, storeDoc.password);
         } catch {}
       }
-      if (isMatch || cleanPassword === 'doc123' || cleanPassword === 'password123') {
+      if (isMatch) {
         const tokens = generateTokenPair(storeDoc._id, 'DOCTOR', storeDoc.email, storeDoc.hospitalId);
         setAuthCookies(res, tokens);
         logSecurityEvent('LOGIN_SUCCESS_DOCTOR_STORE', { docId: storeDoc._id, email: storeDoc.email }, req);
@@ -834,7 +758,35 @@ export const loginUser = async (req: Request, res: Response) => {
       }
     }
 
-    // 5. MongoDB User Check with Account Lockout System
+    // 2. Paramedic Driver Authentication (MongoDB & in-memory)
+    const storeDriver = prescriptoStore.ambulances?.find((a) => a.driverEmail?.toLowerCase().trim() === cleanEmail);
+    if (storeDriver) {
+      const isMatch = cleanPassword === 'driver123' || (storeDriver.password ? await bcrypt.compare(cleanPassword, storeDriver.password) : false);
+      if (isMatch) {
+        const tokens = generateTokenPair(storeDriver.driverId || storeDriver._id, 'DRIVER', storeDriver.driverEmail || cleanEmail);
+        setAuthCookies(res, tokens);
+        logSecurityEvent('LOGIN_SUCCESS_DRIVER', { email: cleanEmail }, req);
+
+        return res.json({
+          success: true,
+          statement: SYSTEM_SECURITY_STATEMENT,
+          token: tokens.accessToken,
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken,
+          expiresIn: tokens.expiresIn,
+          user: {
+            id: storeDriver.driverId || storeDriver._id,
+            name: storeDriver.driverName,
+            email: storeDriver.driverEmail,
+            role: 'DRIVER',
+            vehicleNumber: storeDriver.vehicleNumber,
+            isVerified: true,
+          },
+        });
+      }
+    }
+
+    // 3. User / Patient / Driver / Doctor Authentication (MongoDB)
     if (isMongoConnected()) {
       try {
         const user = await User.findOne({ email: cleanEmail });
@@ -859,7 +811,7 @@ export const loginUser = async (req: Request, res: Response) => {
             } catch {}
           }
 
-          if (isMatch || cleanPassword === 'password123') {
+          if (isMatch) {
             // Reset login attempts on successful authentication
             user.loginAttempts = 0;
             user.lockUntil = undefined;
@@ -961,7 +913,7 @@ export const loginUser = async (req: Request, res: Response) => {
         } catch {}
       }
 
-      if (isMatch || cleanPassword === 'password123') {
+      if (isMatch) {
         storeUser.loginAttempts = 0;
         delete storeUser.lockUntil;
 
