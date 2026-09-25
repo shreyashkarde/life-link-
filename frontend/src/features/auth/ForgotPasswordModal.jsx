@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { getBackendUrl } from '../../config/backendUrl';
 
 /**
  * 🔑 ForgotPasswordModal.jsx
@@ -18,7 +19,7 @@ export const ForgotPasswordModal = ({ isOpen, onClose }) => {
     try {
       setLoading(true);
       setStatus(null);
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const backendUrl = getBackendUrl();
       const res = await fetch(`${backendUrl}/api/auth/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

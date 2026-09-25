@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getBackendUrl } from '../../config/backendUrl';
 
 /**
  * 🚑 LiveTracking.jsx
@@ -14,7 +15,7 @@ export const LiveTracking = ({ bookingId = '', ambulanceId = '', onStatusChange 
 
   const fetchTracking = async () => {
     try {
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const backendUrl = getBackendUrl();
       const query = bookingId ? `bookingId=${bookingId}` : ambulanceId ? `ambulanceId=${ambulanceId}` : '';
       const res = await fetch(`${backendUrl}/api/tracking/live?${query}`);
       const data = await res.json();

@@ -3,6 +3,7 @@ import socketClient from '../realtime/socketClient';
 import { generateAppointmentReceiptPDF } from '../pdf/pdfGenerator';
 import NotificationService from '../notifications/NotificationService';
 import DashboardNavbar from '../../components/DashboardNavbar';
+import { getBackendUrl } from '../../config/backendUrl';
 
 /**
  * 👨‍⚕️ DoctorDashboard.jsx
@@ -37,7 +38,7 @@ export const DoctorDashboard = ({ initialDocId = 'doc1' }) => {
   const fetchDoctorAppointments = async () => {
     try {
       setLoading(true);
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const backendUrl = getBackendUrl();
       const res = await fetch(`${backendUrl}/api/realtime-appointments/doctor-appointments?docId=${docId}`);
       const data = await res.json();
       if (data.success) {
@@ -112,7 +113,7 @@ export const DoctorDashboard = ({ initialDocId = 'doc1' }) => {
   const handleUpdateStatus = async (appointmentId, newStatus) => {
     try {
       setActionLoading(appointmentId);
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const backendUrl = getBackendUrl();
       const res = await fetch(`${backendUrl}/api/realtime-appointments/update-status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

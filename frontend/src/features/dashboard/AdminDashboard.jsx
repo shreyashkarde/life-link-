@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import socketClient from '../realtime/socketClient';
 import { generateAppointmentReceiptPDF } from '../pdf/pdfGenerator';
 import DashboardNavbar from '../../components/DashboardNavbar';
+import { getBackendUrl } from '../../config/backendUrl';
 
 /**
  * 🛠️ AdminDashboard.jsx
@@ -29,7 +30,7 @@ export const AdminDashboard = () => {
   const fetchAdminData = async () => {
     try {
       setLoading(true);
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const backendUrl = getBackendUrl();
       // Fetch metrics
       const metricRes = await fetch(`${backendUrl}/api/realtime-appointments/admin-metrics`);
       const metricData = await metricRes.json();
@@ -89,7 +90,7 @@ export const AdminDashboard = () => {
   // Toggle Doctor Availability
   const handleToggleDoctorAvailability = async (docId) => {
     try {
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const backendUrl = getBackendUrl();
       const res = await fetch(`${backendUrl}/api/admin/change-availability`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -109,7 +110,7 @@ export const AdminDashboard = () => {
   // Admin Appointment Cancel / Complete Control
   const handleAppointmentAction = async (appointmentId, status) => {
     try {
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const backendUrl = getBackendUrl();
       const res = await fetch(`${backendUrl}/api/realtime-appointments/update-status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

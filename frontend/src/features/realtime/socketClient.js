@@ -1,4 +1,5 @@
 import { io } from 'socket.io-client';
+import { getBackendUrl } from '../../config/backendUrl';
 
 /**
  * 🔴 socketClient.js
@@ -8,7 +9,7 @@ import { io } from 'socket.io-client';
 class RealtimeSocketClient {
   constructor() {
     this.socket = null;
-    this.serverUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+    this.serverUrl = getBackendUrl();
     this.listeners = new Map();
     this.activeRooms = new Set();
     this.isConnected = false;

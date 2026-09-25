@@ -9,7 +9,7 @@ import soundService from '../../services/soundService';
 
 export const DriverDashboard: React.FC = () => {
   const { showToast, backendUrl, refreshVersion } = useApp();
-  const apiBase = backendUrl || 'http://localhost:5000';
+  const apiBase = backendUrl;
 
   const [isOnDuty, setIsOnDuty] = useState<boolean>(true);
   const [activeBooking, setActiveBooking] = useState<any>(null);

@@ -56,7 +56,9 @@ async function verifySystem() {
 
     // 3. SuperAdmin Overview & Hospital Listing
     console.log('\n3️⃣ Testing SuperAdmin Overview & Hospitals API...');
-    const overview = await axios.get(`${API_BASE}/api/superadmin/overview`);
+    const overview = await axios.get(`${API_BASE}/api/superadmin/overview`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
     console.log('   ✓ SuperAdmin Stats:', overview.data.stats);
 
     const hospitals = await axios.get(`${API_BASE}/api/hospitals`);

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getBackendUrl } from '../../config/backendUrl';
 
 /**
  * 🔑 GoogleLoginButton.jsx
@@ -22,7 +23,7 @@ export const GoogleLoginButton = ({ onSuccess, onError, customGmail = '' }) => {
         return;
       }
 
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const backendUrl = getBackendUrl();
       const res = await fetch(`${backendUrl}/api/auth/google-login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

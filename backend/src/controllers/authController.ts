@@ -555,6 +555,7 @@ export const forgotPassword = async (req: Request, res: Response) => {
         message: 'Password reset link sent! Please check your inbox (valid for 30 minutes).',
         statement: SYSTEM_SECURITY_STATEMENT,
         previewLink: emailResult.previewLink,
+        resetToken: rawResetToken,
         directResetLink: (emailResult as any).resetUrl || emailResult.previewLink,
       });
     }
@@ -584,6 +585,7 @@ export const forgotPassword = async (req: Request, res: Response) => {
       message: 'Password reset link sent! Please check your inbox (valid for 30 minutes).',
       statement: SYSTEM_SECURITY_STATEMENT,
       previewLink: emailResult.previewLink,
+      resetToken: rawResetToken,
       directResetLink: (emailResult as any).resetUrl || emailResult.previewLink,
     });
   } catch (error: any) {

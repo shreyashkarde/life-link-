@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getBackendUrl } from '../../config/backendUrl';
 
 /**
  * 📍 MapView.jsx
@@ -29,7 +30,7 @@ export const MapView = ({
     const loadMapData = async () => {
       try {
         setLoading(true);
-        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+        const backendUrl = getBackendUrl();
         // 1. Fetch nearby ambulances
         const ambRes = await fetch(`${backendUrl}/api/ambulance/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}&radiusKm=25`);
         const ambData = await ambRes.json();

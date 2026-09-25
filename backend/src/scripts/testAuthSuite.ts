@@ -41,7 +41,7 @@ async function runAuthTests() {
     const regRes = await axios.post(`${BASE_URL}/register`, {
       name: 'New Registered Patient',
       email: testRegEmail,
-      password: 'password123',
+      password: 'Password@123',
       role: 'PATIENT',
     });
     console.log('Registration response:', regRes.data.message);
@@ -70,7 +70,7 @@ async function runAuthTests() {
     console.log('\nTest 6: Resetting password using token...');
     const resetRes = await axios.post(`${BASE_URL}/reset-password`, {
       token: resetToken,
-      newPassword: 'newsecurepassword2026',
+      newPassword: 'NewPassword@2026',
     });
     if (resetRes.data.success) {
       console.log('✅ Passed:', resetRes.data.message);
@@ -82,7 +82,7 @@ async function runAuthTests() {
     console.log('\nTest 7: Logging in with updated password...');
     const loginRes = await axios.post(`${BASE_URL}/login`, {
       email: testRegEmail,
-      password: 'newsecurepassword2026',
+      password: 'NewPassword@2026',
     });
     if (loginRes.data.success && loginRes.data.token) {
       console.log('✅ Passed: Successfully logged in with new password. Role:', loginRes.data.user?.role);

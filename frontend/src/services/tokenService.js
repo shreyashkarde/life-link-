@@ -6,6 +6,8 @@
  * - Auto-refreshes expired access tokens silently via /api/auth/refresh
  */
 
+import { getBackendUrl } from '../config/backendUrl';
+
 let inMemoryAccessToken = null;
 let isRefreshing = false;
 let refreshSubscribers = [];
@@ -63,7 +65,7 @@ export class TokenManager {
     isRefreshing = true;
 
     try {
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const backendUrl = getBackendUrl();
       const res = await fetch(`${backendUrl}/api/auth/refresh`, {
         method: 'POST',
         credentials: 'include', // Transmits HTTP-only refreshToken cookie
@@ -129,7 +131,7 @@ export class TokenManager {
   static async logout() {
     this.clearAccessToken();
     try {
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const backendUrl = getBackendUrl();
       await fetch(`${backendUrl}/api/auth/logout`, {
         method: 'POST',
         credentials: 'include',

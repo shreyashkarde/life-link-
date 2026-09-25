@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import socketClient from '../realtime/socketClient';
+import { getBackendUrl } from '../../config/backendUrl';
 
 /**
  * 📍 useLiveLocation.js
@@ -69,7 +70,7 @@ export const useLiveLocation = ({
       });
       setLastUpdated(new Date());
 
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const backendUrl = getBackendUrl();
 
       // 1. Emit via WebSocket
       socketClient.emit('driverLocation', payload);
@@ -91,7 +92,7 @@ export const useLiveLocation = ({
 
   // Socket setup & room subscription
   useEffect(() => {
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+    const backendUrl = getBackendUrl();
     const socket = socketClient.getSocket();
 
     // 1. Join room based on role & identifiers

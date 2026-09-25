@@ -6,7 +6,7 @@ import { socketService } from '../../services/socket';
 
 export const HospitalAdminDashboard: React.FC = () => {
   const { showToast, backendUrl, token, doctors, getDoctorsData, refreshVersion } = useApp();
-  const apiBase = backendUrl || 'http://localhost:5000';
+  const apiBase = backendUrl;
 
   // Metrics & State
   const [icuBeds, setIcuBeds] = useState<number>(14);

@@ -8,7 +8,7 @@ import { socketService } from '../../services/socket';
 export const SuperAdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { aToken, token, backendUrl, showToast, doctors, getDoctorsData, clearAllSystemData, refreshVersion } = useApp();
-  const apiBase = backendUrl || 'http://localhost:5000';
+  const apiBase = backendUrl;
 
   const [dashData, setDashData] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(true);

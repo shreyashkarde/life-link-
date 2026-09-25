@@ -4,6 +4,7 @@ import socketClient from '../realtime/socketClient';
 import { generateAppointmentReceiptPDF } from '../pdf/pdfGenerator';
 import NotificationService from '../notifications/NotificationService';
 import DashboardNavbar from '../../components/DashboardNavbar';
+import { getBackendUrl } from '../../config/backendUrl';
 
 /**
  * 👤 PatientDashboard.jsx
@@ -29,7 +30,7 @@ export const PatientDashboard = ({ initialUserId = 'user_edward_101' }) => {
   const fetchAppointments = async () => {
     try {
       setLoading(true);
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const backendUrl = getBackendUrl();
       const res = await fetch(`${backendUrl}/api/realtime-appointments/patient-appointments?userId=${userId}`);
       const data = await res.json();
       if (data.success && data.appointments) {
@@ -101,7 +102,7 @@ export const PatientDashboard = ({ initialUserId = 'user_edward_101' }) => {
   const handleCancelAppointment = async (apptId) => {
     if (!window.confirm('Are you sure you want to cancel this consultation?')) return;
     try {
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const backendUrl = getBackendUrl();
       const res = await fetch(`${backendUrl}/api/realtime-appointments/update-status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
