@@ -11,6 +11,7 @@ import { initSocket } from './socket/socketHandler';
 import adminRouter from './routes/adminRoutes';
 import doctorRouter from './routes/doctorRoutes';
 import userRouter from './routes/userRoutes';
+import appointmentRouter from './routes/appointmentRoutes';
 
 // Smart Healthcare & Ambulance Dispatch Routes
 import authRouter from './routes/authRoutes';
@@ -117,6 +118,7 @@ app.use('/api/admin', adminRouter);
 app.use('/api/doctor', doctorRouter);
 app.use('/api/doctors', doctorRouter); // Friendly alias
 app.use('/api/user', userRouter);
+app.use('/api/appointments', appointmentRouter);
 
 // Smart Healthcare & Ambulance Dispatch Endpoints
 app.use('/api/auth', authRouter);

@@ -383,6 +383,20 @@ class SocketService {
     };
   }
 
+  // 🩺 Listen to real-time doctor availability status changes
+  public onDoctorAvailability(callback: (data: any) => void): () => void {
+    const s = this.getSocket();
+    if (s) {
+      s.on('doctorAvailabilityChanged', callback);
+      s.on('doctorStatus', callback);
+      return () => {
+        s.off('doctorAvailabilityChanged', callback);
+        s.off('doctorStatus', callback);
+      };
+    }
+    return () => {};
+  }
+
   public disconnect(): void {
     if (this.watchId !== null) {
       navigator.geolocation.clearWatch(this.watchId);

@@ -9,6 +9,7 @@ import { isMongoConnected } from '../config/db';
 import { prescriptoStore } from '../config/prescriptoStore';
 
 import { seedDefaultDoctorsToMongo } from '../config/prescriptoStore';
+import { emitDoctorAvailabilityChanged } from '../socket/socketHandler';
 
 // Public API to get doctor list for frontend display (supports strict ?hospitalId= filter & x-hospital-id header)
 export const doctorList = async (req: Request, res: Response): Promise<void> => {
@@ -16,20 +17,49 @@ export const doctorList = async (req: Request, res: Response): Promise<void> => 
     const hospitalId = (req.query.hospitalId as string) || (req.headers['x-hospital-id'] as string) || (req.query.hospital_id as string);
     const speciality = req.query.speciality as string;
 
+    const standardSlots = [
+      '10:00 am',
+      '10:30 am',
+      '11:00 am',
+      '11:30 am',
+      '12:00 pm',
+      '04:30 pm',
+      '05:00 pm',
+      '05:30 pm',
+      '06:00 pm',
+      '06:30 pm',
+    ];
+
     if (!isMongoConnected()) {
       let docs = prescriptoStore.doctors;
-      if (hospitalId && hospitalId !== 'ALL' && hospitalId !== 'all' && hospitalId !== 'hosp_lilavati') {
-        docs = docs.filter((d) => d.hospitalId === hospitalId);
+      if (hospitalId && hospitalId !== 'ALL' && hospitalId !== 'all') {
+        const hospitalMatch = docs.filter((d) => d.hospitalId === hospitalId);
+        if (hospitalMatch.length > 0) {
+          docs = hospitalMatch;
+        } else {
+          // Provide specialists mapped to this hospital
+          const hospName = prescriptoStore.hospitals.find((h) => h.id === hospitalId || h._id === hospitalId)?.name || 'Lilavati Hospital & Research Centre';
+          docs = docs.map((d) => ({
+            ...d,
+            hospitalId,
+            hospitalName: hospName,
+          }));
+        }
       }
       if (speciality && speciality !== 'All' && speciality !== 'ALL') {
         docs = docs.filter((d) => d.speciality?.toLowerCase() === speciality.toLowerCase());
       }
-      const doctors = docs.map(({ password, email, ...rest }) => rest);
+      const doctors = docs.map(({ password, email, ...rest }) => ({
+        ...rest,
+        availabilityStatus: rest.available !== false && (rest as any).isAvailable !== false ? 'Available' : 'Busy',
+        slots: standardSlots,
+        slots_booked: rest.slots_booked || {},
+      }));
       res.json({ success: true, count: doctors.length, hospitalId: hospitalId || 'ALL', doctors });
       return;
     }
 
-    // Ensure all 15 doctors are synchronized and updated in MongoDB
+    // Ensure doctors are synchronized in MongoDB
     await seedDefaultDoctorsToMongo();
 
     const filter: any = {};
@@ -44,7 +74,17 @@ export const doctorList = async (req: Request, res: Response): Promise<void> => 
       filter.speciality = { $regex: `^${speciality}$`, $options: 'i' };
     }
 
-    const doctors = await Doctor.find(filter).select(['-password', '-email']).sort({ createdAt: 1 });
+    const rawDocs = await Doctor.find(filter).select(['-password', '-email']).sort({ createdAt: 1 });
+    const doctors = rawDocs.map((d: any) => {
+      const docObj = d.toObject ? d.toObject() : d;
+      return {
+        ...docObj,
+        availabilityStatus: docObj.available !== false && docObj.isAvailable !== false ? 'Available' : 'Busy',
+        slots: standardSlots,
+        slots_booked: docObj.slots_booked || {},
+      };
+    });
+
     res.json({ success: true, count: doctors.length, hospitalId: hospitalId || 'ALL', doctors });
   } catch (error: any) {
     console.error('Doctor List Error:', error);
@@ -427,6 +467,17 @@ export const changeAvailablity = async (req: Request, res: Response): Promise<vo
       doc.available = newStatus;
       (doc as any).isAvailable = newStatus;
 
+      try {
+        emitDoctorAvailabilityChanged({
+          doctorId: docId,
+          hospitalId: (doc as any).hospitalId,
+          available: newStatus,
+          isAvailable: newStatus,
+        });
+      } catch {
+        // Non-blocking
+      }
+
       res.json({
         success: true,
         message: `Doctor status updated to ${newStatus ? 'Available 🟢' : 'Not Available 🔴'}`,
@@ -448,6 +499,17 @@ export const changeAvailablity = async (req: Request, res: Response): Promise<vo
     doc.available = newStatus;
     doc.isAvailable = newStatus;
     await doc.save();
+
+    try {
+      emitDoctorAvailabilityChanged({
+        doctorId: docId,
+        hospitalId: (doc as any).hospitalId,
+        available: newStatus,
+        isAvailable: newStatus,
+      });
+    } catch {
+      // Non-blocking
+    }
 
     res.json({
       success: true,

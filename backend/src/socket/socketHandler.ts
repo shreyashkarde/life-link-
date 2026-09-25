@@ -412,3 +412,18 @@ export const emitAppointmentCancelled = (appointment: any) => {
   ioInstance.emit('appointmentCancelled', appointment);
 };
 
+export const emitDoctorAvailabilityChanged = (payload: {
+  doctorId: string;
+  hospitalId?: string;
+  isAvailable?: boolean;
+  available?: boolean;
+  slots_booked?: any;
+}) => {
+  if (!ioInstance || !payload) return;
+  ioInstance.emit('doctorAvailabilityChanged', payload);
+  ioInstance.emit('doctorStatus', payload);
+  if (payload.hospitalId) {
+    ioInstance.to(`hospital_${payload.hospitalId}`).emit('doctorAvailabilityChanged', payload);
+  }
+};
+

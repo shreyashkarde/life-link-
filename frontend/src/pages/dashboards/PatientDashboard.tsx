@@ -11,6 +11,7 @@ import { socketService } from '../../services/socket';
 import soundService from '../../services/soundService';
 import DigitalPrescriptionModal, { PrescriptionData } from '../../components/DigitalPrescriptionModal';
 import AiTriageModal from '../../features/triage/AiTriageModal';
+import SmartHospitalSearchBooking from '../../features/hospitals/SmartHospitalSearchBooking';
 
 interface HospitalInfo {
   id: string;
@@ -560,153 +561,17 @@ export const PatientDashboard: React.FC = () => {
         {/* ========================================================================= */}
         {/* 3. HOSPITAL SELECTION & NEAREST HOSPITAL SECTION                         */}
         {/* ========================================================================= */}
-        <section id="hospital-selection-section" className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-100 shadow-xs space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xl">🏥</span>
-                <h2 className="text-lg font-bold text-[#0F172A] tracking-tight">
-                  Choose Hospital & Nearest Healthcare Hub
-                </h2>
-              </div>
-              <p className="text-xs text-[#64748B] mt-0.5">
-                Select your preferred hospital to view specialist doctors and book in-clinic appointments directly.
-              </p>
-            </div>
-
-            {/* GPS Nearest Detector Button */}
-            <button
-              onClick={detectNearestHospital}
-              disabled={isLocating}
-              className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-2 self-start sm:self-auto cursor-pointer active:scale-98 disabled:opacity-50"
-            >
-              <span className={`text-sm ${isLocating ? 'animate-spin' : 'animate-pulse'}`}>📍</span>
-              <span>{isLocating ? 'Locating GPS...' : 'Auto-Detect Nearest (GPS)'}</span>
-            </button>
-          </div>
-
-          {/* Hospital Cards Horizontal Scroll / Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {/* "All Partner Hospitals" Card */}
-            <div
-              onClick={() => setSelectedHospitalId('ALL')}
-              className={`p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between ${
-                selectedHospitalId === 'ALL'
-                  ? 'border-blue-600 bg-blue-50/50 ring-2 ring-blue-500/20 shadow-xs'
-                  : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/40'
-              }`}
-            >
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-2xl">🌐</span>
-                  {selectedHospitalId === 'ALL' && (
-                    <span className="text-[10px] font-extrabold bg-blue-600 text-white px-2 py-0.5 rounded-full">
-                      Selected ✓
-                    </span>
-                  )}
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-[#0F172A]">All Partner Hospitals</h3>
-                  <p className="text-[11px] text-[#64748B] mt-0.5">
-                    Browse all verified specialist doctors across the complete city healthcare network.
-                  </p>
-                </div>
-              </div>
-              <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-blue-600 font-semibold">
-                <span>{hospitals.length} Apex Centers</span>
-                <span>{doctors.length} Doctors</span>
-              </div>
-            </div>
-
-            {/* Individual Hospital Cards */}
-            {hospitals.map((hosp) => {
-              const isSelected = selectedHospitalId === hosp.id || selectedHospitalId === hosp._id;
-              const isClosest = nearestHospital && (nearestHospital.id === hosp.id || nearestHospital._id === hosp._id);
-
-              return (
-                <div
-                  key={hosp.id || hosp._id}
-                  onClick={() => setSelectedHospitalId(hosp.id || hosp._id || 'hosp_lilavati')}
-                  className={`p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between ${
-                    isSelected
-                      ? 'border-blue-600 bg-blue-50/50 ring-2 ring-blue-500/20 shadow-xs'
-                      : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/40'
-                  }`}
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xl">🏥</span>
-                        {isClosest && (
-                          <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
-                            Closest to You
-                          </span>
-                        )}
-                      </div>
-                      {isSelected && (
-                        <span className="text-[10px] font-extrabold bg-blue-600 text-white px-2 py-0.5 rounded-full">
-                          Selected ✓
-                        </span>
-                      )}
-                    </div>
-
-                    <div>
-                      <h3 className="text-sm font-bold text-[#0F172A] line-clamp-1">{hosp.name}</h3>
-                      <p className="text-[11px] text-[#64748B] line-clamp-1 mt-0.5">{hosp.address}</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-3 pt-2.5 border-t border-slate-100 space-y-1 text-[11px]">
-                    <div className="flex items-center justify-between text-[#64748B]">
-                      <span className="font-semibold text-slate-700">
-                        📍 {hosp.distanceKm ? `${hosp.distanceKm} km away` : '1.2 km'}
-                      </span>
-                      <span className="text-blue-700 font-bold">
-                        {hosp.estimatedDriveMinutes ? `~${hosp.estimatedDriveMinutes} mins` : '~4 mins'}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-[#64748B]">
-                      <span className="text-[10px] text-slate-500">{hosp.traumaLevel || 'Level 1 Trauma'}</span>
-                      <span className="text-[10px] font-bold text-emerald-700">
-                        🛏️ {hosp.icuBedsAvailable ?? 14} ICU Beds
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Active Hospital Live Overview Strip */}
-          {activeHospital && (
-            <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-900 to-indigo-900 text-white shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">🏥</span>
-                  <h3 className="text-sm font-bold text-white">{activeHospital.name}</h3>
-                  <span className="text-[10px] bg-blue-500/30 text-blue-200 border border-blue-400/30 px-2 py-0.5 rounded-full font-semibold">
-                    {activeHospital.traumaLevel || 'Level 1 Apex Center'}
-                  </span>
-                </div>
-                <p className="text-xs text-blue-200">
-                  {activeHospital.address} • Phone: <strong className="text-white">{activeHospital.contactPhone || activeHospital.phone || '+91 22 2675 1000'}</strong>
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2 text-xs">
-                <span className="px-3 py-1 bg-white/10 rounded-xl text-emerald-300 font-bold border border-white/15">
-                  🛏️ {activeHospital.icuBedsAvailable ?? 14} ICU Beds Ready
-                </span>
-                <button
-                  onClick={() => setSelectedHospitalId('ALL')}
-                  className="px-3 py-1 bg-white/20 hover:bg-white/30 text-white rounded-xl font-bold cursor-pointer transition-colors"
-                >
-                  Clear Filter ✕
-                </button>
-              </div>
-            </div>
-          )}
+        {/* ========================================================================= */}
+        {/* 3. SMART HOSPITAL SEARCH + DOCTOR BOOKING + DIRECTION SYSTEM (Google Maps + Practo) */}
+        {/* ========================================================================= */}
+        <section id="hospital-selection-section" className="space-y-4">
+          <SmartHospitalSearchBooking
+            initialHospitalId={selectedHospitalId !== 'ALL' ? selectedHospitalId : undefined}
+            onAppointmentBooked={() => {
+              fetchDashboardData();
+              getDoctorsData();
+            }}
+          />
         </section>
 
         {/* ========================================================================= */}

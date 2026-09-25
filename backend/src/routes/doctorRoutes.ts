@@ -17,6 +17,7 @@ const doctorRouter = express.Router();
 
 // Public doctor directory
 doctorRouter.get('/list', doctorList);
+doctorRouter.get('/', doctorList);
 
 // Doctor auth & panel routes
 doctorRouter.post('/login', loginDoctor);
