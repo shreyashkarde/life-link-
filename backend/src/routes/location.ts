@@ -8,16 +8,33 @@ const locationRouter = express.Router();
 /**
  * 📍 POST /api/location/update
  * Updates live GPS coordinates for driver or patient.
- * Emits strictly to assigned patient or ride room.
+ * Emits strictly to assigned patient or ride room and broadcasts for low latency.
  */
 locationRouter.post('/update', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { userId, role, latitude, longitude, heading = 0, speed = 0, bookingId, patientId } = req.body;
+    const {
+      userId,
+      driverId,
+      role = 'driver',
+      latitude: rawLat,
+      longitude: rawLng,
+      lat,
+      lng,
+      heading = 0,
+      speed = 0,
+      bookingId,
+      patientId,
+      hospitalId,
+    } = req.body;
 
-    if (!userId || !role || typeof latitude !== 'number' || typeof longitude !== 'number') {
+    const effectiveUserId = (userId || driverId || 'driver_108').trim();
+    const latitude = typeof rawLat === 'number' ? rawLat : typeof lat === 'number' ? lat : null;
+    const longitude = typeof rawLng === 'number' ? rawLng : typeof lng === 'number' ? lng : null;
+
+    if (!effectiveUserId || latitude === null || longitude === null) {
       res.status(400).json({
         success: false,
-        message: 'Invalid location payload. userId, role, latitude, and longitude are required.',
+        message: 'Invalid location payload. latitude and longitude numbers are required.',
       });
       return;
     }
@@ -33,22 +50,27 @@ locationRouter.post('/update', async (req: Request, res: Response): Promise<void
 
     const now = new Date();
     const locationData = {
-      userId,
-      role: role as 'patient' | 'driver',
+      userId: effectiveUserId,
+      role: (role as 'patient' | 'driver') || 'driver',
       latitude,
       longitude,
-      heading,
-      speed,
+      heading: Number(heading) || 0,
+      speed: Number(speed) || 0,
       updatedAt: now,
     };
 
     // 1. Update in-memory telemetry store for instant microsecond lookup
-    memoryLocationStore.set(userId, locationData);
+    memoryLocationStore.set(effectiveUserId, locationData);
+    if (driverId) {
+      memoryLocationStore.set(driverId, locationData);
+    }
+    // Always keep driver_108 synced as the primary active 108 emergency ambulance
+    memoryLocationStore.set('driver_108', locationData);
 
     // 2. Persist to MongoDB Location collection if connected
     try {
       await Location.findOneAndUpdate(
-        { userId },
+        { userId: effectiveUserId },
         { ...locationData, updatedAt: now },
         { upsert: true, new: true }
       );
@@ -56,31 +78,49 @@ locationRouter.post('/update', async (req: Request, res: Response): Promise<void
       // Non-blocking in-memory fallback
     }
 
-    // 3. Emit real-time Socket event STRICTLY to designated room
+    // 3. Emit real-time Socket event to designated rooms and broadcast
     const io = getIO();
     if (io) {
       const payload = {
-        userId,
-        role,
+        userId: effectiveUserId,
+        driverId: driverId || effectiveUserId,
+        role: locationData.role,
         latitude,
         longitude,
-        heading,
-        speed,
+        lat: latitude,
+        lng: longitude,
+        heading: locationData.heading,
+        speed: locationData.speed,
         bookingId,
+        patientId,
+        hospitalId,
         timestamp: now.toISOString(),
       };
 
       // Emit to ride room if trip active
       if (bookingId) {
         io.to(`ride_${bookingId}`).emit('locationUpdate', payload);
+        io.to(`ride_${bookingId}`).emit('driverLocation', payload);
       }
       // Emit to patient room
       if (patientId) {
         io.to(`patient_${patientId}`).emit('locationUpdate', payload);
+        io.to(`patient_${patientId}`).emit('driverLocation', payload);
         io.to(`user_${patientId}`).emit('locationUpdate', payload);
+        io.to(`user_${patientId}`).emit('driverLocation', payload);
+      }
+      // Emit to hospital room
+      if (hospitalId) {
+        io.to(`hospital_${hospitalId}`).emit('locationUpdate', payload);
+        io.to(`hospital_${hospitalId}`).emit('driverLocation', payload);
       }
       // Emit to driver's own room
-      io.to(`driver_${userId}`).emit('locationUpdate', payload);
+      io.to(`driver_${effectiveUserId}`).emit('locationUpdate', payload);
+      io.to(`driver_${effectiveUserId}`).emit('driverLocation', payload);
+
+      // Global low-latency broadcast for all tracking consumers
+      io.emit('driverLocation', payload);
+      io.emit('locationUpdate', payload);
     }
 
     res.json({
@@ -105,8 +145,8 @@ locationRouter.get('/:userId', async (req: Request, res: Response): Promise<void
   try {
     const { userId } = req.params;
 
-    // 1. Check memory store first
-    const cached = memoryLocationStore.get(userId);
+    // 1. Check memory store first for instant microsecond response
+    const cached = memoryLocationStore.get(userId) || (userId !== 'driver_108' ? memoryLocationStore.get('driver_108') : null);
     if (cached) {
       res.json({
         success: true,
@@ -140,6 +180,8 @@ locationRouter.get('/:userId', async (req: Request, res: Response): Promise<void
         role: 'driver',
         latitude: 19.0522,
         longitude: 72.8295,
+        lat: 19.0522,
+        lng: 72.8295,
         heading: 45,
         speed: 0,
         updatedAt: new Date(),
@@ -154,6 +196,8 @@ locationRouter.get('/:userId', async (req: Request, res: Response): Promise<void
         role: 'driver',
         latitude: 19.0522,
         longitude: 72.8295,
+        lat: 19.0522,
+        lng: 72.8295,
         heading: 45,
         speed: 0,
         updatedAt: new Date(),
@@ -169,8 +213,8 @@ locationRouter.get('/:userId', async (req: Request, res: Response): Promise<void
 locationRouter.get('/trip/:bookingId', async (req: Request, res: Response): Promise<void> => {
   try {
     const { bookingId } = req.params;
+    const liveDriver = memoryLocationStore.get('driver_108');
 
-    // Fetch trip details from memory or default
     res.json({
       success: true,
       bookingId,
@@ -183,12 +227,15 @@ locationRouter.get('/trip/:bookingId', async (req: Request, res: Response): Prom
         driverId: 'driver_108',
         name: 'Rajesh Kumar',
         vehicleNumber: 'MH-01-EQ-1108',
-        latitude: 19.0522,
-        longitude: 72.8295,
+        latitude: liveDriver?.latitude ?? 19.0522,
+        longitude: liveDriver?.longitude ?? 72.8295,
+        heading: liveDriver?.heading ?? 45,
+        speed: liveDriver?.speed ?? 0,
         status: 'EN_ROUTE_PICKUP',
       },
     });
   } catch (error: any) {
+    const liveDriver = memoryLocationStore.get('driver_108');
     res.status(200).json({
       success: true,
       bookingId: req.params.bookingId || 'booking_default',
@@ -201,8 +248,10 @@ locationRouter.get('/trip/:bookingId', async (req: Request, res: Response): Prom
         driverId: 'driver_108',
         name: 'Rajesh Kumar',
         vehicleNumber: 'MH-01-EQ-1108',
-        latitude: 19.0522,
-        longitude: 72.8295,
+        latitude: liveDriver?.latitude ?? 19.0522,
+        longitude: liveDriver?.longitude ?? 72.8295,
+        heading: liveDriver?.heading ?? 45,
+        speed: liveDriver?.speed ?? 0,
         status: 'EN_ROUTE_PICKUP',
       },
     });

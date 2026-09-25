@@ -1,21 +1,45 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import socketClient from '../realtime/socketClient';
-import { getBackendUrl } from '../../config/backendUrl';
+import socketService from '../../services/socket';
+import apiClient from '../../services/apiClient';
+
+// Haversine formula distance calculation in km
+export const calculateDistance = (lat1, lon1, lat2, lon2) => {
+  if (!lat1 || !lon1 || !lat2 || !lon2) return null;
+  const R = 6371; // Earth's radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c * 100) / 100;
+};
+
+// Compute dynamic bearing/heading angle (0–360°) between two coordinates
+export const calculateBearing = (lat1, lon1, lat2, lon2) => {
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+  const y = Math.sin(Δλ) * Math.cos(φ2);
+  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  const θ = Math.atan2(y, x);
+  return (Math.round((θ * 180) / Math.PI) + 360) % 360;
+};
 
 /**
  * 📍 useLiveLocation.js
  * Custom React Hook for Real-Time Dynamic Location & Ambulance Tracking
- * - Connects strictly to room-based channels: `ride_${bookingId}`, `patient_${patientId}`, `driver_${driverId}`
- * - Listens for real-time `locationUpdate`, `driverConnected`, `trackingStart`
- * - Streams GPS updates to backend without manual page refreshes
- * - Calculates dynamic distance and ETA based on coordinates
  */
 export const useLiveLocation = ({
   userId,
-  role = 'patient', // 'patient' | 'driver'
+  role = 'patient',
   bookingId = null,
   patientId = null,
   driverId = null,
+  hospitalId = 'hosp_lilavati',
   autoWatchGps = false,
 } = {}) => {
   const [currentLocation, setCurrentLocation] = useState(null);
@@ -24,120 +48,230 @@ export const useLiveLocation = ({
   const [etaMinutes, setEtaMinutes] = useState(null);
   const [distanceKm, setDistanceKm] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
-  const watchIdRef = useRef(null);
+  const [isBroadcasting, setIsBroadcasting] = useState(false);
+  const [gpsAccuracy, setGpsAccuracy] = useState(null);
+  const [pingsSent, setPingsSent] = useState(0);
+  const [gpsError, setGpsError] = useState(null);
 
-  // Haversine formula distance calculation
-  const calculateDistance = (lat1, lon1, lat2, lon2) => {
-    if (!lat1 || !lon1 || !lat2 || !lon2) return null;
-    const R = 6371; // Earth's radius in km
-    const dLat = ((lat2 - lat1) * Math.PI) / 180;
-    const dLon = ((lon2 - lon1) * Math.PI) / 180;
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos((lat1 * Math.PI) / 180) *
-        Math.cos((lat2 * Math.PI) / 180) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return Math.round(R * c * 10) / 10;
-  };
+  const watchIdRef = useRef(null);
+  const heartbeatIntervalRef = useRef(null);
+  const lastSentTimeRef = useRef(0);
+  const lastCoordsRef = useRef(null);
 
   // Helper to send live location updates to backend and socket
   const updateLocation = useCallback(
     async (coords) => {
       if (!coords || typeof coords.latitude !== 'number' || typeof coords.longitude !== 'number') return;
 
+      const effectiveDriverId = driverId || userId || 'driver_108';
+      const heading = typeof coords.heading === 'number' && !isNaN(coords.heading) ? coords.heading : 0;
+      const speed = typeof coords.speed === 'number' && !isNaN(coords.speed) ? coords.speed : 0;
+
       const payload = {
-        userId: userId || driverId || 'driver_108',
+        userId: userId || effectiveDriverId,
+        driverId: effectiveDriverId,
         role,
         latitude: coords.latitude,
         longitude: coords.longitude,
         lat: coords.latitude,
         lng: coords.longitude,
-        heading: coords.heading || 0,
-        speed: coords.speed || 0,
+        heading,
+        speed,
         bookingId,
         patientId,
-        hospitalId: 'hosp_lilavati',
+        hospitalId,
+        timestamp: new Date().toISOString(),
       };
 
+      const now = new Date();
       setCurrentLocation({
         latitude: coords.latitude,
         longitude: coords.longitude,
-        heading: coords.heading || 0,
-        speed: coords.speed || 0,
-        updatedAt: new Date(),
+        lat: coords.latitude,
+        lng: coords.longitude,
+        heading,
+        speed,
+        accuracy: coords.accuracy,
+        updatedAt: now,
       });
-      setLastUpdated(new Date());
+      setLastUpdated(now);
+      if (coords.accuracy !== undefined) {
+        setGpsAccuracy(coords.accuracy);
+      }
+      setPingsSent((prev) => prev + 1);
 
-      const backendUrl = getBackendUrl();
+      // 1. Emit via WebSocket with low latency
+      socketService.emitDriverLocation(payload);
 
-      // 1. Emit via WebSocket
-      socketClient.emit('driverLocation', payload);
-      socketClient.emit('locationUpdate', payload);
-
-      // 2. Persist via REST API
+      // 2. Persist via REST API (non-blocking)
       try {
-        await fetch(`${backendUrl}/api/location/update`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+        await apiClient.post('/api/location/update', {
+          ...payload,
+          role: 'driver',
         });
-      } catch (err) {
+      } catch {
         // Non-blocking telemetry
       }
     },
-    [userId, role, bookingId, patientId, driverId]
+    [userId, bookingId, patientId, driverId, hospitalId, role]
   );
+
+  // 📡 Start Hardware Geolocation Broadcaster (watchPosition)
+  const startBroadcasting = useCallback(() => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      setGpsError('Geolocation API not supported by device');
+      return;
+    }
+
+    setGpsError(null);
+    setIsBroadcasting(true);
+
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+    }
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        const now = Date.now();
+        const currentLat = pos.coords.latitude;
+        const currentLng = pos.coords.longitude;
+        const currentAccuracy = pos.coords.accuracy;
+
+        let heading = pos.coords.heading;
+        if (heading === null || isNaN(heading) || heading === 0) {
+          if (lastCoordsRef.current) {
+            const dist = calculateDistance(
+              lastCoordsRef.current.lat,
+              lastCoordsRef.current.lng,
+              currentLat,
+              currentLng
+            );
+            if (dist && dist > 0.003) {
+              heading = calculateBearing(
+                lastCoordsRef.current.lat,
+                lastCoordsRef.current.lng,
+                currentLat,
+                currentLng
+              );
+            } else {
+              heading = lastCoordsRef.current.heading;
+            }
+          } else {
+            heading = 0;
+          }
+        }
+
+        const speedKmh = pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : 0;
+
+        // Throttle updates: send every 2 to 3 seconds
+        if (now - lastSentTimeRef.current >= 2200) {
+          lastSentTimeRef.current = now;
+          lastCoordsRef.current = { lat: currentLat, lng: currentLng, heading: heading || 0 };
+
+          updateLocation({
+            latitude: currentLat,
+            longitude: currentLng,
+            heading: heading || 0,
+            speed: speedKmh,
+            accuracy: Math.round(currentAccuracy * 10) / 10,
+          });
+        }
+      },
+      (err) => {
+        setGpsError(err.message);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 8000,
+        maximumAge: 0,
+      }
+    );
+
+    // 💓 Heartbeat interval: if stationary, keep heartbeat active
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+    }
+    heartbeatIntervalRef.current = setInterval(() => {
+      const now = Date.now();
+      if (now - lastSentTimeRef.current >= 2500 && lastCoordsRef.current) {
+        lastSentTimeRef.current = now;
+        updateLocation({
+          latitude: lastCoordsRef.current.lat,
+          longitude: lastCoordsRef.current.lng,
+          heading: lastCoordsRef.current.heading,
+          speed: 0,
+          accuracy: 5,
+        });
+      }
+    }, 2500);
+  }, [updateLocation]);
+
+  const stopBroadcasting = useCallback(() => {
+    setIsBroadcasting(false);
+    if (watchIdRef.current !== null && typeof navigator !== 'undefined' && navigator.geolocation) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+      heartbeatIntervalRef.current = null;
+    }
+  }, []);
 
   // Socket setup & room subscription
   useEffect(() => {
-    const backendUrl = getBackendUrl();
-    const socket = socketClient.getSocket();
+    const socket = socketService.connect();
 
-    // 1. Join room based on role & identifiers
-    if (bookingId) {
-      socketClient.joinRoom(`ride_${bookingId}`);
-    }
-    if (patientId) {
-      socketClient.joinRoom(`patient_${patientId}`);
-    }
+    if (bookingId) socketService.joinRide(bookingId);
+    if (patientId) socketService.joinPatient(patientId);
+    if (hospitalId) socketService.joinHospital(hospitalId);
     if (driverId) {
-      socketClient.joinRoom(`driver_${driverId}`);
-      socket.emit('driverConnected', { driverId, hospitalId: 'hosp_lilavati' });
+      socketService.joinDriver(driverId);
+      socket.emit('driverConnected', { driverId, hospitalId });
     }
 
-    // 2. Initial fetch from dynamic API
     const targetUser = role === 'patient' ? driverId || 'driver_108' : userId || driverId || 'driver_108';
-    fetch(`${backendUrl}/api/location/${targetUser}`)
-      .then((r) => r.json())
-      .then((res) => {
-        if (res.success && res.location) {
-          setCurrentLocation({
-            latitude: res.location.latitude,
-            longitude: res.location.longitude,
-            heading: res.location.heading || 0,
-            speed: res.location.speed || 0,
-            updatedAt: new Date(res.location.updatedAt),
+    const pollLocationFromAPI = async () => {
+      try {
+        const res = await apiClient.get(`/api/location/${targetUser}`);
+        if (res.data?.success && res.data.location) {
+          const loc = res.data.location;
+          setCurrentLocation((prev) => {
+            const apiUpdated = loc.updatedAt ? new Date(loc.updatedAt).getTime() : Date.now();
+            const prevUpdated = prev?.updatedAt ? new Date(prev.updatedAt).getTime() : 0;
+            if (apiUpdated >= prevUpdated || !prev) {
+              return {
+                latitude: loc.latitude,
+                longitude: loc.longitude,
+                lat: loc.latitude,
+                lng: loc.longitude,
+                heading: loc.heading || 0,
+                speed: loc.speed || 0,
+                updatedAt: new Date(loc.updatedAt || Date.now()),
+              };
+            }
+            return prev;
           });
-          setTrackingStatus('TRACKING_ACTIVE');
+          setTrackingStatus((prev) => (prev === 'LIVE_STREAMING' ? prev : 'TRACKING_ACTIVE'));
         }
-      })
-      .catch(() => {});
+      } catch {
+        // Fallback polling error caught silently
+      }
+    };
 
-    // Fetch trip pickup if bookingId provided
+    pollLocationFromAPI();
+    const fallbackPollInterval = setInterval(pollLocationFromAPI, 2800);
+
     if (bookingId) {
-      fetch(`${backendUrl}/api/location/trip/${bookingId}`)
-        .then((r) => r.json())
+      apiClient.get(`/api/location/trip/${bookingId}`)
         .then((res) => {
-          if (res.success && res.pickup) {
-            setPickupLocation(res.pickup);
+          if (res.data?.success && res.data.pickup) {
+            setPickupLocation(res.data.pickup);
           }
         })
         .catch(() => {});
     }
 
-    // 3. Listen for live `driverLocation` & `locationUpdate`
     const handleLocationIncoming = (data) => {
       const lat = data.latitude ?? data.lat;
       const lng = data.longitude ?? data.lng;
@@ -145,6 +279,8 @@ export const useLiveLocation = ({
         setCurrentLocation({
           latitude: lat,
           longitude: lng,
+          lat,
+          lng,
           heading: data.heading || 0,
           speed: data.speed || 0,
           updatedAt: new Date(),
@@ -154,39 +290,18 @@ export const useLiveLocation = ({
       }
     };
 
-    const unsubDriverLocation = socketClient.on('driverLocation', handleLocationIncoming);
-    const unsubLocation = socketClient.on('locationUpdate', handleLocationIncoming);
+    socketService.onDriverLocation(handleLocationIncoming);
 
-    const unsubDriverConnected = socketClient.on('driverStatus', () => {
-      setTrackingStatus('DRIVER_ONLINE');
-    });
-
-    // 4. Driver auto-watch GPS option
-    if (autoWatchGps && navigator.geolocation && role === 'driver') {
-      watchIdRef.current = navigator.geolocation.watchPosition(
-        (pos) => {
-          updateLocation({
-            latitude: pos.coords.latitude,
-            longitude: pos.coords.longitude,
-            heading: pos.coords.heading || 0,
-            speed: pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : 0,
-          });
-        },
-        () => {},
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 2000 }
-      );
+    if (autoWatchGps && role === 'driver') {
+      startBroadcasting();
     }
 
     return () => {
-      unsubLocation();
-      unsubDriverConnected();
-      if (watchIdRef.current !== null && navigator.geolocation) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
-      }
+      clearInterval(fallbackPollInterval);
+      stopBroadcasting();
     };
-  }, [bookingId, patientId, driverId, role, autoWatchGps, updateLocation, userId]);
+  }, [bookingId, patientId, driverId, hospitalId, role, autoWatchGps, startBroadcasting, stopBroadcasting, userId]);
 
-  // Recalculate ETA and Distance dynamically when coordinates update
   useEffect(() => {
     if (currentLocation && pickupLocation) {
       const dist = calculateDistance(
@@ -197,8 +312,7 @@ export const useLiveLocation = ({
       );
       if (dist !== null) {
         setDistanceKm(dist);
-        // Estimate ETA assuming average urban ambulance transit speed ~30 km/h with siren
-        const minutes = Math.max(1, Math.round((dist / 30) * 60));
+        const minutes = Math.max(1, Math.round((dist / 35) * 60));
         setEtaMinutes(minutes);
       }
     }
@@ -211,7 +325,13 @@ export const useLiveLocation = ({
     etaMinutes,
     distanceKm,
     lastUpdated,
+    isBroadcasting,
+    gpsAccuracy,
+    pingsSent,
+    gpsError,
     updateLocation,
+    startBroadcasting,
+    stopBroadcasting,
   };
 };
 

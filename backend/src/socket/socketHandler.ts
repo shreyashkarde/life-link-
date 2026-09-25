@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { ENV } from '../config/env';
 import { prescriptoStore } from '../config/prescriptoStore';
 import { TokenService } from '../services/tokenService';
+import { memoryLocationStore } from '../models/locationModel';
 
 let ioInstance: SocketIOServer | null = null;
 
@@ -151,22 +152,37 @@ export const initSocket = (io: SocketIOServer) => {
       const lng = payload.longitude ?? payload.lng;
       if (typeof lat !== 'number' || typeof lng !== 'number') return;
 
+      const effectiveDriverId = (payload.driverId || payload.userId || 'driver_108').trim();
       const normPayload = {
-        userId: payload.userId,
+        userId: payload.userId || effectiveDriverId,
         patientId: payload.patientId,
-        driverId: payload.driverId,
+        driverId: effectiveDriverId,
         bookingId: payload.bookingId,
         hospitalId: payload.hospitalId,
         latitude: lat,
         longitude: lng,
         lat,
         lng,
-        heading: payload.heading || 0,
-        speed: payload.speed || 0,
+        heading: Number(payload.heading) || 0,
+        speed: Number(payload.speed) || 0,
         timestamp: new Date().toISOString(),
       };
 
-      // Broadcast to ride room, patient room, driver room, and hospital room
+      // 1. Update in-memory telemetry store for microsecond lookups
+      const locRecord = {
+        userId: normPayload.userId,
+        role: 'driver' as const,
+        latitude: lat,
+        longitude: lng,
+        heading: normPayload.heading,
+        speed: normPayload.speed,
+        updatedAt: new Date(),
+      };
+      memoryLocationStore.set(effectiveDriverId, locRecord);
+      memoryLocationStore.set(normPayload.userId, locRecord);
+      memoryLocationStore.set('driver_108', locRecord);
+
+      // 2. Broadcast to isolated rooms
       if (payload.bookingId) {
         socket.to(`ride_${payload.bookingId}`).emit('driverLocation', normPayload);
         socket.to(`ride_${payload.bookingId}`).emit('locationUpdate', normPayload);
@@ -175,14 +191,21 @@ export const initSocket = (io: SocketIOServer) => {
         socket.to(`patient_${payload.patientId}`).emit('driverLocation', normPayload);
         socket.to(`patient_${payload.patientId}`).emit('locationUpdate', normPayload);
         socket.to(`user_${payload.patientId}`).emit('driverLocation', normPayload);
+        socket.to(`user_${payload.patientId}`).emit('locationUpdate', normPayload);
       }
       if (payload.hospitalId) {
         socket.to(`hospital_${payload.hospitalId}`).emit('driverLocation', normPayload);
+        socket.to(`hospital_${payload.hospitalId}`).emit('locationUpdate', normPayload);
       }
       if (payload.driverId) {
         socket.to(`driver_${payload.driverId}`).emit('driverLocation', normPayload);
+        socket.to(`driver_${payload.driverId}`).emit('locationUpdate', normPayload);
       }
       socket.to('admin_emergency_room').emit('driverLocation', normPayload);
+
+      // 3. Low latency broadcast to all connected tracking clients
+      socket.broadcast.emit('driverLocation', normPayload);
+      socket.broadcast.emit('locationUpdate', normPayload);
     };
 
     socket.on('driverLocation', handleDriverLocation);

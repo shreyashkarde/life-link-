@@ -62,6 +62,8 @@ export const PatientDashboard: React.FC = () => {
   const [consultationType, setConsultationType] = useState<'IN_CLINIC' | 'VIDEO'>('IN_CLINIC');
   const [patientNotes, setPatientNotes] = useState<string>('');
   const [isBookingSubmitting, setIsBookingSubmitting] = useState<boolean>(false);
+  const [expandedTripId, setExpandedTripId] = useState<string | null>(null);
+  const [showLiveTracking, setShowLiveTracking] = useState<boolean>(false);
 
   const patientName = userData?.name || 'Edward Vincent';
 
@@ -524,8 +526,20 @@ export const PatientDashboard: React.FC = () => {
               </div>
 
               <div className="mt-5 pt-4 border-t border-white/20 flex items-center justify-between text-xs font-bold">
-                <span>Trigger Emergency Dispatch</span>
-                <span className="text-base group-hover:translate-x-1 transition-transform">→</span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowLiveTracking((prev) => !prev);
+                  }}
+                  className="hover:underline bg-white/20 hover:bg-white/30 px-2.5 py-1 rounded-lg cursor-pointer transition-colors"
+                >
+                  {showLiveTracking ? 'Hide Live Radar ✕' : '📡 View 108 Live Radar'}
+                </button>
+                <span className="flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                  <span>Trigger SOS</span>
+                  <span className="text-base">→</span>
+                </span>
               </div>
             </div>
 
@@ -557,6 +571,67 @@ export const PatientDashboard: React.FC = () => {
             </div>
           </div>
         </section>
+
+        {/* ========================================================================= */}
+        {/* 2B. LIVE AMBULANCE TRACKING (UBER/PORTER 60FPS LIVE GPS STREAM)           */}
+        {/* ========================================================================= */}
+        {(activeAmbulance || showLiveTracking) && (
+          <section className="bg-white rounded-2xl p-6 sm:p-8 border border-red-200 shadow-sm space-y-4 animate-in fade-in duration-300">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-red-100 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-red-600 to-rose-700 text-white flex items-center justify-center text-xl font-bold shadow-md shadow-red-500/20">
+                  🚑
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base font-extrabold text-[#0F172A]">
+                      Live Ambulance GPS Tracking (Porter/Uber Mode)
+                    </h2>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200 uppercase">
+                      {activeAmbulance?.status || 'EN ROUTE TO PICKUP'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#64748B]">
+                    Paramedic: <strong className="text-slate-800">{activeAmbulance?.driverName || 'Rajesh Kumar'}</strong> ({activeAmbulance?.driverPhone || '+91 98201 10800'}) • Unit: <span className="font-mono font-bold text-red-600">{activeAmbulance?.vehicleNumber || 'MH-01-EQ-1108'}</span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                  60fps Telemetry (No Jump)
+                </span>
+                {!activeAmbulance && (
+                  <button
+                    type="button"
+                    onClick={() => setShowLiveTracking(false)}
+                    className="text-xs text-slate-400 hover:text-slate-600 px-2 py-1 rounded-lg border border-slate-200 cursor-pointer"
+                  >
+                    Close ✕
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Dynamic Map Component */}
+            <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-xs">
+              <LiveMap
+                latitude={driverLocation?.latitude || activeAmbulance?.currentLocation?.lat || 19.0522}
+                longitude={driverLocation?.longitude || activeAmbulance?.currentLocation?.lng || 72.8295}
+                pickupLat={userCoords.lat || 19.0600}
+                pickupLng={userCoords.lng || 72.8340}
+                bookingId={activeAmbulance?._id || activeAmbulance?.bookingId || 'SOS-108'}
+                patientId={userData?._id || 'user_edward_101'}
+                vehicleNumber={activeAmbulance?.vehicleNumber || 'MH-01-EQ-1108'}
+                driverName={activeAmbulance?.driverName || 'Rajesh Kumar'}
+                driverPhone={activeAmbulance?.driverPhone || '+91 98201 10800'}
+                status={activeAmbulance?.status || 'EN ROUTE TO PICKUP'}
+                height="300px"
+              />
+            </div>
+          </section>
+        )}
 
         {/* ========================================================================= */}
         {/* 3. HOSPITAL SELECTION & NEAREST HOSPITAL SECTION                         */}
@@ -837,26 +912,53 @@ export const PatientDashboard: React.FC = () => {
             <div className="divide-y divide-slate-100">
               {ambulanceBookings && ambulanceBookings.length > 0 ? (
                 ambulanceBookings.map((trip: any, idx: number) => (
-                  <div key={trip._id || idx} className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-mono font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded border border-red-200">
-                          {trip.vehicleNumber || 'MH-01-EQ-1108'}
-                        </span>
-                        <h4 className="text-sm font-bold text-[#0F172A]">
-                          {trip.destinationHospital?.name || (typeof trip.destinationHospital === 'string' ? trip.destinationHospital : trip.hospitalName || 'Lilavati Hospital Trauma Center')}
-                        </h4>
+                  <div key={trip._id || idx} className="py-4 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-mono font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded border border-red-200">
+                            {trip.vehicleNumber || 'MH-01-EQ-1108'}
+                          </span>
+                          <h4 className="text-sm font-bold text-[#0F172A]">
+                            {trip.destinationHospital?.name || (typeof trip.destinationHospital === 'string' ? trip.destinationHospital : trip.hospitalName || 'Lilavati Hospital Trauma Center')}
+                          </h4>
+                        </div>
+                        <p className="text-xs text-[#64748B]">
+                          Paramedic: {trip.driverName || 'Rajesh Kumar'} • Condition: {trip.patientCondition || 'Emergency SOS'}
+                        </p>
                       </div>
-                      <p className="text-xs text-[#64748B]">
-                        Paramedic: {trip.driverName || 'Rajesh Kumar'} • Condition: {trip.patientCondition || 'Emergency SOS'}
-                      </p>
+
+                      <div className="flex items-center gap-2.5">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedTripId(expandedTripId === (trip._id || idx) ? null : (trip._id || idx))}
+                          className="px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-lg border border-blue-200 transition-colors cursor-pointer flex items-center gap-1"
+                        >
+                          <span>🗺️ {expandedTripId === (trip._id || idx) ? 'Hide Telemetry' : 'Track Route'}</span>
+                        </button>
+
+                        <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-800 border border-slate-200">
+                          {trip.status || 'COMPLETED'}
+                        </span>
+                      </div>
                     </div>
 
-                    <div>
-                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-800 border border-slate-200">
-                        {trip.status || 'COMPLETED'}
-                      </span>
-                    </div>
+                    {expandedTripId === (trip._id || idx) && (
+                      <div className="mt-2 rounded-xl overflow-hidden border border-slate-200 shadow-xs animate-in fade-in duration-200">
+                        <LiveMap
+                          latitude={trip.currentLocation?.lat || 19.0522}
+                          longitude={trip.currentLocation?.lng || 72.8295}
+                          pickupLat={trip.pickupLocation?.lat || 19.0600}
+                          pickupLng={trip.pickupLocation?.lng || 72.8340}
+                          bookingId={trip._id || trip.bookingId || 'SOS-108'}
+                          patientId={userData?._id || 'user_edward_101'}
+                          vehicleNumber={trip.vehicleNumber || 'MH-01-EQ-1108'}
+                          driverName={trip.driverName || 'Rajesh Kumar'}
+                          status={trip.status || 'COMPLETED'}
+                          height="240px"
+                        />
+                      </div>
+                    )}
                   </div>
                 ))
               ) : (

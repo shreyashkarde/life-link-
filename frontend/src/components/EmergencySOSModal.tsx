@@ -3,8 +3,8 @@ import ambulanceService, { AmbulanceItem } from '../services/ambulanceService';
 import socketService from '../services/socket';
 import ratingService from '../services/ratingService';
 import { useApp } from '../context/AppContext';
-
 import soundService from '../services/soundService';
+import { LiveMap } from '../features/maps/LiveMap';
 
 export const EmergencySOSModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
   const { userData, showToast } = useApp();
@@ -139,26 +139,37 @@ export const EmergencySOSModal: React.FC<{ isOpen: boolean; onClose: () => void 
         <div className="p-6 overflow-y-auto space-y-5">
           {/* Active Mission Display if SOS has been triggered */}
           {activeBooking && (
-            <div className="p-5 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-primary/30 rounded-2xl shadow-sm">
-              <div className="flex items-center justify-between mb-2">
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-primary/30 rounded-2xl shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
                 <span className="px-3 py-1 bg-primary text-white text-[11px] font-black rounded-full uppercase tracking-wider">
                   Live Dispatch: {activeBooking.status}
                 </span>
                 <span className="text-xs font-bold text-gray-500">Unit: {activeBooking.vehicleNumber}</span>
               </div>
-              <p className="text-sm font-extrabold text-gray-900 mt-1">
-                Driver: <span className="text-primary">{activeBooking.driverName}</span> ({activeBooking.driverPhone})
-              </p>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Destination: {activeBooking.destinationHospital?.name || (typeof activeBooking.destinationHospital === 'string' ? activeBooking.destinationHospital : activeBooking.hospitalName || 'Lilavati Hospital & Research Centre')}
-              </p>
+              <div>
+                <p className="text-sm font-extrabold text-gray-900">
+                  Paramedic: <span className="text-primary">{activeBooking.driverName}</span> ({activeBooking.driverPhone})
+                </p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Destination: {activeBooking.destinationHospital?.name || (typeof activeBooking.destinationHospital === 'string' ? activeBooking.destinationHospital : activeBooking.hospitalName || 'Lilavati Hospital & Research Centre')}
+                </p>
+              </div>
 
-              {liveLocation && (
-                <div className="mt-3 p-3 bg-white rounded-xl border border-primary/20 text-xs font-bold text-primary flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse"></span>
-                  <span>Live GPS: {liveLocation.lat.toFixed(4)}° N, {liveLocation.lng.toFixed(4)}° E</span>
-                </div>
-              )}
+              {/* 🗺️ Real-Time 60fps Live Ambulance Navigation Map */}
+              <div className="rounded-xl overflow-hidden border border-blue-200 shadow-xs">
+                <LiveMap
+                  latitude={liveLocation?.lat || activeBooking.currentLocation?.lat || 19.0522}
+                  longitude={liveLocation?.lng || activeBooking.currentLocation?.lng || 72.8295}
+                  pickupLat={19.076}
+                  pickupLng={72.8777}
+                  bookingId={activeBooking._id || activeBooking.bookingId || 'SOS-108'}
+                  patientId={userData?._id || 'user_edward_101'}
+                  vehicleNumber={activeBooking.vehicleNumber || 'MH-01-EQ-1108'}
+                  driverName={activeBooking.driverName || 'Rajesh Kumar'}
+                  status={activeBooking.status || 'EN ROUTE'}
+                  height="220px"
+                />
+              </div>
             </div>
           )}
 

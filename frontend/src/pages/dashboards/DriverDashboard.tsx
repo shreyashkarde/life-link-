@@ -32,8 +32,18 @@ export const DriverDashboard: React.FC = () => {
   const [tripHistory, setTripHistory] = useState<any[]>([]);
   const [isSimulatingTransit, setIsSimulatingTransit] = useState<boolean>(false);
 
-  // 📍 Live Driver Location Telemetry Hook
-  const { currentLocation, pickupLocation, updateLocation } = useLiveLocation({
+  // 📍 Live Driver Location Telemetry Hook (High Precision GPS)
+  const {
+    currentLocation,
+    pickupLocation,
+    updateLocation,
+    isBroadcasting,
+    startBroadcasting,
+    stopBroadcasting,
+    gpsAccuracy,
+    pingsSent,
+    gpsError,
+  } = useLiveLocation({
     role: 'driver',
     driverId: 'driver_108',
     patientId: activeBooking?.patientId || incomingRequest?.patientId || 'user_edward_101',
@@ -41,30 +51,33 @@ export const DriverDashboard: React.FC = () => {
     autoWatchGps: true,
   });
 
-  // Dynamic simulation of ambulance driving along Bandra corridor to Lilavati Hospital
+  // Dynamic simulation of ambulance driving along Bandra corridor to Lilavati Hospital (2.2s intervals)
   const handleSimulateLiveTransit = async () => {
     setIsSimulatingTransit(true);
     soundService.playEmergencySiren(1.5);
-    showToast('🚀 Simulating live ambulance motion along Bandra corridor...', 'info');
+    showToast('🚀 Simulating live ambulance motion along Bandra road corridor...', 'info');
 
     const waypoints = [
-      { lat: 19.0600, lng: 72.8340, speed: 42, note: 'Leaving base, entering S.V. Road' },
-      { lat: 19.0570, lng: 72.8320, speed: 52, note: 'Passing Bandra Junction' },
-      { lat: 19.0545, lng: 72.8305, speed: 48, note: 'Turning onto Reclamation flyover' },
-      { lat: 19.0528, lng: 72.8298, speed: 35, note: 'Entering Lilavati Hospital driveway' },
-      { lat: 19.0522, lng: 72.8295, speed: 0, note: 'Arrived at Lilavati Trauma Care!' },
+      { lat: 19.0600, lng: 72.8340, speed: 42, heading: 210, note: 'Leaving base, entering S.V. Road' },
+      { lat: 19.0570, lng: 72.8320, speed: 52, heading: 195, note: 'Passing Bandra Junction' },
+      { lat: 19.0545, lng: 72.8305, speed: 48, heading: 180, note: 'Turning onto Reclamation flyover' },
+      { lat: 19.0528, lng: 72.8298, speed: 35, heading: 170, note: 'Entering Lilavati Hospital driveway' },
+      { lat: 19.0522, lng: 72.8295, speed: 0, heading: 165, note: 'Arrived at Lilavati Trauma Care!' },
     ];
 
     for (let i = 0; i < waypoints.length; i++) {
-      await new Promise((r) => setTimeout(r, 1000));
+      if (i > 0) {
+        await new Promise((r) => setTimeout(r, 2200));
+      }
       const wp = waypoints[i];
       await updateLocation({
         latitude: wp.lat,
         longitude: wp.lng,
-        heading: 180,
+        heading: wp.heading,
         speed: wp.speed,
+        accuracy: 3.5,
       });
-      showToast(`📍 [GPS Feed] ${wp.note} (${wp.speed} km/h)`, 'info');
+      showToast(`📍 [Live GPS Stream] ${wp.note} (${wp.speed} km/h)`, 'info');
     }
 
     soundService.playSuccessChime();
@@ -607,34 +620,53 @@ export const DriverDashboard: React.FC = () => {
         )}
 
         {/* ========================================================================= */}
-        {/* 6. MAP / LOCATION SECTION (DYNAMIC GOOGLE MAP + GPS SIMULATOR)           */}
+        {/* 6. MAP / LOCATION SECTION (DYNAMIC GOOGLE MAP + GPS BROADCASTER)         */}
         {/* ========================================================================= */}
         <section className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-100 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
             <div>
               <h2 className="text-base font-bold text-[#0F172A] flex items-center gap-2">
                 <span>🗺️</span> Real-time Navigation & Live GPS Stream
               </h2>
-              <p className="text-xs text-[#64748B]">Driver location stream broadcasted to patient tracking room</p>
+              <p className="text-xs text-[#64748B]">Driver mobile broadcasts live GPS every 2–3s via Socket.IO directly to patient map</p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
+            <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+              {/* Hardware GPS Broadcaster Toggle */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (isBroadcasting) {
+                    stopBroadcasting();
+                    showToast('Hardware GPS broadcast paused', 'info');
+                  } else {
+                    startBroadcasting();
+                    showToast('🛰️ High-accuracy hardware GPS broadcasting active!', 'success');
+                  }
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                  isBroadcasting
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300 shadow-xs'
+                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <span className={`w-2 h-2 rounded-full ${isBroadcasting ? 'bg-emerald-500 animate-ping' : 'bg-slate-400'}`}></span>
+                <span>{isBroadcasting ? '📡 Live Hardware GPS (Active)' : 'Start Mobile GPS'}</span>
+              </button>
+
+              {/* Realistic Road Simulation */}
               <button
                 type="button"
                 disabled={isSimulatingTransit}
                 onClick={handleSimulateLiveTransit}
                 className="px-3.5 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
               >
-                <span>{isSimulatingTransit ? '🔄 Driving...' : '⚡ Simulate Live Route Motion'}</span>
+                <span>{isSimulatingTransit ? '🔄 Driving Along Road...' : '⚡ Road Route Transit'}</span>
               </button>
-              <span className="text-xs text-emerald-600 font-bold flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-                Socket Active
-              </span>
             </div>
           </div>
 
-          {/* Dynamic Map Component */}
+          {/* Dynamic Map Component with 60fps Smooth Marker Animation */}
           <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-xs">
             <LiveMap
               latitude={currentLocation?.latitude || 19.0522}
@@ -644,25 +676,51 @@ export const DriverDashboard: React.FC = () => {
               driverName="Rajesh Kumar"
               vehicleNumber="MH-01-EQ-1108"
               status={tripStatus === 'IDLE' ? 'PATROL STANDBY' : tripStatus}
-              height="260px"
+              height="280px"
             />
           </div>
 
-          {/* Live Telemetry Emitter Toolbar */}
-          <div className="flex flex-col sm:flex-row items-center justify-between p-3.5 rounded-xl bg-blue-50/70 border border-blue-200 text-xs gap-3">
-            <div className="flex items-center gap-2 text-blue-900">
-              <span className="text-base">🛰️</span>
-              <span>
-                Live GPS Broadcast: <strong>{currentLocation ? `${currentLocation.latitude}, ${currentLocation.longitude}` : '19.0522, 72.8295'}</strong>
+          {/* Live Telemetry Status Bar & Controls */}
+          <div className="flex flex-col md:flex-row items-center justify-between p-3.5 rounded-xl bg-gradient-to-r from-blue-50/80 via-indigo-50/60 to-slate-50 border border-blue-200 text-xs gap-3">
+            <div className="flex flex-wrap items-center gap-3 text-blue-950 font-medium">
+              <div className="flex items-center gap-1.5">
+                <span className="text-base">🛰️</span>
+                <span>
+                  Coords: <strong className="font-mono text-blue-900">{currentLocation ? `${currentLocation.latitude.toFixed(4)}, ${currentLocation.longitude.toFixed(4)}` : '19.0522, 72.8295'}</strong>
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5 text-slate-700">
+                <span>Speed: <strong className="text-slate-900">{currentLocation?.speed || 0} km/h</strong></span>
+              </div>
+
+              <div className="flex items-center gap-1.5 text-slate-700">
+                <span>Heading: <strong className="text-slate-900">{Math.round(currentLocation?.heading || 0)}°</strong></span>
+              </div>
+
+              {gpsAccuracy && (
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  ±{gpsAccuracy}m Accuracy
+                </span>
+              )}
+
+              <span className="text-[10px] font-mono text-slate-500 bg-white/80 px-2 py-0.5 rounded border border-slate-200">
+                Pings: {pingsSent} (every 2.5s)
               </span>
+
+              {gpsError && (
+                <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                  ⚠️ {gpsError}
+                </span>
+              )}
             </div>
 
             <button
               type="button"
               onClick={handleSimulateMovement}
-              className="w-full sm:w-auto px-5 py-2 bg-[#2563EB] hover:bg-[#1D4ED8] active:scale-95 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center justify-center gap-2"
+              className="w-full md:w-auto px-4 py-2 bg-[#2563EB] hover:bg-[#1D4ED8] active:scale-95 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center justify-center gap-2"
             >
-              <span>Simulate Drive (+100m)</span>
+              <span>Advance +100m</span>
               <span>→</span>
             </button>
           </div>
