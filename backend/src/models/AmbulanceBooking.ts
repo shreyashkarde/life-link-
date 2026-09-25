@@ -2,12 +2,15 @@ import mongoose, { Document, Schema } from 'mongoose';
 
 export type BookingType = 'NORMAL' | 'EMERGENCY_SOS';
 export type BookingStatus =
-  | 'PENDING'
+  | 'REQUESTED'
+  | 'ASSIGNED'
   | 'ACCEPTED'
+  | 'EN_ROUTE'
+  | 'COMPLETED'
+  | 'PENDING'
   | 'EN_ROUTE_PICKUP'
   | 'PATIENT_ONBOARD'
   | 'ONGOING'
-  | 'COMPLETED'
   | 'REJECTED'
   | 'CANCELLED';
 export type EmergencySeverity = 'LOW' | 'MEDIUM' | 'CRITICAL_CODE_RED';
@@ -88,16 +91,20 @@ const ambulanceBookingSchema = new Schema<IAmbulanceBooking>(
     status: {
       type: String,
       enum: [
-        'PENDING',
+        'REQUESTED',
+        'ASSIGNED',
         'ACCEPTED',
+        'EN_ROUTE',
+        'COMPLETED',
+        'PENDING',
         'EN_ROUTE_PICKUP',
         'PATIENT_ONBOARD',
         'ONGOING',
-        'COMPLETED',
         'REJECTED',
         'CANCELLED',
       ],
-      default: 'PENDING',
+      default: 'REQUESTED',
+      index: true,
     },
     emergencySeverity: {
       type: String,

@@ -110,7 +110,7 @@ export const createAmbulanceBooking = async (req: AuthRequest, res: Response) =>
         lng: 72.8277,
       },
       bookingType: 'NORMAL' as const,
-      status: 'PENDING' as const,
+      status: (assignedAmbulance ? 'ASSIGNED' : 'REQUESTED') as any,
       emergencySeverity: 'MEDIUM' as const,
       patientCondition,
       fare: 120,
@@ -310,6 +310,9 @@ export const acceptBooking = async (req: AuthRequest, res: Response) => {
           }
           if (booking.patientId) {
             io.to(`patient_${booking.patientId}`).emit('rideAccepted', { bookingId, status: 'ACCEPTED', booking });
+            io.to(`user_${booking.patientId}`).emit('rideAccepted', { bookingId, status: 'ACCEPTED', booking });
+            io.to(`patient_${booking.patientId}`).emit('bookingAccepted', { bookingId, status: 'ACCEPTED', booking });
+            io.to(`user_${booking.patientId}`).emit('bookingAccepted', { bookingId, status: 'ACCEPTED', booking });
           }
         }
         return res.json({ success: true, message: 'Booking accepted', booking });
@@ -332,6 +335,9 @@ export const acceptBooking = async (req: AuthRequest, res: Response) => {
         }
         if (booking.patientId) {
           io.to(`patient_${booking.patientId}`).emit('rideAccepted', { bookingId, status: 'ACCEPTED', booking });
+          io.to(`user_${booking.patientId}`).emit('rideAccepted', { bookingId, status: 'ACCEPTED', booking });
+          io.to(`patient_${booking.patientId}`).emit('bookingAccepted', { bookingId, status: 'ACCEPTED', booking });
+          io.to(`user_${booking.patientId}`).emit('bookingAccepted', { bookingId, status: 'ACCEPTED', booking });
         }
       }
       return res.json({ success: true, message: 'Booking accepted', booking });
@@ -432,6 +438,7 @@ export const updateBookingStatus = async (req: AuthRequest, res: Response) => {
           }
           if (booking.patientId) {
             io.to(`patient_${booking.patientId}`).emit('rideStatusUpdate', { bookingId, status, booking });
+            io.to(`user_${booking.patientId}`).emit('rideStatusUpdate', { bookingId, status, booking });
           }
         }
         return res.json({ success: true, message: `Status updated to ${status}`, booking });
@@ -454,6 +461,7 @@ export const updateBookingStatus = async (req: AuthRequest, res: Response) => {
         }
         if (booking.patientId) {
           io.to(`patient_${booking.patientId}`).emit('rideStatusUpdate', { bookingId, status, booking });
+          io.to(`user_${booking.patientId}`).emit('rideStatusUpdate', { bookingId, status, booking });
         }
       }
       return res.json({ success: true, message: `Status updated to ${status}`, booking });

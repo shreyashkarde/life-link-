@@ -73,4 +73,5 @@ ambulanceSchema.index({ hospitalId: 1, isAvailable: 1 });
 ambulanceSchema.index({ hospitalId: 1, currentStatus: 1 });
 
 export const Ambulance = mongoose.models.Ambulance || mongoose.model<IAmbulance>('Ambulance', ambulanceSchema);
+export const Driver = Ambulance;
 export default Ambulance;

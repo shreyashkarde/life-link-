@@ -126,24 +126,38 @@ export const useLiveLocation = ({
       socket.emit('driverConnected', { driverId, hospitalId });
     }
 
-    // 2. Initial fetch from dynamic API
+    // 2. Initial fetch & 5-second fallback polling from dynamic API
     const targetUser = role === 'patient' ? driverId || 'driver_108' : userId || driverId || 'driver_108';
-    apiClient.get(`/api/location/${targetUser}`)
-      .then((res) => {
+    const pollLocationFromAPI = async () => {
+      try {
+        const res = await apiClient.get(`/api/location/${targetUser}`);
         if (res.data?.success && res.data.location) {
-          setCurrentLocation({
-            latitude: res.data.location.latitude,
-            longitude: res.data.location.longitude,
-            lat: res.data.location.latitude,
-            lng: res.data.location.longitude,
-            heading: res.data.location.heading || 0,
-            speed: res.data.location.speed || 0,
-            updatedAt: new Date(res.data.location.updatedAt),
+          const loc = res.data.location;
+          setCurrentLocation((prev) => {
+            const apiUpdated = loc.updatedAt ? new Date(loc.updatedAt).getTime() : Date.now();
+            const prevUpdated = prev?.updatedAt ? new Date(prev.updatedAt).getTime() : 0;
+            if (apiUpdated >= prevUpdated || !prev) {
+              return {
+                latitude: loc.latitude,
+                longitude: loc.longitude,
+                lat: loc.latitude,
+                lng: loc.longitude,
+                heading: loc.heading || 0,
+                speed: loc.speed || 0,
+                updatedAt: new Date(loc.updatedAt || Date.now()),
+              };
+            }
+            return prev;
           });
-          setTrackingStatus('TRACKING_ACTIVE');
+          setTrackingStatus((prev) => (prev === 'LIVE_STREAMING' ? prev : 'TRACKING_ACTIVE'));
         }
-      })
-      .catch(() => {});
+      } catch (err) {
+        // Fallback polling error caught silently
+      }
+    };
+
+    pollLocationFromAPI();
+    const fallbackPollInterval = setInterval(pollLocationFromAPI, 5000);
 
     // Fetch trip pickup if bookingId provided
     if (bookingId) {
@@ -194,6 +208,7 @@ export const useLiveLocation = ({
     }
 
     return () => {
+      clearInterval(fallbackPollInterval);
       if (watchIdRef.current !== null && navigator.geolocation) {
         navigator.geolocation.clearWatch(watchIdRef.current);
       }

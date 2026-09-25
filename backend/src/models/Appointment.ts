@@ -13,6 +13,7 @@ export interface IAppointment extends Document {
   docData: any;
   amount: number;
   date: number;
+  status: 'REQUESTED' | 'ASSIGNED' | 'ACCEPTED' | 'EN_ROUTE' | 'COMPLETED' | 'CANCELLED';
   cancelled: boolean;
   payment: boolean;
   isCompleted: boolean;
@@ -34,6 +35,12 @@ const appointmentSchema = new Schema<IAppointment>(
     docData: { type: Object, required: true },
     amount: { type: Number, required: true },
     date: { type: Number, required: true },
+    status: {
+      type: String,
+      enum: ['REQUESTED', 'ASSIGNED', 'ACCEPTED', 'EN_ROUTE', 'COMPLETED', 'CANCELLED'],
+      default: 'ASSIGNED',
+      index: true,
+    },
     cancelled: { type: Boolean, default: false },
     payment: { type: Boolean, default: false },
     isCompleted: { type: Boolean, default: false },

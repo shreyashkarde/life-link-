@@ -21,7 +21,7 @@ export interface AuthRequest extends Request {
  */
 export const authenticateJWT = (req: Request, res: Response, next: NextFunction): void => {
   try {
-    let token = req.cookies?.accessToken;
+    let token = req.cookies?.accessToken || req.cookies?.token;
 
     if (!token) {
       const authHeader =

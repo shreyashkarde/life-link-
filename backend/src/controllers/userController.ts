@@ -83,6 +83,17 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
       { expiresIn: '7d' }
     );
 
+    const isProd = process.env.NODE_ENV === 'production';
+    const cookieOptions = {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: (isProd ? 'none' : 'lax') as 'none' | 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      path: '/',
+    };
+    res.cookie('token', token, cookieOptions);
+    res.cookie('accessToken', token, cookieOptions);
+
     res.json({ success: true, token, user: { id: user._id, name: user.name, email: user.email, role: 'PATIENT' } });
   } catch (error: any) {
     console.error('Register User Error:', error);
@@ -94,6 +105,14 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
 export const loginUser = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body;
+    const isProd = process.env.NODE_ENV === 'production';
+    const cookieOptions = {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: (isProd ? 'none' : 'lax') as 'none' | 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      path: '/',
+    };
 
     if (!isMongoConnected()) {
       const user = prescriptoStore.users.find((u) => u.email === email);
@@ -111,6 +130,8 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
         ENV.JWT_SECRET,
         { expiresIn: '7d' }
       );
+      res.cookie('token', token, cookieOptions);
+      res.cookie('accessToken', token, cookieOptions);
       res.json({ success: true, token, user: { id: user._id, name: user.name, email: user.email, role: 'PATIENT' } });
       return;
     }
@@ -133,6 +154,8 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
       { expiresIn: '7d' }
     );
 
+    res.cookie('token', token, cookieOptions);
+    res.cookie('accessToken', token, cookieOptions);
     res.json({ success: true, token, user: { id: user._id, name: user.name, email: user.email, role: user.role || 'PATIENT' } });
   } catch (error: any) {
     console.error('Login User Error:', error);

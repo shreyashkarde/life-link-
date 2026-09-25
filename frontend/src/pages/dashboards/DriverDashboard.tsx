@@ -14,7 +14,9 @@ export const DriverDashboard: React.FC = () => {
   const [isOnDuty, setIsOnDuty] = useState<boolean>(true);
   const [activeBooking, setActiveBooking] = useState<any>(null);
   const [incomingRequest, setIncomingRequest] = useState<any>(null);
-  const [tripStatus, setTripStatus] = useState<'IDLE' | 'ASSIGNED' | 'EN_ROUTE_PICKUP' | 'PATIENT_ONBOARD' | 'COMPLETED'>('IDLE');
+  const [tripStatus, setTripStatus] = useState<
+    'IDLE' | 'REQUESTED' | 'ASSIGNED' | 'ACCEPTED' | 'EN_ROUTE' | 'EN_ROUTE_PICKUP' | 'PATIENT_ONBOARD' | 'COMPLETED'
+  >('IDLE');
   const [tripHistory, setTripHistory] = useState<any[]>([]);
   const [isSimulatingTransit, setIsSimulatingTransit] = useState<boolean>(false);
 
@@ -168,7 +170,7 @@ export const DriverDashboard: React.FC = () => {
     if (!incomingRequest) return;
     const accepted = { ...incomingRequest, status: 'ACCEPTED' };
     setActiveBooking(accepted);
-    setTripStatus('ASSIGNED');
+    setTripStatus('ACCEPTED');
     setIncomingRequest(null);
     showToast('✅ Emergency Dispatch Accepted! Green Corridor Active.', 'success');
 
@@ -188,6 +190,7 @@ export const DriverDashboard: React.FC = () => {
   const handleStatusTransition = async (status: typeof tripStatus) => {
     setTripStatus(status);
     const messages: Record<string, string> = {
+      EN_ROUTE: 'Status updated: En route to patient pickup point.',
       EN_ROUTE_PICKUP: 'Status updated: En route to patient pickup point.',
       PATIENT_ONBOARD: 'Status updated: Patient onboard! Driving to Trauma Center.',
       COMPLETED: 'Trip Completed! Patient admitted safely to Trauma Bay.',
@@ -501,8 +504,8 @@ export const DriverDashboard: React.FC = () => {
             {/* 5-Stage Stepper Bar */}
             <div className="space-y-2">
               <div className="flex items-center justify-between text-[11px] font-bold text-slate-500">
-                <span className={tripStatus === 'ASSIGNED' ? 'text-blue-600' : ''}>1. Accepted</span>
-                <span className={tripStatus === 'EN_ROUTE_PICKUP' ? 'text-blue-600' : ''}>2. En Route</span>
+                <span className={tripStatus === 'ASSIGNED' || tripStatus === 'ACCEPTED' ? 'text-blue-600' : ''}>1. Accepted</span>
+                <span className={tripStatus === 'EN_ROUTE' || tripStatus === 'EN_ROUTE_PICKUP' ? 'text-blue-600' : ''}>2. En Route</span>
                 <span className={tripStatus === 'PATIENT_ONBOARD' ? 'text-blue-600' : ''}>3. Patient Onboard</span>
                 <span className={tripStatus === 'COMPLETED' ? 'text-emerald-600' : ''}>4. Admitted</span>
               </div>
@@ -510,9 +513,9 @@ export const DriverDashboard: React.FC = () => {
               <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden flex">
                 <div
                   className={`h-full transition-all duration-500 ${
-                    tripStatus === 'ASSIGNED'
+                    tripStatus === 'ASSIGNED' || tripStatus === 'ACCEPTED'
                       ? 'w-1/4 bg-blue-500'
-                      : tripStatus === 'EN_ROUTE_PICKUP'
+                      : tripStatus === 'EN_ROUTE' || tripStatus === 'EN_ROUTE_PICKUP'
                       ? 'w-2/4 bg-indigo-600'
                       : tripStatus === 'PATIENT_ONBOARD'
                       ? 'w-3/4 bg-amber-500'
@@ -559,8 +562,8 @@ export const DriverDashboard: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <button
                   type="button"
-                  onClick={() => handleStatusTransition('EN_ROUTE_PICKUP')}
-                  disabled={tripStatus !== 'ASSIGNED'}
+                  onClick={() => handleStatusTransition('EN_ROUTE')}
+                  disabled={tripStatus !== 'ASSIGNED' && tripStatus !== 'ACCEPTED'}
                   className="py-3.5 px-4 bg-[#2563EB] hover:bg-[#1D4ED8] disabled:opacity-30 disabled:pointer-events-none text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center justify-center gap-2"
                 >
                   <span>1. En Route to Pickup Point</span>
@@ -570,7 +573,7 @@ export const DriverDashboard: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => handleStatusTransition('PATIENT_ONBOARD')}
-                  disabled={tripStatus !== 'EN_ROUTE_PICKUP'}
+                  disabled={tripStatus !== 'EN_ROUTE' && tripStatus !== 'EN_ROUTE_PICKUP'}
                   className="py-3.5 px-4 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-30 disabled:pointer-events-none text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center justify-center gap-2"
                 >
                   <span>2. Patient Onboard (To Hospital)</span>
