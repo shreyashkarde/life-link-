@@ -149,7 +149,9 @@ export const EmergencySOSModal: React.FC<{ isOpen: boolean; onClose: () => void 
               <p className="text-sm font-extrabold text-gray-900 mt-1">
                 Driver: <span className="text-primary">{activeBooking.driverName}</span> ({activeBooking.driverPhone})
               </p>
-              <p className="text-xs text-gray-500 mt-0.5">Destination: {activeBooking.destinationHospital?.name}</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Destination: {activeBooking.destinationHospital?.name || (typeof activeBooking.destinationHospital === 'string' ? activeBooking.destinationHospital : activeBooking.hospitalName || 'Lilavati Hospital & Research Centre')}
+              </p>
 
               {liveLocation && (
                 <div className="mt-3 p-3 bg-white rounded-xl border border-primary/20 text-xs font-bold text-primary flex items-center gap-2">

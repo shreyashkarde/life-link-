@@ -979,7 +979,7 @@ export const PatientDashboard: React.FC = () => {
                           {trip.vehicleNumber || 'MH-01-EQ-1108'}
                         </span>
                         <h4 className="text-sm font-bold text-[#0F172A]">
-                          {trip.destinationHospital?.name || 'Lilavati Hospital Trauma Center'}
+                          {trip.destinationHospital?.name || (typeof trip.destinationHospital === 'string' ? trip.destinationHospital : trip.hospitalName || 'Lilavati Hospital Trauma Center')}
                         </h4>
                       </div>
                       <p className="text-xs text-[#64748B]">

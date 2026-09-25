@@ -7,6 +7,18 @@ import { apiClient } from '../../services/apiClient';
 import { socketService } from '../../services/socket';
 import soundService from '../../services/soundService';
 
+const getHospitalName = (dest: any, fallback = 'Lilavati Hospital Trauma Bay'): string => {
+  if (!dest) return fallback;
+  if (typeof dest === 'string') return dest;
+  return dest.name || dest.address || fallback;
+};
+
+const getAddressString = (loc: any, fallback = 'Bandra West Reclamation'): string => {
+  if (!loc) return fallback;
+  if (typeof loc === 'string') return loc;
+  return loc.address || loc.name || fallback;
+};
+
 export const DriverDashboard: React.FC = () => {
   const { showToast, backendUrl, refreshVersion } = useApp();
   const apiBase = backendUrl;
@@ -451,8 +463,8 @@ export const DriverDashboard: React.FC = () => {
 
               <div className="p-4 rounded-2xl bg-white border border-rose-200 shadow-xs space-y-1.5">
                 <p className="font-bold text-slate-500 uppercase tracking-wider text-[10px]">Transit Route</p>
-                <p className="text-slate-800 font-medium"><strong>Pickup:</strong> {incomingRequest.pickupAddress}</p>
-                <p className="text-slate-800 font-medium"><strong>Destination:</strong> {incomingRequest.destinationHospital}</p>
+                <p className="text-slate-800 font-medium"><strong>Pickup:</strong> {getAddressString(incomingRequest.pickupAddress, 'Bandra West Reclamation')}</p>
+                <p className="text-slate-800 font-medium"><strong>Destination:</strong> {getHospitalName(incomingRequest.destinationHospital, 'Lilavati Hospital & Research Centre')}</p>
                 <p className="text-emerald-700 font-bold bg-emerald-50 p-2 rounded-xl border border-emerald-200 mt-1">
                   Lilavati Resuscitation Bay Confirmed Ready
                 </p>
@@ -538,8 +550,8 @@ export const DriverDashboard: React.FC = () => {
 
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-1.5">
                 <p className="font-bold text-slate-500 uppercase tracking-wider text-[10px]">Navigation Route</p>
-                <p className="text-slate-800"><strong>Pickup:</strong> {activeBooking.pickupAddress || 'Bandra West Reclamation'}</p>
-                <p className="text-slate-800"><strong>Destination:</strong> {activeBooking.destinationHospital || 'Lilavati Hospital Trauma Bay'}</p>
+                <p className="text-slate-800"><strong>Pickup:</strong> {getAddressString(activeBooking.pickupAddress || activeBooking.pickupLocation, 'Bandra West Reclamation')}</p>
+                <p className="text-slate-800"><strong>Destination:</strong> {getHospitalName(activeBooking.destinationHospital || activeBooking.hospitalName, 'Lilavati Hospital Trauma Bay')}</p>
                 <div className="flex gap-2 pt-2">
                   <a
                     href={`tel:${activeBooking.patientPhone || '+919876543210'}`}
@@ -689,7 +701,7 @@ export const DriverDashboard: React.FC = () => {
                       </span>
                     </div>
                     <p className="text-xs text-[#64748B]">
-                      Route: {item.pickup || item.pickupLocation?.address || 'Pickup Point'} → <strong className="text-slate-800">{item.destination || item.destinationHospital?.name || 'Lilavati Trauma Bay'}</strong>
+                      Route: {getAddressString(item.pickup || item.pickupLocation, 'Pickup Point')} → <strong className="text-slate-800">{getHospitalName(item.destination || item.destinationHospital || item.hospitalName, 'Lilavati Trauma Bay')}</strong>
                     </p>
                     <p className="text-[11px] text-slate-400">
                       Condition: {item.condition || item.patientCondition || 'Emergency Intake'} • Time: {item.time || 'Today'}

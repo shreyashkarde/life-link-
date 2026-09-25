@@ -21,6 +21,13 @@ export const generateBookingReceiptPDF = (bookingData = {}) => {
     emergencySeverity = 'CRITICAL_CODE_RED',
   } = bookingData;
 
+  const resolvedHospital = typeof destinationHospital === 'string'
+    ? destinationHospital
+    : destinationHospital?.name || 'Lilavati Hospital & Research Centre';
+  const resolvedPickup = typeof pickupAddress === 'string'
+    ? pickupAddress
+    : pickupAddress?.address || 'Bandra West Junction, Mumbai';
+
   const htmlContent = `
     <!DOCTYPE html>
     <html lang="en">
@@ -164,8 +171,8 @@ export const generateBookingReceiptPDF = (bookingData = {}) => {
         </div>
 
         <div style="font-size: 12px; margin-bottom: 16px; line-height: 1.6;">
-          <div><strong>📍 Pickup Location:</strong> ${pickupAddress}</div>
-          <div><strong>🏥 Destination Hospital:</strong> ${destinationHospital}</div>
+          <div><strong>📍 Pickup Location:</strong> ${resolvedPickup}</div>
+          <div><strong>🏥 Destination Hospital:</strong> ${resolvedHospital}</div>
         </div>
 
         <table>
