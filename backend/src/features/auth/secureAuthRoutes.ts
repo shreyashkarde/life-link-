@@ -3,7 +3,6 @@ import bcrypt from 'bcryptjs';
 import { TokenService } from '../../services/tokenService';
 import { authenticateUser } from '../../security/authMiddleware';
 import { validateLoginInput, noSQLSanitizerMiddleware } from '../../security/validator';
-import { rateLimiter } from '../../security/rateLimiter';
 import { prescriptoStore } from '../../config/prescriptoStore';
 import { isMongoConnected } from '../../config/db';
 import { User } from '../../models/User';
@@ -18,7 +17,6 @@ const router = Router();
  */
 router.post(
   '/token-login',
-  rateLimiter(20, 60 * 1000), // Max 20 attempts per minute
   noSQLSanitizerMiddleware,
   validateLoginInput,
   async (req: Request, res: Response): Promise<void> => {

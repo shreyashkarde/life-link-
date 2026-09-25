@@ -3,7 +3,6 @@ import trackingRouter from './tracking/trackingRoutes';
 import hospitalRouter from './hospitals/hospitalRoutes';
 import notificationRouter from './notifications/notificationRoutes';
 import authEnhancementsRouter from './auth/authEnhancementsRoutes';
-import rateLimiter from './security/rateLimiter';
 import appointmentSocketRouter from './appointments/appointmentSocketService';
 import secureAuthRouter from './auth/secureAuthRoutes';
 import privacyRouter from './privacy/privacyRoutes';
@@ -25,8 +24,8 @@ export const registerModularFeatures = (app: Application) => {
   // 3. Notification System (/api/notifications)
   app.use('/api/notifications', notificationRouter);
 
-  // 4. Auth Enhancements with selective rate limiting (/api/auth/google-login, /api/auth/forgot-password)
-  app.use('/api/auth', rateLimiter(30, 60 * 1000), authEnhancementsRouter);
+  // 4. Auth Enhancements (/api/auth/google-login, /api/auth/forgot-password)
+  app.use('/api/auth', authEnhancementsRouter);
 
   // 5. Real-Time Room-Based Appointments Engine (/api/realtime-appointments)
   app.use('/api/realtime-appointments', appointmentSocketRouter);
