@@ -3,6 +3,8 @@ import { ENV } from './env';
 
 let mongoConnected = false;
 
+mongoose.set('bufferCommands', false);
+
 // Real-time mongoose connection state monitors
 mongoose.connection.on('connected', () => {
   mongoConnected = true;
@@ -23,6 +25,7 @@ export const connectDB = async (): Promise<boolean> => {
   try {
     const conn = await mongoose.connect(ENV.MONGODB_URI, {
       serverSelectionTimeoutMS: 5000, // 5s fast failover for instant container boot
+      bufferCommands: false,
     });
     console.log(`[MongoDB] Connected successfully to host: ${conn.connection.host}, database: ${conn.connection.name}`);
     mongoConnected = true;

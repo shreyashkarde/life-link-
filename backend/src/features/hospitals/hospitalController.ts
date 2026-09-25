@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import Hospital from '../../models/Hospital';
+import { isMongoConnected } from '../../config/db';
 
 // Haversine formula distance calculation in kilometers
 const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
@@ -177,49 +178,51 @@ export const getNearbyHospitals = async (req: Request, res: Response) => {
     let hospitalsList: any[] = [];
 
     // 🌍 STEP 1: MongoDB Geospatial Query using $near, $geometry, and $maxDistance
-    try {
-      const geoHospitals = await Hospital.find({
-        isActive: true,
-        location: {
-          $near: {
-            $geometry: {
-              type: 'Point',
-              coordinates: [lng, lat],
+    if (isMongoConnected()) {
+      try {
+        const geoHospitals = await Hospital.find({
+          isActive: true,
+          location: {
+            $near: {
+              $geometry: {
+                type: 'Point',
+                coordinates: [lng, lat],
+              },
+              $maxDistance: maxDistanceMeters,
             },
-            $maxDistance: maxDistanceMeters,
           },
-        },
-      }).lean();
+        }).lean();
 
-      if (Array.isArray(geoHospitals) && geoHospitals.length > 0) {
-        geoHospitals.forEach((dbh: any) => {
-          const hospLat = dbh.lat || (dbh.location && dbh.location.coordinates ? dbh.location.coordinates[1] : 19.0760);
-          const hospLng = dbh.lng || (dbh.location && dbh.location.coordinates ? dbh.location.coordinates[0] : 72.8777);
-          hospitalsList.push({
-            id: String(dbh._id),
-            hospitalId: String(dbh._id),
-            _id: String(dbh._id),
-            name: dbh.name || 'Hospital',
-            address: typeof dbh.address === 'string' ? dbh.address : `${dbh.address?.street || ''}, ${dbh.address?.city || 'Mumbai'}`,
-            city: typeof dbh.address === 'object' ? dbh.address?.city : (dbh.city || 'Mumbai'),
-            lat: hospLat,
-            lng: hospLng,
-            location: { lat: hospLat, lng: hospLng },
-            phone: dbh.phone || dbh.contactPhone || '+91 22 2675 1000',
-            emergencyContact: dbh.emergencyContact || dbh.phone || '+91 22 2656 8000',
-            traumaLevel: dbh.traumaLevel || 'Level 1 Apex Trauma Center',
-            icuBedsAvailable: dbh.icuBedsAvailable || 18,
-            totalBeds: dbh.totalBeds || 300,
-            rating: dbh.rating || 4.8,
-            doctorsCount: dbh.doctorsCount || 3,
-            specialities: dbh.specialities || ['General physician', 'Cardiology', 'Emergency Care'],
-            ambulanceServiceAvailable: true,
+        if (Array.isArray(geoHospitals) && geoHospitals.length > 0) {
+          geoHospitals.forEach((dbh: any) => {
+            const hospLat = dbh.lat || (dbh.location && dbh.location.coordinates ? dbh.location.coordinates[1] : 19.0760);
+            const hospLng = dbh.lng || (dbh.location && dbh.location.coordinates ? dbh.location.coordinates[0] : 72.8777);
+            hospitalsList.push({
+              id: String(dbh._id),
+              hospitalId: String(dbh._id),
+              _id: String(dbh._id),
+              name: dbh.name || 'Hospital',
+              address: typeof dbh.address === 'string' ? dbh.address : `${dbh.address?.street || ''}, ${dbh.address?.city || 'Mumbai'}`,
+              city: typeof dbh.address === 'object' ? dbh.address?.city : (dbh.city || 'Mumbai'),
+              lat: hospLat,
+              lng: hospLng,
+              location: { lat: hospLat, lng: hospLng },
+              phone: dbh.phone || dbh.contactPhone || '+91 22 2675 1000',
+              emergencyContact: dbh.emergencyContact || dbh.phone || '+91 22 2656 8000',
+              traumaLevel: dbh.traumaLevel || 'Level 1 Apex Trauma Center',
+              icuBedsAvailable: dbh.icuBedsAvailable || 18,
+              totalBeds: dbh.totalBeds || 300,
+              rating: dbh.rating || 4.8,
+              doctorsCount: dbh.doctorsCount || 3,
+              specialities: dbh.specialities || ['General physician', 'Cardiology', 'Emergency Care'],
+              ambulanceServiceAvailable: true,
+            });
           });
-        });
+        }
+      } catch (geoError) {
+        // Non-blocking fallback for development/in-memory
+        console.warn('[Nearby API] Geo query fallback to standard indexing:', geoError);
       }
-    } catch (geoError) {
-      // Non-blocking fallback for development/in-memory
-      console.warn('[Nearby API] Geo query fallback to standard indexing:', geoError);
     }
 
     // 🏥 STEP 2: Enrich with Accredited Verified Hospitals for full coverage

@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import { Location, memoryLocationStore } from '../models/locationModel';
 import { getIO } from '../socket/socketHandler';
 import { authenticateJWT } from '../middleware/auth';
+import { isMongoConnected } from '../config/db';
 
 const locationRouter = express.Router();
 
@@ -68,14 +69,16 @@ locationRouter.post('/update', async (req: Request, res: Response): Promise<void
     memoryLocationStore.set('driver_108', locationData);
 
     // 2. Persist to MongoDB Location collection if connected
-    try {
-      await Location.findOneAndUpdate(
-        { userId: effectiveUserId },
-        { ...locationData, updatedAt: now },
-        { upsert: true, new: true }
-      );
-    } catch (dbErr) {
-      // Non-blocking in-memory fallback
+    if (isMongoConnected()) {
+      try {
+        await Location.findOneAndUpdate(
+          { userId: effectiveUserId },
+          { ...locationData, updatedAt: now },
+          { upsert: true, new: true }
+        );
+      } catch (dbErr) {
+        // Non-blocking in-memory fallback
+      }
     }
 
     // 3. Emit real-time Socket event to designated rooms and broadcast
@@ -157,18 +160,20 @@ locationRouter.get('/:userId', async (req: Request, res: Response): Promise<void
     }
 
     // 2. Fallback to database safely
-    try {
-      const doc = await Location.findOne({ userId });
-      if (doc) {
-        res.json({
-          success: true,
-          source: 'database',
-          location: doc,
-        });
-        return;
+    if (isMongoConnected()) {
+      try {
+        const doc = await Location.findOne({ userId });
+        if (doc) {
+          res.json({
+            success: true,
+            source: 'database',
+            location: doc,
+          });
+          return;
+        }
+      } catch {
+        // Offline/memory fallback
       }
-    } catch {
-      // Offline/memory fallback
     }
 
     // 3. Fallback default coordinates if not yet streamed
