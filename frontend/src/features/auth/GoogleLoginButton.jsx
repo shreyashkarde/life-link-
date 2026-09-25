@@ -3,21 +3,26 @@ import { getBackendUrl } from '../../config/backendUrl';
 
 /**
  * 🔑 GoogleLoginButton.jsx
- * "Only @gmail.com users are allowed to authenticate via Google login."
+ * Native Google Identity Services (GIS) OAuth 2.0 Integration
+ * Enforces: "Only @gmail.com users are allowed to authenticate via Google login."
  */
 export const GoogleLoginButton = ({ onSuccess, onError, customGmail = '' }) => {
   const [loading, setLoading] = useState(false);
   const [showPromptModal, setShowPromptModal] = useState(false);
-  const [gmailInput, setGmailInput] = useState(customGmail || 'shreyash.patient@gmail.com');
-  const [nameInput, setNameInput] = useState('Shreyash Karde');
+  const [gmailInput, setGmailInput] = useState(customGmail || '');
+  const [nameInput, setNameInput] = useState('');
+
+  const clientId =
+    import.meta.env.VITE_GOOGLE_CLIENT_ID ||
+    '748480555286-1lcn1lck6do44gl5aipdqlmla1jp1mn5.apps.googleusercontent.com';
 
   const executeGoogleLogin = async (emailToUse, nameToUse, rawToken = null) => {
     try {
       setLoading(true);
       const cleanEmail = (emailToUse || '').toLowerCase().trim();
 
-      // 🚨 Client-Side Check: Only allow @gmail.com
-      if (!cleanEmail.endsWith('@gmail.com')) {
+      // Client-Side Check: Only allow @gmail.com if manual email is passed
+      if (!rawToken && cleanEmail && !cleanEmail.endsWith('@gmail.com')) {
         const errorMsg = 'Only @gmail.com users are allowed to authenticate via Google login.';
         if (onError) onError(errorMsg);
         return;
@@ -29,10 +34,10 @@ export const GoogleLoginButton = ({ onSuccess, onError, customGmail = '' }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           token: rawToken,
-          email: cleanEmail,
-          name: nameToUse || cleanEmail.split('@')[0],
+          email: cleanEmail || undefined,
+          name: nameToUse || (cleanEmail ? cleanEmail.split('@')[0] : undefined),
           picture: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200',
-          googleId: 'g_' + btoa(cleanEmail).substring(0, 16),
+          googleId: cleanEmail ? 'g_' + btoa(cleanEmail).substring(0, 16) : undefined,
         }),
       });
 
@@ -50,9 +55,29 @@ export const GoogleLoginButton = ({ onSuccess, onError, customGmail = '' }) => {
     }
   };
 
+  // Initialize Google Identity Services
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.google?.accounts?.id && clientId) {
+      try {
+        window.google.accounts.id.initialize({
+          client_id: clientId,
+          callback: (response) => {
+            if (response.credential) {
+              executeGoogleLogin(null, null, response.credential);
+            }
+          },
+          auto_select: false,
+          cancel_on_tap_outside: true,
+        });
+      } catch (e) {
+        console.warn('Google GSI init notice:', e);
+      }
+    }
+  }, [clientId]);
+
   const handleButtonClick = () => {
-    // Check if Google GSI is available in window
-    if (typeof window !== 'undefined' && window.google?.accounts?.id) {
+    // If Google GSI is available, open the official Google prompt
+    if (typeof window !== 'undefined' && window.google?.accounts?.id && clientId) {
       try {
         window.google.accounts.id.prompt((notification) => {
           if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
@@ -97,7 +122,7 @@ export const GoogleLoginButton = ({ onSuccess, onError, customGmail = '' }) => {
         <span>{loading ? 'Connecting Google...' : 'Continue with Google'}</span>
       </button>
 
-      {/* Google OAuth Modal for Fast Selection & Policy Verification */}
+      {/* Google OAuth Modal for Direct Verification */}
       {showPromptModal && (
         <div className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-gray-100 space-y-4 animate-in fade-in zoom-in-95 duration-200">
@@ -125,7 +150,7 @@ export const GoogleLoginButton = ({ onSuccess, onError, customGmail = '' }) => {
                 <span>🛡️</span> Security Policy Enforcement:
               </p>
               <p className="text-blue-800">
-                "Only @gmail.com users are allowed to authenticate via Google login."
+                Only @gmail.com users are allowed to authenticate via Google login.
               </p>
             </div>
 
@@ -139,7 +164,7 @@ export const GoogleLoginButton = ({ onSuccess, onError, customGmail = '' }) => {
                   value={nameInput}
                   onChange={(e) => setNameInput(e.target.value)}
                   className="w-full text-xs px-3.5 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="e.g. Shreyash Karde"
+                  placeholder="e.g. John Doe"
                 />
               </div>
 
@@ -172,7 +197,7 @@ export const GoogleLoginButton = ({ onSuccess, onError, customGmail = '' }) => {
               </button>
               <button
                 type="button"
-                disabled={loading || !gmailInput}
+                disabled={loading || !gmailInput || !gmailInput.endsWith('@gmail.com')}
                 onClick={() => executeGoogleLogin(gmailInput, nameInput)}
                 className="px-5 py-2 text-xs font-bold text-white bg-[#1e2e6e] hover:bg-[#162354] rounded-xl shadow-md disabled:opacity-50 cursor-pointer"
               >
