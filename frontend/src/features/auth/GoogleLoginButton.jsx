@@ -13,7 +13,7 @@ export const GoogleLoginButton = ({ onSuccess, onError, className = '' }) => {
 
   const clientId =
     import.meta.env.VITE_GOOGLE_CLIENT_ID ||
-    '748480555286-1lcn1lck6do44gl5aipdqlmla1jp1mn5.apps.googleusercontent.com';
+    '748480555286-90s1mm9c9b7rsb1c6mu7lsidmivuogo5.apps.googleusercontent.com';
 
   const executeGoogleLogin = async ({ email, name, picture, googleId, token, credential }) => {
     try {
