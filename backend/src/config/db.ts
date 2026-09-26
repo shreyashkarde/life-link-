@@ -43,8 +43,6 @@ export const connectDB = async (): Promise<boolean> => {
     console.warn('--------------------------------------------------');
     console.warn('[MongoDB] External MongoDB offline or IP not whitelisted.');
     console.warn(`[MongoDB Error] ${error?.message || error}`);
-    console.warn('[Prescripto] Seamless High-Performance Store Activated!');
-    console.warn('[Prescripto] All 15 Doctors & Demo Accounts are ONLINE and fully functional.');
     console.warn('--------------------------------------------------');
     return false;
   }
