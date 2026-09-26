@@ -1,5 +1,13 @@
 import mongoose from 'mongoose';
+import dns from 'dns';
 import { ENV } from './env';
+
+// Configure reliable DNS resolution for MongoDB Atlas SRV records
+try {
+  dns.setServers(['8.8.8.8', '1.1.1.1']);
+} catch (dnsErr) {
+  // Use system default DNS
+}
 
 let mongoConnected = false;
 
