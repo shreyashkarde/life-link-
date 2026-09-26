@@ -84,6 +84,31 @@ export const Login: React.FC<LoginProps> = ({ embedded = false, initialMode = 'L
     }
   };
 
+  const handleDemoLogin = async (demoEmail: string, demoPass: string) => {
+    setEmail(demoEmail);
+    setPassword(demoPass);
+    setLoading(true);
+    setUnverifiedEmail(null);
+
+    try {
+      const { data } = await apiClient.post('/api/auth/login', {
+        email: demoEmail.trim().toLowerCase(),
+        password: demoPass,
+      });
+
+      if (data.success) {
+        showToast(`Welcome! Logged in as ${data.user?.role || 'User'}.`, 'success');
+        handleRoleRouting(data.user?.role || 'PATIENT', data.token);
+      } else {
+        showToast(data.message || 'Demo login failed', 'error');
+      }
+    } catch (error: any) {
+      showToast(error.response?.data?.message || 'Authentication error during demo login.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const onSubmitHandler = async (event: React.FormEvent) => {
     event.preventDefault();
     setLoading(true);
@@ -326,6 +351,58 @@ export const Login: React.FC<LoginProps> = ({ embedded = false, initialMode = 'L
                 onSuccess={(data) => handleRoleRouting(data.user?.role || 'PATIENT', data.token)}
                 onError={(err) => showToast(err, 'error')}
               />
+
+              {/* Quick 1-Click Demo Logins */}
+              <div className="pt-1 space-y-2">
+                <div className="relative flex items-center justify-center my-1.5">
+                  <div className="border-t border-gray-200 w-full"></div>
+                  <span className="bg-white px-2.5 text-[10px] uppercase font-bold text-gray-500 tracking-wider flex items-center gap-1">
+                    <span>⚡</span> Demo Logins (1-Click)
+                  </span>
+                  <div className="border-t border-gray-200 w-full"></div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  {/* Patient Demo */}
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => handleDemoLogin('patient@prescripto.com', 'password123')}
+                    className="flex flex-col items-center justify-center p-2.5 rounded-2xl border border-blue-100 bg-blue-50/60 hover:bg-blue-100 active:scale-95 transition-all text-center group cursor-pointer shadow-xs disabled:opacity-50"
+                    title="Login as Patient (Edward Vincent)"
+                  >
+                    <span className="text-base group-hover:scale-110 transition-transform">👤</span>
+                    <span className="text-xs font-bold text-blue-900 mt-0.5">Patient</span>
+                    <span className="text-[9px] text-blue-600 font-medium">Edward V.</span>
+                  </button>
+
+                  {/* Doctor Demo */}
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => handleDemoLogin('doc1@prescripto.com', 'doc123')}
+                    className="flex flex-col items-center justify-center p-2.5 rounded-2xl border border-emerald-100 bg-emerald-50/60 hover:bg-emerald-100 active:scale-95 transition-all text-center group cursor-pointer shadow-xs disabled:opacity-50"
+                    title="Login as Doctor (Dr. Richard James)"
+                  >
+                    <span className="text-base group-hover:scale-110 transition-transform">🩺</span>
+                    <span className="text-xs font-bold text-emerald-900 mt-0.5">Doctor</span>
+                    <span className="text-[9px] text-emerald-600 font-medium">Dr. Richard</span>
+                  </button>
+
+                  {/* Driver Demo */}
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => handleDemoLogin('driver1@prescripto.com', 'driver123')}
+                    className="flex flex-col items-center justify-center p-2.5 rounded-2xl border border-rose-100 bg-rose-50/60 hover:bg-rose-100 active:scale-95 transition-all text-center group cursor-pointer shadow-xs disabled:opacity-50"
+                    title="Login as Driver (Rajesh Kumar - ALS 108)"
+                  >
+                    <span className="text-base group-hover:scale-110 transition-transform">🚑</span>
+                    <span className="text-xs font-bold text-rose-900 mt-0.5">Driver</span>
+                    <span className="text-[9px] text-rose-600 font-medium">Rajesh 108</span>
+                  </button>
+                </div>
+              </div>
 
               {/* Switch Sign Up / Log In */}
               <div className="text-center text-xs text-gray-600 pt-1">
