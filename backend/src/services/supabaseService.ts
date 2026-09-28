@@ -330,7 +330,43 @@ export const supabaseService = {
       return null;
     }
   },
+
+  // 🧹 Clear Old / Test Database Records
+  async clearDynamicData() {
+    if (!isSupabaseConfigured() || !supabase) {
+      return { success: false, message: 'Supabase not configured' };
+    }
+    try {
+      console.log('🧹 [Supabase] Purging old dynamic test appointments, bookings, prescriptions, ratings...');
+      await supabase.from('appointments').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('ambulance_bookings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('prescriptions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('ratings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      return { success: true, message: 'Supabase dynamic test data cleared successfully' };
+    } catch (err: any) {
+      console.warn('⚠️ [Supabase Clear Dynamic Error]:', err.message);
+      return { success: false, message: err.message };
+    }
+  },
+
+  async clearAllData() {
+    if (!isSupabaseConfigured() || !supabase) {
+      return { success: false, message: 'Supabase not configured' };
+    }
+    try {
+      console.log('🧹 [Supabase] Full database reset requested...');
+      await supabase.from('appointments').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('ambulance_bookings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('prescriptions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('ratings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      return { success: true, message: 'All tables cleared successfully' };
+    } catch (err: any) {
+      console.warn('⚠️ [Supabase Clear All Error]:', err.message);
+      return { success: false, message: err.message };
+    }
+  },
 };
 
 export default supabaseService;
+
 

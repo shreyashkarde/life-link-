@@ -14,6 +14,7 @@ import { ENV } from '../config/env';
 import { isMongoConnected } from '../config/db';
 import { prescriptoStore, clearEntireStore, seedDefaultDoctorsToMongo } from '../config/prescriptoStore';
 import { getIO } from '../socket/socketHandler';
+import { supabaseService } from '../services/supabaseService';
 
 // API for admin login
 export const loginAdmin = async (req: Request, res: Response): Promise<void> => {
@@ -334,7 +335,10 @@ export const clearAllData = async (_req: Request, res: Response): Promise<void> 
     // 1. Wipe in-memory store
     clearEntireStore();
 
-    // 2. If MongoDB is connected, wipe transactional collections and reset booked slots
+    // 2. Wipe Supabase dynamic tables (appointments, ambulance_bookings, prescriptions, ratings)
+    await supabaseService.clearDynamicData();
+
+    // 3. If MongoDB is connected, wipe transactional collections and reset booked slots
     if (isMongoConnected()) {
       await Appointment.deleteMany({});
       await AmbulanceBooking.deleteMany({});
@@ -349,7 +353,7 @@ export const clearAllData = async (_req: Request, res: Response): Promise<void> 
       console.log('✓ [DB-Clear] MongoDB reset: exactly 1 Doctor, 1 Hospital, 1 Patient, 1 Driver, and 0 old appointments/trips.');
     }
 
-    // 3. Emit real-time Socket.IO dataCleared event to all connected clients & rooms
+    // 4. Emit real-time Socket.IO dataCleared event to all connected clients & rooms
     const io = getIO();
     if (io) {
       console.log('📡 [Socket Engine] Broadcasting dataCleared event to all connected sockets & dashboard rooms');
