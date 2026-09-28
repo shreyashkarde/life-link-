@@ -203,22 +203,17 @@ export const getHospitalScore = (
   patientCondition: string = 'General Care',
   patientLocation: GeoPoint = { lat: 19.0760, lng: 72.8777 }
 ): HospitalScoreResult => {
-  // Extract coordinates from hospital address
-  let hLat = 19.0544;
-  let hLng = 72.8277;
+  // Extract coordinates from hospital directly or address
+  let hLat = (hospital as any).lat ?? (hospital as any).location?.lat ?? 19.0544;
+  let hLng = (hospital as any).lng ?? (hospital as any).location?.lng ?? 72.8277;
 
   if (hospital.address && typeof hospital.address === 'object') {
     if (hospital.address.coordinates) {
       hLat = hospital.address.coordinates.lat || hLat;
       hLng = hospital.address.coordinates.lng || hLng;
     }
-  } else if (hospital.name?.includes('Kokilaben')) {
-    hLat = 19.1300;
-    hLng = 72.8300;
-  } else if (hospital.name?.includes('City Care')) {
-    hLat = 19.0800;
-    hLng = 72.8600;
   }
+
 
   const pLat = patientLocation?.lat ?? 19.0760;
   const pLng = patientLocation?.lng ?? 72.8777;

@@ -13,23 +13,60 @@ export const EmergencySOSModal: React.FC<{ isOpen: boolean; onClose: () => void 
   const [loading, setLoading] = useState(false);
   const [activeBooking, setActiveBooking] = useState<any>(null);
   const [liveLocation, setLiveLocation] = useState<{ lat: number; lng: number; heading?: number } | null>(null);
+  const [deviceCoords, setDeviceCoords] = useState<{ lat: number; lng: number; address: string }>({
+    lat: 19.076,
+    lng: 72.8777,
+    address: 'Detecting live GPS location...',
+  });
 
   // Rating Modal state
   const [showRating, setShowRating] = useState(false);
   const [ratingScore, setRatingScore] = useState(5);
   const [ratingReview, setRatingReview] = useState('');
 
-  // Fetch nearby ambulances when modal opens
+  // Auto-detect Device Coordinates
   useEffect(() => {
     if (isOpen) {
-      loadNearby();
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+            setDeviceCoords({
+              ...coords,
+              address: `GPS Satellite Pin (${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)})`,
+            });
+            loadNearby(coords.lat, coords.lng);
+          },
+          async () => {
+            try {
+              const res = await fetch('https://ipapi.co/json/', { signal: AbortSignal.timeout(3000) });
+              const data = await res.json();
+              if (data?.latitude && data?.longitude) {
+                const coords = { lat: data.latitude, lng: data.longitude };
+                setDeviceCoords({
+                  ...coords,
+                  address: `${data.city || 'Local Area'}, ${data.region || 'Region'} (Network IP)`,
+                });
+                loadNearby(coords.lat, coords.lng);
+                return;
+              }
+            } catch {
+              // fallback
+            }
+            loadNearby(19.076, 72.8777);
+          },
+          { timeout: 4000, enableHighAccuracy: true }
+        );
+      } else {
+        loadNearby(19.076, 72.8777);
+      }
     }
   }, [isOpen]);
 
-  const loadNearby = async () => {
+  const loadNearby = async (lat: number = deviceCoords.lat, lng: number = deviceCoords.lng) => {
     try {
       setLoading(true);
-      const res = await ambulanceService.getNearbyAmbulances(19.076, 72.8777, 25);
+      const res = await ambulanceService.getNearbyAmbulances(lat, lng, 35);
       if (res.success) {
         setNearbyAmbulances(res.ambulances || []);
       }
@@ -109,19 +146,19 @@ export const EmergencySOSModal: React.FC<{ isOpen: boolean; onClose: () => void 
       setLoading(true);
       const res = await ambulanceService.triggerEmergencySOS({
         pickupLocation: {
-          address: userData?.address?.line1 || 'Current GPS Location, Mumbai',
-          lat: 19.076,
-          lng: 72.8777,
+          address: deviceCoords.address || userData?.address?.line1 || 'Live GPS Location Ping',
+          lat: deviceCoords.lat,
+          lng: deviceCoords.lng,
         },
         patientName: userData?.name || 'Emergency Patient',
         patientPhone: userData?.phone || '+91 98200 99999',
-        condition: 'Critical Emergency Callout',
+        condition: '🚨 Critical Emergency Callout (Code Red)',
       });
 
       if (res.success) {
         soundService.playEmergencySiren(3.5);
         setActiveBooking(res.booking);
-        showToast('🚨 Code Red SOS Active! Closest ambulance dispatched.', 'success');
+        showToast('🚨 Code Red SOS Active! Closest ambulance dispatched to your live location.', 'success');
       } else {
         showToast(res.message || 'Emergency dispatch failed', 'error');
       }
@@ -199,10 +236,10 @@ export const EmergencySOSModal: React.FC<{ isOpen: boolean; onClose: () => void 
               {/* 🗺️ Real-Time 60fps Live Ambulance Navigation Map */}
               <div className="rounded-xl overflow-hidden border border-blue-200 shadow-xs">
                 <LiveMap
-                  latitude={liveLocation?.lat || activeBooking.currentLocation?.lat || 19.0522}
-                  longitude={liveLocation?.lng || activeBooking.currentLocation?.lng || 72.8295}
-                  pickupLat={19.076}
-                  pickupLng={72.8777}
+                  latitude={liveLocation?.lat || activeBooking.currentLocation?.lat || activeBooking.pickupLocation?.lat || deviceCoords.lat}
+                  longitude={liveLocation?.lng || activeBooking.currentLocation?.lng || activeBooking.pickupLocation?.lng || deviceCoords.lng}
+                  pickupLat={activeBooking.pickupLocation?.lat || deviceCoords.lat}
+                  pickupLng={activeBooking.pickupLocation?.lng || deviceCoords.lng}
                   bookingId={activeBooking._id || activeBooking.bookingId || 'SOS-108'}
                   patientId={userData?._id || 'user_edward_101'}
                   vehicleNumber={activeBooking.vehicleNumber || 'MH-01-EQ-1108'}
@@ -216,8 +253,12 @@ export const EmergencySOSModal: React.FC<{ isOpen: boolean; onClose: () => void 
 
           {/* High Priority One-Tap SOS Button */}
           {!activeBooking && (
-            <div className="text-center p-5 bg-rose-50 border-2 border-rose-200 rounded-2xl">
-              <p className="text-xs font-black text-rose-700 uppercase tracking-wider mb-2">
+            <div className="text-center p-5 bg-rose-50 border-2 border-rose-200 rounded-2xl space-y-3">
+              <div className="flex items-center justify-center gap-1.5 px-3 py-1 bg-white border border-rose-200 rounded-full text-[11px] font-bold text-rose-700 mx-auto w-fit">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>📍 {deviceCoords.address}</span>
+              </div>
+              <p className="text-xs font-black text-rose-700 uppercase tracking-wider">
                 ⚡ Critical Emergency One-Tap Action
               </p>
               <button
@@ -226,10 +267,10 @@ export const EmergencySOSModal: React.FC<{ isOpen: boolean; onClose: () => void 
                 className="w-full py-4 bg-rose-600 hover:bg-rose-700 text-white font-black text-base rounded-2xl shadow-lg hover:shadow-rose-600/30 transition-all active:scale-98 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 <span>🚨</span>
-                <span>{loading ? 'Locating Closest Driver...' : 'TRIGGER ONE-TAP EMERGENCY SOS'}</span>
+                <span>{loading ? 'Locating Closest Paramedic Team...' : 'TRIGGER ONE-TAP EMERGENCY SOS'}</span>
               </button>
-              <p className="text-[11px] text-gray-500 mt-2 font-medium">
-                Auto-assigns nearest life-support ambulance with priority sirens.
+              <p className="text-[11px] text-gray-500 font-medium">
+                Auto-dispatches closest Level-1 trauma response team to your current GPS coordinates.
               </p>
             </div>
           )}
@@ -240,7 +281,7 @@ export const EmergencySOSModal: React.FC<{ isOpen: boolean; onClose: () => void 
               <h3 className="text-xs font-black uppercase tracking-wider text-gray-500">
                 Nearest Fleet in Proximity ({nearbyAmbulances.length})
               </h3>
-              <button onClick={loadNearby} className="text-xs text-primary font-bold hover:underline">
+              <button onClick={() => loadNearby()} className="text-xs text-primary font-bold hover:underline cursor-pointer">
                 Refresh
               </button>
             </div>

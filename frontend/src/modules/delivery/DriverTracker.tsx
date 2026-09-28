@@ -45,7 +45,7 @@ export const DriverTracker: React.FC<DriverTrackerProps> = ({
   const socketRef = useRef<Socket | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const lastEmitTimeRef = useRef<number>(0);
-  const simIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const simIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // 1. Initialize Socket.IO connection
   useEffect(() => {

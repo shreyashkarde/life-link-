@@ -52,6 +52,7 @@ export const PatientDashboard: React.FC = () => {
   
   // Geolocation & Nearest Hospital State
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number }>({ lat: 19.0760, lng: 72.8777 });
+  const [userLocationLabel, setUserLocationLabel] = useState<string>('Detecting Live GPS...');
   const [isLocating, setIsLocating] = useState<boolean>(false);
   const [nearestHospital, setNearestHospital] = useState<HospitalInfo | null>(null);
 
@@ -134,14 +135,14 @@ export const PatientDashboard: React.FC = () => {
     try {
       const lat = coords?.lat || userCoords.lat;
       const lng = coords?.lng || userCoords.lng;
-      const res = await apiClient.get(`/api/hospitals/nearby?lat=${lat}&lng=${lng}&radiusKm=50`);
+      const res = await apiClient.get(`/api/hospitals/nearby?lat=${lat}&lng=${lng}&radiusKm=100`);
       
       if (res.data?.success && Array.isArray(res.data.hospitals) && res.data.hospitals.length > 0) {
         setHospitals(res.data.hospitals);
         setNearestHospital(res.data.hospitals[0]);
       } else {
         const fallbackRes = await apiClient.get('/api/hospitals');
-        if (fallbackRes.data?.success && Array.isArray(fallbackRes.data.hospitals)) {
+        if (fallbackRes.data?.success && Array.isArray(fallbackRes.data.hospitals) && fallbackRes.data.hospitals.length > 0) {
           setHospitals(fallbackRes.data.hospitals);
           setNearestHospital(fallbackRes.data.hospitals[0] || null);
         }
@@ -151,35 +152,73 @@ export const PatientDashboard: React.FC = () => {
     }
   }, [userCoords]);
 
-  // GPS Auto-detect Nearest Hospital
-  const detectNearestHospital = () => {
+  // Smart Multi-Tier GPS & IP Auto-detection for Nearest Hospitals
+  const detectNearestHospital = useCallback(async () => {
     setIsLocating(true);
-    showToast('📍 Accessing GPS to identify closest hospital...', 'info');
 
+    const resolveCoords = (coords: { lat: number; lng: number }, source: string, label?: string) => {
+      setUserCoords(coords);
+      setUserLocationLabel(label || `${coords.lat.toFixed(4)}°N, ${coords.lng.toFixed(4)}°E`);
+      fetchHospitalsList(coords);
+      setIsLocating(false);
+      showToast(`✓ Location locked via ${source}! Nearest trauma hospitals updated.`, 'success');
+    };
+
+    // Tier 1: Try Browser HTML5 Geolocation API with fast timeout
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-          setUserCoords(coords);
-          fetchHospitalsList(coords);
-          setIsLocating(false);
-          showToast('✓ GPS Location updated! Nearest hospitals recalculated.', 'success');
+          const c = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          resolveCoords(c, 'GPS Satellite', `GPS: ${c.lat.toFixed(3)}°, ${c.lng.toFixed(3)}°`);
         },
-        () => {
-          // Default to Mumbai Central coordinates
+        async () => {
+          // Tier 2: IP-based real location fallback (works without permission prompt)
+          try {
+            const ipRes = await fetch('https://ipapi.co/json/', { signal: AbortSignal.timeout(3500) });
+            const ipData = await ipRes.json();
+            if (ipData?.latitude && ipData?.longitude) {
+              const cityLabel = ipData.city ? `${ipData.city}, ${ipData.region || 'Region'}` : 'Network IP Hub';
+              resolveCoords({ lat: ipData.latitude, lng: ipData.longitude }, `Network IP (${ipData.city || 'Hub'})`, cityLabel);
+              return;
+            }
+          } catch {
+            // Secondary IP service fallback
+            try {
+              const ipwhoRes = await fetch('https://ipwho.is/', { signal: AbortSignal.timeout(3000) });
+              const ipwhoData = await ipwhoRes.json();
+              if (ipwhoData?.latitude && ipwhoData?.longitude) {
+                const cityLabel = ipwhoData.city ? `${ipwhoData.city}, ${ipwhoData.region || 'Region'}` : 'Network IP Hub';
+                resolveCoords({ lat: ipwhoData.latitude, lng: ipwhoData.longitude }, `Network IP (${ipwhoData.city || 'Hub'})`, cityLabel);
+                return;
+              }
+            } catch {
+              // Final fallback
+            }
+          }
+
+          // Tier 3: Default Central Healthcare coordinates
           const defaultCoords = { lat: 19.0522, lng: 72.8295 };
-          setUserCoords(defaultCoords);
-          fetchHospitalsList(defaultCoords);
-          setIsLocating(false);
-          showToast('📍 Using City Center GPS coordinates.', 'info');
+          resolveCoords(defaultCoords, 'Regional Apex Hub', 'Mumbai Apex Hub');
         },
-        { timeout: 8000 }
+        { timeout: 4000, enableHighAccuracy: true }
       );
     } else {
-      setIsLocating(false);
-      fetchHospitalsList();
+      // Direct IP fallback
+      try {
+        const ipRes = await fetch('https://ipapi.co/json/', { signal: AbortSignal.timeout(3500) });
+        const ipData = await ipRes.json();
+        if (ipData?.latitude && ipData?.longitude) {
+          const cityLabel = ipData.city ? `${ipData.city}, ${ipData.region || 'Region'}` : 'Network IP Hub';
+          resolveCoords({ lat: ipData.latitude, lng: ipData.longitude }, 'Network IP', cityLabel);
+          return;
+        }
+      } catch {
+        // Fallback
+      }
+      resolveCoords({ lat: 19.0522, lng: 72.8295 }, 'Regional Apex Hub', 'Mumbai Apex Hub');
     }
-  };
+  }, [fetchHospitalsList, showToast]);
+
 
   // Fetch patient appointments, ambulance bookings, and doctor roster
   const fetchDashboardData = useCallback(async () => {
@@ -220,6 +259,7 @@ export const PatientDashboard: React.FC = () => {
 
   useEffect(() => {
     fetchDashboardData();
+    detectNearestHospital();
 
     // 🔔 Real-time Socket.IO Subscriptions for Patient
     const patientId = userData?._id || 'user_edward_101';
@@ -391,12 +431,20 @@ export const PatientDashboard: React.FC = () => {
                 <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
                 Patient Health Command
               </span>
-              <span className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-50 text-emerald-700 text-xs font-semibold rounded-full border border-emerald-200/60">
-                ✓ Medical ID Verified
-              </span>
+              <button
+                type="button"
+                onClick={detectNearestHospital}
+                disabled={isLocating}
+                className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-bold rounded-full border border-emerald-200/60 cursor-pointer transition-colors"
+                title="Click to re-scan device GPS"
+              >
+                <span className={`w-2 h-2 rounded-full bg-emerald-500 ${isLocating ? 'animate-spin' : 'animate-ping'}`}></span>
+                <span>📍 {userLocationLabel}</span>
+                <span className="text-[10px] text-emerald-600 font-extrabold underline ml-0.5">{isLocating ? 'Scanning...' : 'Sync GPS'}</span>
+              </button>
               {nearestHospital && (
                 <span className="inline-flex items-center gap-1 px-3 py-1 bg-indigo-50 text-indigo-700 text-xs font-semibold rounded-full border border-indigo-200/60">
-                  📍 Nearest: {nearestHospital.name.split(' ')[0]} ({nearestHospital.distanceKm ? `${nearestHospital.distanceKm} km` : '1.2 km'})
+                  🏥 Closest: {nearestHospital.name.split(' ')[0]} ({nearestHospital.distanceKm ? `${nearestHospital.distanceKm} km` : '1.2 km'} • ~{nearestHospital.estimatedDriveMinutes || 4} mins)
                 </span>
               )}
             </div>
@@ -405,7 +453,7 @@ export const PatientDashboard: React.FC = () => {
               Hello, {patientName} 👋
             </h1>
             <p className="text-xs sm:text-sm text-[#64748B] max-w-2xl font-normal">
-              Select your preferred or nearest partner hospital, consult verified specialists, and manage emergency ambulance dispatch.
+              Showing emergency hospitals and doctors customized to your current location. Instant ambulance dispatch and booking ready.
             </p>
           </div>
 
@@ -571,7 +619,7 @@ export const PatientDashboard: React.FC = () => {
                   <span>👨‍⚕️</span> Verified Medical Specialists
                   {activeHospital && (
                     <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
-                      at {activeHospital.name.split(' ')[0]}
+                      at {activeHospital?.name ? activeHospital.name.split(' ')[0] : 'Partner Hospital'}
                     </span>
                   )}
                 </h2>

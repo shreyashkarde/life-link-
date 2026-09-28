@@ -45,33 +45,43 @@ export const GoogleNearbyHospitals: React.FC<GoogleNearbyHospitalsProps> = ({
 
   const mapRef = useRef<HTMLDivElement | null>(null);
 
-  // 1. Get Live User Location from Browser GPS
+  // 1. Get Live User Location from Browser GPS with IP Geolocation Fallback
   const getUserLiveLocation = useCallback(() => {
-    if (!navigator.geolocation) {
-      setError('Geolocation is not supported by your browser.');
-      loadHospitals(19.076, 72.8777, radius, keyword);
-      return;
-    }
-
     setIsLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const coords = {
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-        };
-        setUserLocation(coords);
-        setIsLocating(false);
-        loadHospitals(coords.lat, coords.lng, radius, keyword);
-      },
-      (err) => {
-        console.warn('GPS location permission denied or error:', err.message);
-        setIsLocating(false);
-        // Fallback to default coordinates
-        loadHospitals(userLocation.lat, userLocation.lng, radius, keyword);
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-    );
+
+    const applyCoords = (coords: { lat: number; lng: number }) => {
+      setUserLocation(coords);
+      setIsLocating(false);
+      loadHospitals(coords.lat, coords.lng, radius, keyword);
+    };
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          applyCoords({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          });
+        },
+        async () => {
+          // IP fallback
+          try {
+            const ipRes = await fetch('https://ipapi.co/json/', { signal: AbortSignal.timeout(3500) });
+            const ipData = await ipRes.json();
+            if (ipData?.latitude && ipData?.longitude) {
+              applyCoords({ lat: ipData.latitude, lng: ipData.longitude });
+              return;
+            }
+          } catch {
+            // Secondary fallback
+          }
+          applyCoords({ lat: 19.0522, lng: 72.8295 });
+        },
+        { enableHighAccuracy: true, timeout: 4000 }
+      );
+    } else {
+      applyCoords({ lat: 19.0522, lng: 72.8295 });
+    }
   }, [radius, keyword]);
 
   // 2. Fetch Nearby Hospitals from Backend API

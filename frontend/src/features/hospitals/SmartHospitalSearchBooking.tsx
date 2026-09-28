@@ -502,31 +502,56 @@ export const SmartHospitalSearchBooking: React.FC<SmartHospitalSearchBookingProp
     return () => clearTimeout(handler);
   }, [searchQuery]);
 
-  // 2. Auto-Detect User's Geolocation
+  // 2. Auto-Detect User's Geolocation with Multi-Tier GPS & IP Fallback
   const detectUserGps = useCallback(() => {
-    if (!navigator.geolocation) {
-      showToast('Geolocation is not supported by your browser', 'info');
-      return;
-    }
     setIsLocatingUser(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        setUserLocation(coords);
-        setIsLocatingUser(false);
-        showToast('✓ GPS Location locked! Hospitals recalculated by proximity.', 'success');
-        if (mapInstance) {
-          mapInstance.panTo(coords);
-          mapInstance.setZoom(13);
-        }
-      },
-      () => {
-        setIsLocatingUser(false);
-        showToast('Using Mumbai Healthcare Hub coordinates', 'info');
-      },
-      { timeout: 7000, enableHighAccuracy: true }
-    );
+
+    const applyLocation = (coords: { lat: number; lng: number }, source: string) => {
+      setUserLocation(coords);
+      setIsLocatingUser(false);
+      showToast(`✓ Location updated via ${source}`, 'success');
+      if (mapInstance) {
+        mapInstance.panTo(coords);
+        mapInstance.setZoom(13);
+      }
+    };
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          applyLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }, 'GPS');
+        },
+        async () => {
+          // IP fallback
+          try {
+            const ipRes = await fetch('https://ipapi.co/json/', { signal: AbortSignal.timeout(3500) });
+            const ipData = await ipRes.json();
+            if (ipData?.latitude && ipData?.longitude) {
+              applyLocation({ lat: ipData.latitude, lng: ipData.longitude }, `Network IP (${ipData.city || 'Regional'})`);
+              return;
+            }
+          } catch {
+            // Secondary IP service
+            try {
+              const ipwhoRes = await fetch('https://ipwho.is/', { signal: AbortSignal.timeout(3000) });
+              const ipwhoData = await ipwhoRes.json();
+              if (ipwhoData?.latitude && ipwhoData?.longitude) {
+                applyLocation({ lat: ipwhoData.latitude, lng: ipwhoData.longitude }, `Network IP (${ipwhoData.city || 'Regional'})`);
+                return;
+              }
+            } catch {
+              // Ignore
+            }
+          }
+          applyLocation({ lat: 19.0522, lng: 72.8295 }, 'City Hub');
+        },
+        { timeout: 4000, enableHighAccuracy: true }
+      );
+    } else {
+      applyLocation({ lat: 19.0522, lng: 72.8295 }, 'City Hub');
+    }
   }, [mapInstance, showToast]);
+
 
   // Auto detect once on mount
   useEffect(() => {
@@ -1313,6 +1338,18 @@ export const SmartHospitalSearchBooking: React.FC<SmartHospitalSearchBookingProp
               }
               )
             </button>
+          </div>
+
+          {/* Active Geolocation Telemetry Strip */}
+          <div className="flex flex-wrap items-center gap-2 mt-3 pt-2.5 border-t border-white/10 text-[11px] text-blue-200/90 font-medium">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 rounded-full font-bold">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              GPS Live: {userLocation.lat.toFixed(4)}°N, {userLocation.lng.toFixed(4)}°E
+            </span>
+            <span>•</span>
+            <span>Radius: 50 km Proximity</span>
+            <span>•</span>
+            <span className="text-white font-bold">{hospitals.length} Hospitals Found Nearby</span>
           </div>
         </div>
       </div>

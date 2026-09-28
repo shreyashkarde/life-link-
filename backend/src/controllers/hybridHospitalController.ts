@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import axios from 'axios';
-import Hospital from '../models/Hospital';
+import { supabaseService } from '../services/supabaseService';
 import { HOSPITALS_DATABASE } from '../features/hospitals/hospitalController';
 import { REAL_WORLD_HOSPITALS_FALLBACK } from './googleNearbyHospitalController';
 
@@ -40,6 +40,7 @@ export interface UnifiedHospital {
   lat: number;
   lng: number;
   address: string;
+  city?: string;
   source: 'database' | 'google';
   rating: number;
   user_ratings_total?: number;
@@ -98,57 +99,42 @@ export const getHybridHospitals = async (req: Request, res: Response) => {
     }
 
     const apiKey = process.env.GOOGLE_MAPS_API_KEY || '';
-
-    // ==========================================
-    // STEP 1: FETCH DATABASE HOSPITALS (MongoDB $near)
-    // ==========================================
     const dbHospitalsList: UnifiedHospital[] = [];
 
     try {
-      const mongoDocs = await Hospital.find({
-        isActive: true,
-        location: {
-          $near: {
-            $geometry: {
-              type: 'Point',
-              coordinates: [lng, lat],
-            },
-            $maxDistance: radius,
-          },
-        },
-      }).lean();
-
-      if (Array.isArray(mongoDocs)) {
-        mongoDocs.forEach((doc: any) => {
-          const hospLat = doc.lat || (doc.location?.coordinates ? doc.location.coordinates[1] : 19.076);
-          const hospLng = doc.lng || (doc.location?.coordinates ? doc.location.coordinates[0] : 72.8777);
+      const supabaseDocs = await supabaseService.getHospitals();
+      if (Array.isArray(supabaseDocs)) {
+        supabaseDocs.forEach((doc: any) => {
+          const hospLat = Number(doc.lat) || 19.0522;
+          const hospLng = Number(doc.lng) || 72.8295;
           const dist = calculateDistanceKm(lat, lng, hospLat, hospLng);
 
           dbHospitalsList.push({
-            id: String(doc._id),
+            id: String(doc.id || doc.hospital_id),
             name: doc.name || 'Hospital',
             lat: hospLat,
             lng: hospLng,
-            address: typeof doc.address === 'string' ? doc.address : `${doc.address?.street || ''}, ${doc.address?.city || 'Mumbai'}`,
+            address: doc.address || 'Medical Enclave',
+            city: doc.city || 'Mumbai',
             source: 'database',
             rating: Number(doc.rating) || 4.9,
-            user_ratings_total: Number(doc.user_ratings_total) || 120,
+            user_ratings_total: 150,
             distance: dist,
             estimatedDriveMinutes: Math.max(2, Math.round(dist * 2.2)),
-            phone: doc.phone || doc.contactPhone || '+91 22 2675 1000',
-            emergencyContact: doc.emergencyContact || doc.phone || '+91 22 2656 8000',
-            icuBedsAvailable: doc.icuBedsAvailable || 15,
-            totalBeds: doc.totalBeds || 320,
-            traumaLevel: doc.traumaLevel || 'Level 1 Trauma Care',
+            phone: doc.phone || doc.contact_phone || '+91 22 2675 1000',
+            emergencyContact: doc.emergency_contact || '+91 22 2656 8000',
+            icuBedsAvailable: doc.icu_beds_available || 15,
+            totalBeds: doc.total_beds || 320,
+            traumaLevel: doc.trauma_level || 'Level 1 Trauma Care',
             specialities: doc.specialities || ['General physician', 'Cardiology', 'Emergency Care'],
             open_now: true,
-            place_id: `db_${doc._id}`,
+            place_id: `db_${doc.id}`,
             googleMapsUrl: `https://www.google.com/maps/dir/?api=1&destination=${hospLat},${hospLng}`,
           });
         });
       }
     } catch (dbErr: any) {
-      console.warn('[Hybrid API] MongoDB geospatial query fallback:', dbErr.message);
+      console.warn('[Hybrid API] Supabase query fallback:', dbErr.message);
     }
 
     // Enrich with verified in-network database records if DB is fresh/empty

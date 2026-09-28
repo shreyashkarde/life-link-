@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import AppContextProvider, { useApp } from './context/AppContext';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Components
 import Navbar from './components/Navbar';
@@ -44,8 +45,9 @@ const PatientLayout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
 export const App: React.FC = () => {
   return (
-    <AppContextProvider>
-      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+    <ErrorBoundary>
+      <AppContextProvider>
+        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           {/* Primary Portal Entry: Secure Authentication Login Page */}
           <Route path="/" element={<Login />} />
@@ -157,6 +159,7 @@ export const App: React.FC = () => {
         </Routes>
       </BrowserRouter>
     </AppContextProvider>
+    </ErrorBoundary>
   );
 };
 

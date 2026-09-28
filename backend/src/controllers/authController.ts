@@ -10,6 +10,7 @@ import { prescriptoStore } from '../config/prescriptoStore';
 import { isMongoConnected } from '../config/db';
 import { AuthRequest } from '../middleware/auth';
 import { emailService } from '../services/emailService';
+import { supabaseService } from '../services/supabaseService';
 import {
   isStrongPassword,
   generateTokenPair,
@@ -129,6 +130,16 @@ export const googleAuthLogin = async (req: Request, res: Response) => {
         await user.save();
       }
 
+      // Sync with Supabase profiles table in background
+      supabaseService.upsertProfile({
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        image: user.image,
+        google_id: user.googleId,
+        phone: user.phone,
+      }).catch((e) => console.warn('Supabase sync warning:', e.message));
+
       const tokens = generateTokenPair(user._id.toString(), user.role, user.email);
       setAuthCookies(res, tokens);
 
@@ -189,6 +200,16 @@ export const googleAuthLogin = async (req: Request, res: Response) => {
       storeUser.loginAttempts = 0;
       delete storeUser.lockUntil;
     }
+
+    // Sync with Supabase profiles table in background
+    supabaseService.upsertProfile({
+      email: storeUser.email,
+      name: storeUser.name,
+      role: storeUser.role || 'PATIENT',
+      image: storeUser.image,
+      google_id: storeUser.googleId,
+      phone: storeUser.phone,
+    }).catch((e) => console.warn('Supabase sync warning:', e.message));
 
     const tokens = generateTokenPair(storeUser._id, storeUser.role || 'PATIENT', storeUser.email);
     setAuthCookies(res, tokens);
@@ -276,6 +297,14 @@ export const registerUser = async (req: Request, res: Response) => {
       // Send verification email via Nodemailer
       const emailResult = await emailService.sendVerificationEmail(cleanEmail, name, rawVerificationToken);
 
+      // Sync with Supabase
+      supabaseService.upsertProfile({
+        email: newUser.email,
+        name: newUser.name,
+        role: newUser.role,
+        phone: newUser.phone,
+      }).catch((e) => console.warn('Supabase sync warning:', e.message));
+
       const tokens = generateTokenPair(newUser._id.toString(), newUser.role, newUser.email);
       setAuthCookies(res, tokens);
 
@@ -326,6 +355,15 @@ export const registerUser = async (req: Request, res: Response) => {
     prescriptoStore.users.push(createdUser);
 
     const emailResult = await emailService.sendVerificationEmail(cleanEmail, name, rawVerificationToken);
+
+    // Sync with Supabase
+    supabaseService.upsertProfile({
+      email: createdUser.email,
+      name: createdUser.name,
+      role: createdUser.role,
+      phone: createdUser.phone,
+      image: createdUser.image,
+    }).catch((e) => console.warn('Supabase sync warning:', e.message));
 
     const tokens = generateTokenPair(createdUser._id, createdUser.role, createdUser.email);
     setAuthCookies(res, tokens);

@@ -9,6 +9,7 @@ import { ENV } from '../config/env';
 import { isMongoConnected } from '../config/db';
 import { prescriptoStore } from '../config/prescriptoStore';
 import { emitAppointmentBooked } from '../socket/socketHandler';
+import { supabaseService } from '../services/supabaseService';
 
 // API to register user
 export const registerUser = async (req: Request, res: Response): Promise<void> => {
@@ -367,6 +368,24 @@ export const bookAppointment = async (req: Request, res: Response): Promise<void
 
       prescriptoStore.appointments.unshift(newAppt);
 
+      // ⚡ Sync appointment with Supabase
+      supabaseService.createAppointment({
+        patient_id: userId,
+        patient_name: (user as any)?.name || 'Patient',
+        patient_email: (user as any)?.email || 'patient@prescripto.com',
+        patient_phone: (user as any)?.phone || '0000000000',
+        doctor_id: doc._id,
+        doctor_name: doc.name,
+        doctor_speciality: doc.speciality,
+        hospital_id: hospitalId,
+        hospital_name: hospitalName,
+        slot_date: slotDate,
+        slot_time: slotTime,
+        amount: doc.fees,
+        payment_status: 'PENDING',
+        status: 'CONFIRMED',
+      }).catch((e) => console.warn('Supabase appointment sync warning:', e.message));
+
       // 🔔 Emit real-time "newAppointment" notification to doctor and hospital
       emitAppointmentBooked(newAppt);
 
@@ -482,6 +501,24 @@ export const bookAppointment = async (req: Request, res: Response): Promise<void
     } else {
       await Doctor.updateOne({ _id: docData._id }, { $set: { slots_booked } });
     }
+
+    // ⚡ Sync appointment with Supabase
+    supabaseService.createAppointment({
+      patient_id: userId,
+      patient_name: userData.name || 'Patient',
+      patient_email: userData.email || 'patient@prescripto.com',
+      patient_phone: userData.phone || '0000000000',
+      doctor_id: docData._id.toString(),
+      doctor_name: docData.name,
+      doctor_speciality: docData.speciality,
+      hospital_id: hospitalId,
+      hospital_name: hospitalName,
+      slot_date: slotDate,
+      slot_time: slotTime,
+      amount: docData.fees,
+      payment_status: 'PENDING',
+      status: 'CONFIRMED',
+    }).catch((e) => console.warn('Supabase appointment sync warning:', e.message));
 
     // 🔔 Emit real-time "newAppointment" notification to doctor and hospital
     emitAppointmentBooked(newAppointment);

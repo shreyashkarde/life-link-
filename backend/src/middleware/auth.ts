@@ -98,5 +98,58 @@ export const authorizeRoles = (...allowedRoles: string[]) => {
   };
 };
 
+/**
+ * 🚑 Optional Authentication Middleware for Emergency SOS & Public Booking
+ * If valid JWT token is provided, attaches user context.
+ * If no token provided or expired, assigns guest patient identity so emergency dispatch is NEVER blocked.
+ */
+export const optionalAuthenticateJWT = (req: Request, res: Response, next: NextFunction): void => {
+  try {
+    let token = req.cookies?.accessToken || req.cookies?.token;
+
+    if (!token) {
+      const authHeader =
+        (req.headers.authorization as string) ||
+        (req.headers.token as string) ||
+        (req.headers.dtoken as string) ||
+        (req.headers.atoken as string);
+
+      if (authHeader) {
+        token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : authHeader;
+      }
+    }
+
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, ENV.JWT_SECRET) as any;
+        (req as any).user = decoded;
+        res.locals.userId = decoded.id;
+        res.locals.role = decoded.role;
+        return next();
+      } catch {
+        // Fallback to guest for emergency dispatch
+      }
+    }
+
+    // Assign fallback guest identity
+    (req as any).user = {
+      id: 'patient_guest_' + Date.now(),
+      role: 'PATIENT',
+      email: 'patient@prescripto.com',
+    };
+    res.locals.userId = (req as any).user.id;
+    res.locals.role = 'PATIENT';
+    next();
+  } catch {
+    (req as any).user = {
+      id: 'patient_guest_' + Date.now(),
+      role: 'PATIENT',
+      email: 'patient@prescripto.com',
+    };
+    next();
+  }
+};
+
 export const authenticate = authenticateJWT;
 export default authenticateJWT;
+

@@ -85,7 +85,7 @@ export const useLiveLocation = ({
   const [gpsError, setGpsError] = useState<string | null>(null);
 
   const watchIdRef = useRef<number | null>(null);
-  const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const heartbeatIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastSentTimeRef = useRef<number>(0);
   const lastCoordsRef = useRef<{ lat: number; lng: number; heading: number } | null>(null);
 

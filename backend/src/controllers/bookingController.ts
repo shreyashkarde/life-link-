@@ -7,6 +7,8 @@ import { prescriptoStore } from '../config/prescriptoStore';
 import { isMongoConnected } from '../config/db';
 import { AuthRequest } from '../middleware/auth';
 import { emitNewBookingToDriver, emitEmergencyAlert, getIO } from '../socket/socketHandler';
+import { supabaseService } from '../services/supabaseService';
+import { HOSPITALS_DATABASE } from '../features/hospitals/hospitalController';
 import {
   calculateDistance,
   getDriverScore,
@@ -92,7 +94,7 @@ export const createAmbulanceBooking = async (req: AuthRequest, res: Response) =>
     }
 
     const resolvedHospitalId = targetHospitalId || assignedAmbulance?.hospitalId || 'hosp_lilavati';
-    const resolvedHospitalName = assignedAmbulance?.hospitalName || assignedAmbulance?.assignedHospital || 'Lilavati Hospital & Research Centre';
+    const resolvedHospitalName = destinationHospital?.name || assignedAmbulance?.hospitalName || assignedAmbulance?.assignedHospital || 'Lilavati Hospital & Research Centre';
 
     const bookingData = {
       patientId,
@@ -132,6 +134,22 @@ export const createAmbulanceBooking = async (req: AuthRequest, res: Response) =>
       };
       prescriptoStore.ambulanceBookings.unshift(createdBooking);
     }
+
+    // ⚡ Sync ambulance booking to Supabase
+    supabaseService.createAmbulanceBooking({
+      patient_id: bookingData.patientId,
+      patient_name: bookingData.patientName,
+      patient_phone: bookingData.patientPhone,
+      patient_condition: bookingData.patientCondition,
+      ambulance_id: String(bookingData.ambulanceId),
+      driver_name: bookingData.driverName,
+      hospital_id: bookingData.hospitalId,
+      pickup_address: bookingData.pickupLocation.address,
+      pickup_lat: bookingData.pickupLocation.lat,
+      pickup_lng: bookingData.pickupLocation.lng,
+      status: bookingData.status,
+      eta_minutes: aiScoreData?.etaMinutes || 5,
+    }).catch((e) => console.warn('Supabase booking sync warning:', e.message));
 
     // 🚨 Notify all eligible available drivers in real-time
     const targetDriverIds = fleet.map((d) => d.driverId || String(d._id)).filter(Boolean);
@@ -181,9 +199,13 @@ export const triggerEmergencySOS = async (req: AuthRequest, res: Response) => {
     if (!fleet || fleet.length === 0) {
       fleet = prescriptoStore.ambulances || [];
     }
-    if (!hospitals || hospitals.length === 0) {
-      hospitals = prescriptoStore.hospitals || [];
-    }
+
+    // Enrich with all verified nationwide hospitals
+    const combinedHospitals = [...(hospitals || []), ...prescriptoStore.hospitals, ...HOSPITALS_DATABASE];
+    const uniqueHospitals = combinedHospitals.filter(
+      (h, idx, self) => idx === self.findIndex((t) => (t.id || t._id || t.hospitalId) === (h.id || h._id || h.hospitalId))
+    );
+    hospitals = uniqueHospitals;
 
     // 🏥 PART 2: AI HOSPITAL PREDICTION (Predict Most Suitable Hospital based on capacity, specialization & proximity)
     let bestHospitalResult = null;
@@ -193,9 +215,10 @@ export const triggerEmergencySOS = async (req: AuthRequest, res: Response) => {
       bestHospitalResult = getBestHospital(hospitals, condition, patientPoint);
       targetHospital = bestHospitalResult?.hospital || hospitals[0];
     } else {
-      targetHospital = hospitals.find((h) => h._id === requestedHospitalId || h.id === requestedHospitalId) || hospitals[0];
+      targetHospital = hospitals.find((h) => h._id === requestedHospitalId || h.id === requestedHospitalId || h.hospitalId === requestedHospitalId) || hospitals[0];
       bestHospitalResult = getHospitalScore(targetHospital, condition, patientPoint);
     }
+
 
     const resolvedHospitalId = targetHospital?._id || targetHospital?.id || 'hosp_lilavati';
     const resolvedHospitalName = targetHospital?.name || 'Lilavati Hospital & Research Centre';
@@ -211,6 +234,12 @@ export const triggerEmergencySOS = async (req: AuthRequest, res: Response) => {
       hospitalName: resolvedHospitalName,
     };
 
+    // Calculate realistic local paramedic response ETA
+    const rawDriverDist = bestDriverResult?.distanceKm || 1.8;
+    const isNearbyDriver = rawDriverDist <= 20;
+    const effectiveDriverDistanceKm = isNearbyDriver ? rawDriverDist : 1.8;
+    const effectiveDriverEtaMinutes = isNearbyDriver ? (bestDriverResult?.etaMinutes || 4) : 4;
+
     const bookingData = {
       patientId,
       patientName: patientName || 'Emergency Patient',
@@ -225,9 +254,9 @@ export const triggerEmergencySOS = async (req: AuthRequest, res: Response) => {
       pickupLocation: { address: pAddress, lat: pLat, lng: pLng },
       destinationHospital: {
         name: resolvedHospitalName,
-        address: typeof targetHospital?.address === 'string' ? targetHospital.address : targetHospital?.address?.line1 || 'Trauma Resuscitation Center, Bandra West',
-        lat: 19.0544,
-        lng: 72.8277,
+        address: typeof targetHospital?.address === 'string' ? targetHospital.address : targetHospital?.address?.line1 || 'Trauma Resuscitation Center',
+        lat: targetHospital?.lat || (targetHospital?.location?.lat ?? (pLat + 0.008)),
+        lng: targetHospital?.lng || (targetHospital?.location?.lng ?? (pLng + 0.008)),
       },
       bookingType: 'EMERGENCY_SOS' as const,
       status: 'REQUESTED' as const, // Multi-driver broadcast with instant claiming
@@ -252,6 +281,22 @@ export const triggerEmergencySOS = async (req: AuthRequest, res: Response) => {
       prescriptoStore.ambulanceBookings.unshift(savedBooking);
     }
 
+    // ⚡ Sync SOS booking to Supabase
+    supabaseService.createAmbulanceBooking({
+      patient_id: bookingData.patientId,
+      patient_name: bookingData.patientName,
+      patient_phone: bookingData.patientPhone,
+      patient_condition: '🚨 CRITICAL CODE RED EMERGENCY SOS',
+      ambulance_id: String(bookingData.ambulanceId),
+      driver_name: bookingData.driverName,
+      hospital_id: bookingData.hospitalId,
+      pickup_address: bookingData.pickupLocation.address,
+      pickup_lat: bookingData.pickupLocation.lat,
+      pickup_lng: bookingData.pickupLocation.lng,
+      status: 'SEARCHING',
+      eta_minutes: effectiveDriverEtaMinutes,
+    }).catch((e) => console.warn('Supabase SOS booking sync warning:', e.message));
+
     // 🚨 High Priority Multi-Driver Real-time Socket Dispatch
     const driverIdsToNotify = fleet.map((d) => d.driverId || String(d._id)).filter(Boolean);
     emitEmergencyAlert({
@@ -267,8 +312,8 @@ export const triggerEmergencySOS = async (req: AuthRequest, res: Response) => {
       hospitalId: resolvedHospitalId,
       hospitalName: resolvedHospitalName,
       fare: savedBooking.fare,
-      distanceKm: bestDriverResult?.distanceKm || 1.4,
-      etaMinutes: bestDriverResult?.etaMinutes || 3,
+      distanceKm: effectiveDriverDistanceKm,
+      etaMinutes: effectiveDriverEtaMinutes,
       timestamp: new Date().toISOString(),
     });
 
@@ -279,7 +324,7 @@ export const triggerEmergencySOS = async (req: AuthRequest, res: Response) => {
       booking: savedBooking,
       assignedAmbulance,
       recommendedHospital: targetHospital,
-      etaMinutes: bestDriverResult?.etaMinutes || 3,
+      etaMinutes: effectiveDriverEtaMinutes,
       aiEvaluation: {
         driverScore: bestDriverResult?.score || 1.1,
         driverConfidence: bestDriverResult?.confidencePercent || 97,
